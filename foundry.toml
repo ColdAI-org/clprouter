@@ -16,7 +16,7 @@ cbor_metadata = false
 ignored_error_codes = [5740, 2394]
 # Test and script contracts deploy whole CLPR stacks; their own size is irrelevant.
 ignored_warnings_from = ["test/", "script/", "lib/"]
-fs_permissions = [{ access = "read-write", path = "./e2e-out" }]
+fs_permissions = [{ access = "read-write", path = "./e2e-out" }, { access = "read-write", path = "./sdk/test/vectors" }]
 # CLPRouter's Router is compiled with fewer optimizer runs to stay under EIP-170 (24,576 B).
 additional_compiler_profiles = [{ name = "small", optimizer_runs = 200 }]
 compilation_restrictions = [{ paths = "src/ClprRouter.sol", optimizer_runs = 200 }]
