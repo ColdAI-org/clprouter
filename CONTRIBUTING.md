@@ -1,7 +1,7 @@
 # Contributing to CLPRouter
 
-Thank you for helping. This project follows the contribution rules of the CLPR project (LFDT-CLPR): Apache-2.0
-licence, Developer Certificate of Origin sign-off, and review before merge.
+Thank you for helping. This project is MIT-licensed and follows the CLPR project's (LFDT-CLPR) contribution practices: Developer
+Certificate of Origin sign-off and review before merge.
 
 ## Developer Certificate of Origin (DCO)
 
@@ -64,4 +64,4 @@ Do not open an issue or pull request. Follow [SECURITY.md](SECURITY.md).
 
 ## Licence
 
-By contributing you agree that your contributions are licensed under the Apache License 2.0 ([LICENSE](LICENSE)).
+By contributing you agree that your contributions are licensed under the MIT License ([LICENSE](LICENSE)).
