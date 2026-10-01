@@ -39,6 +39,16 @@ for i in 0 1 2; do
 done
 echo "anvil A/B/C up on ${PORTS[*]}"
 
+# The ClprRouterDeployer is created through the deterministic-deployment proxy, so it has one address on A, B
+# and C. Recent anvils pre-install the proxy; install its runtime code where it is missing.
+CREATE2_PROXY=0x4e59b44847b379578588920ca78fbf26c0b4956c
+CREATE2_PROXY_CODE=0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3
+for i in 0 1 2; do
+  if [ "$(cast code "$CREATE2_PROXY" --rpc-url "${RPCS[$i]}")" = "0x" ]; then
+    cast rpc anvil_setCode "$CREATE2_PROXY" "$CREATE2_PROXY_CODE" --rpc-url "${RPCS[$i]}" >/dev/null
+  fi
+done
+
 # Multi-chain forge scripts cannot link libraries, so the two external libraries are deployed first at the
 # deployer's nonces 0 and 1 on every (fresh) chain — the same addresses everywhere — and linked explicitly.
 DEPLOYER_PK=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
@@ -75,6 +85,10 @@ record_gas() {
 
 echo "== deploy"
 for i in 0 1 2; do fs "$i" 'deployStack(uint8)' "$i" >/dev/null; done
+# One deployer address everywhere, so every Router is at its canonical address.
+[ "$(jq -r .deployer e2e-out/L0.json)" = "$(jq -r .deployer e2e-out/L1.json)" ] &&
+  [ "$(jq -r .deployer e2e-out/L1.json)" = "$(jq -r .deployer e2e-out/L2.json)" ] || { echo "deployer addresses differ"; exit 1; }
+echo "   ClprRouterDeployer $(jq -r .deployer e2e-out/L0.json) on A, B and C; vaults bound to their Routers"
 fs 0 'wireChannel(uint8,uint8)' 0 1 >/dev/null
 fs 1 'wireChannel(uint8,uint8)' 1 0 >/dev/null
 fs 1 'wireChannel(uint8,uint8)' 1 2 >/dev/null

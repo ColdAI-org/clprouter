@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {Script, console} from "forge-std/Script.sol";
@@ -17,12 +17,15 @@ import {E2EVerifier} from "@test/E2EVerifier.sol";
 import {MockClprConnector} from "@test/mocks/MockClprConnector.sol";
 
 import {ClprRouter} from "@clprouter/ClprRouter.sol";
+import {ClprRouterDeployer} from "@clprouter/ClprRouterDeployer.sol";
+import {IClprRouter, IClprRouterDeployer} from "@clprouter/interfaces/IClprRouter.sol";
 import {ProviderRegistry} from "@clprouter/ProviderRegistry.sol";
 import {QuarantineVault} from "@clprouter/QuarantineVault.sol";
 import {IProviderRegistry} from "@clprouter/interfaces/IProviderRegistry.sol";
 import {IQuarantineVault} from "@clprouter/interfaces/IQuarantineVault.sol";
 import {RouteTypes} from "@clprouter/libraries/RouteTypes.sol";
 import {Caip} from "@clprouter/libraries/Caip.sol";
+import {RouteLogic} from "@clprouter/libraries/RouteLogic.sol";
 import {RouteApp} from "../test/helpers/RouteApp.sol";
 
 /// @notice Cross-process end-to-end run of CLPRouter on three anvil chains A (31001) — B (31002) — C (31003),
@@ -32,6 +35,12 @@ import {RouteApp} from "../test/helpers/RouteApp.sol";
 ///         Every step broadcasts to exactly one chain — the one given with --rpc-url, passed as `here` — and
 ///         only reads the other chains through forks (multi-chain broadcasts cannot link libraries).
 ///         Steps: deployStack · wireChannel · wireConnector · setAppRevert · send · decide · relay · check.
+///
+///         Every Router is deployed by one ClprRouterDeployer at its canonical CREATE2 address. The deployer
+///         itself is created through the deterministic-deployment proxy (0x4e59b448…, installed by run.sh with
+///         anvil_setCode if anvil lacks it) with the same owner, salt and Router init-code hash on every chain, so
+///         it has one address on A, B and C. Each vault is bound to its ledger's Router by a k + 1 committee
+///         decision before the first route is sent.
 ///         relay() plays the CLPR endpoint (copies the source queue into a bundle and submits it on the
 ///         destination) and the permissionless pumper (completes Router hops deferred inside delivery).
 contract E2E is Script {
@@ -41,6 +50,14 @@ contract E2E is Script {
     uint256 internal constant CHANNEL_PK = 0xC1A;
     string internal constant CONTACT = "mailto:incident@provider.example";
     bytes32 internal constant CASE = keccak256("e2e-case-1");
+    /// @dev Deployment id of the e2e registries (EIP-712 domain salt of every committee decision).
+    bytes32 internal constant DEPLOYMENT_ID = keccak256("clprouter-e2e");
+    /// @dev CREATE2 salt of the ClprRouterDeployer (through the deterministic-deployment proxy) and the
+    ///      deployment salt of the Routers it deploys.
+    bytes32 internal constant DEPLOYER_SALT = keccak256("clprouter-e2e.deployer");
+    bytes32 internal constant ROUTER_SALT = keccak256("clprouter-e2e.routers");
+    uint8 internal constant K = 3;
+    uint8 internal constant ACTION_VAULT_BIND_ROUTER = 12;
 
     struct Ledger {
         string id;
@@ -91,18 +108,44 @@ contract E2E is Script {
         );
         svc.initialize(abi.encodePacked(address(svc)), throttles, "", "", _econ());
         svc.setClprEnabled(true);
-        ProviderRegistry reg =
-            new ProviderRegistry(_members(), 3, CONTACT, [uint64(7 days), 72 hours, 7 days, 7 days, 30 days]);
-        QuarantineVault vault = new QuarantineVault(IProviderRegistry(address(reg)), 3 days, 7 days);
-        ClprRouter router = new ClprRouter(
-            IClprService(address(svc)),
-            IProviderRegistry(address(reg)),
-            IQuarantineVault(address(vault)),
-            L[here].id,
-            1 hours,
-            300_000,
-            1_500_000
+        ProviderRegistry reg = new ProviderRegistry(
+            DEPLOYMENT_ID, _members(), K, CONTACT, [uint64(7 days), 72 hours, 7 days, 7 days, 30 days, 7 days]
         );
+        QuarantineVault vault = new QuarantineVault(IProviderRegistry(address(reg)), 3 days, 7 days);
+        bytes memory routerInit = type(ClprRouter).creationCode;
+        // Same owner, salt and init-code hash on every chain → the same deployer address on A, B and C.
+        ClprRouterDeployer deployer =
+            new ClprRouterDeployer{salt: DEPLOYER_SALT}(vm.addr(DEPLOYER_PK), ROUTER_SALT, keccak256(routerInit));
+        ClprRouter router = ClprRouter(
+            deployer.deploy(
+                routerInit,
+                IClprRouterDeployer.Params({
+                    service: IClprService(address(svc)),
+                    registry: IProviderRegistry(address(reg)),
+                    vault: IQuarantineVault(address(vault)),
+                    ledgerId: L[here].id,
+                    reclaimGrace: 1 hours,
+                    appGas: 300_000,
+                    minSendGas: 1_500_000
+                })
+            )
+        );
+        require(address(router) == deployer.routerAddress(L[here].id), "router not canonical");
+        vm.stopBroadcast();
+
+        // The committee binds the vault to this Router (k + 1 signatures over the vault-bound digest).
+        IProviderRegistry.Decision memory d = IProviderRegistry.Decision({
+            action: ACTION_VAULT_BIND_ROUTER,
+            payload: abi.encode(address(router)),
+            evidenceHash: keccak256("e2e: bind vault to the canonical Router"),
+            nonce: 1,
+            effectiveAt: 0,
+            validUntil: uint64(block.timestamp + 1 days),
+            epoch: reg.epoch()
+        });
+        bytes[] memory sigs = _sign(vault.decisionDigest(d), reg.requiredSignatures(ACTION_VAULT_BIND_ROUTER));
+        vm.startBroadcast(DEPLOYER_PK);
+        vault.bindRouter(d, sigs);
         RouteApp app = new RouteApp();
         app.setRouter(address(router));
         vm.stopBroadcast();
@@ -112,8 +155,10 @@ contract E2E is Script {
         vm.serializeAddress(k, "registry", address(reg));
         vm.serializeAddress(k, "vault", address(vault));
         vm.serializeAddress(k, "router", address(router));
+        vm.serializeAddress(k, "deployer", address(deployer));
         vm.writeJson(vm.serializeAddress(k, "app", address(app)), _file(here));
         console.log("router", L[here].id, address(router));
+        console.log("deployer", address(deployer));
     }
 
     /// @notice Open this ledger's side of the Channel to `peer` (commit-reveal with the E2EVerifier).
@@ -184,7 +229,7 @@ contract E2E is Script {
     /// @notice On A (here = 0): alice sends route `n` with a 1 ETH escrow and a 0.1 ETH fee budget.
     function send(uint8 here, uint8 n) external {
         _load(here);
-        ClprRouter.SendRequest memory req;
+        IClprRouter.SendRequest memory req;
         req.destination = RouteTypes.Endpoint({ledgerId: L[2].id, application: abi.encodePacked(address(L[2].app))});
         req.recipient = Caip.account(L[2].id, address(L[2].app));
         req.hops = new RouteTypes.Hop[](3);
@@ -194,12 +239,16 @@ contract E2E is Script {
         req.mode = RouteTypes.Mode.CHEAPEST;
         req.constraints.deadline = uint64(block.timestamp + (n == 5 ? 60 : 1 hours));
         req.payload = abi.encodePacked("e2e scenario ", vm.toString(n));
-        req.routeId = _routeId(n);
+        req.isoUetr = _uetr(n);
         req.escrow = 1 ether;
         req.payee = _payee(n);
+        bytes16 expected = _routeId(n);
         vm.startBroadcast(ALICE_PK);
-        L[here].router.send{value: 1.1 ether}(req);
+        bytes16 id = L[here].router.send{value: 1.1 ether}(req);
         vm.stopBroadcast();
+        require(id == expected, "route id is not the Router-derived one");
+        console.log("ROUTE_ID");
+        console.logBytes16(id);
     }
 
     /// @notice On B (here = 1): relay the provider decision of scenario `n` (k + 1 committee signatures).
@@ -258,13 +307,13 @@ contract E2E is Script {
         uint256 pumped;
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics.length == 0) continue;
-            if (logs[i].topics[0] == ClprRouter.ForwardPending.selector) {
+            if (logs[i].topics[0] == IClprRouter.ForwardPending.selector) {
                 (, bytes memory env) = abi.decode(logs[i].data, (uint32, bytes));
                 vm.startBroadcast(DEPLOYER_PK);
                 ClprRouter(logs[i].emitter).forward(env, new RouteTypes.Hop[](0));
                 vm.stopBroadcast();
                 pumped++;
-            } else if (logs[i].topics[0] == ClprRouter.OutboxQueued.selector) {
+            } else if (logs[i].topics[0] == IClprRouter.OutboxQueued.selector) {
                 (bytes32 c, bytes32 k, bytes memory target, bytes memory data) =
                     abi.decode(logs[i].data, (bytes32, bytes32, bytes, bytes));
                 vm.startBroadcast(DEPLOYER_PK);
@@ -286,17 +335,17 @@ contract E2E is Script {
         _load(0);
         bytes16 id = _routeId(n);
         vm.selectFork(L[0].fork);
-        (,, ClprRouter.RouteStatus status,,,,,,,) = L[0].router.routes(id);
+        (,, IClprRouter.RouteStatus status,,,,,,,,,,,) = L[0].router.routes(id);
         uint256 payeeBal = _payee(n).balance;
         uint256 vaultBal = address(L[0].vault).balance;
         vm.selectFork(L[2].fork);
         uint256 delivered = L[2].app.deliveredCount();
 
-        ClprRouter.RouteStatus want = n == 1
-            ? ClprRouter.RouteStatus.DELIVERED
+        IClprRouter.RouteStatus want = n == 1
+            ? IClprRouter.RouteStatus.DELIVERED
             : n == 4
-                ? ClprRouter.RouteStatus.QUARANTINED
-                : n == 5 ? ClprRouter.RouteStatus.EXPIRED : ClprRouter.RouteStatus.FAILED;
+                ? IClprRouter.RouteStatus.QUARANTINED
+                : n == 5 ? IClprRouter.RouteStatus.EXPIRED : IClprRouter.RouteStatus.FAILED;
         require(
             status == want, string.concat("route status ", vm.toString(uint8(status)), " != ", vm.toString(uint8(want)))
         );
@@ -377,10 +426,17 @@ contract E2E is Script {
             validUntil: uint64(block.timestamp + 1 days),
             epoch: reg.epoch()
         });
-        bytes32 h = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", reg.decisionDigest(d)));
-        uint256 need = reg.requiredSignatures(action);
+        bytes[] memory sigs = _sign(reg.decisionDigest(d), reg.requiredSignatures(action));
+        vm.startBroadcast(DEPLOYER_PK);
+        reg.submit(d, sigs);
+        vm.stopBroadcast();
+    }
+
+    /// @dev EIP-191 signatures over `digest` by the first `need` committee members in address order.
+    function _sign(bytes32 digest, uint256 need) internal view returns (bytes[] memory sigs) {
+        bytes32 h = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", digest));
         address[] memory m = _members();
-        bytes[] memory sigs = new bytes[](need);
+        sigs = new bytes[](need);
         for (uint256 j = 0; j < need; j++) {
             uint256 pk;
             for (uint256 q = 0; q < 5; q++) {
@@ -389,9 +445,6 @@ contract E2E is Script {
             (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, h);
             sigs[j] = abi.encodePacked(r, s, v);
         }
-        vm.startBroadcast(DEPLOYER_PK);
-        reg.submit(d, sigs);
-        vm.stopBroadcast();
     }
 
     /// @dev Set up `here` as the broadcast chain (the --rpc-url fork) and create read forks for the others.
@@ -453,7 +506,14 @@ contract E2E is Script {
         return keccak256(abi.encodePacked(ch, abi.encodePacked(w.publicKeyX, w.publicKeyY), bytes32(0)));
     }
 
-    function _routeId(uint8 n) internal pure returns (bytes16) {
-        return bytes16(keccak256(abi.encodePacked("e2e-route", n)));
+    /// @dev Route id the Router on A derives for alice's route of scenario `n` (alice sends one route per
+    ///      scenario, in order, so its nonce is n - 1).
+    function _routeId(uint8 n) internal view returns (bytes16) {
+        return RouteLogic.routeId(keccak256(bytes(L[0].id)), address(L[0].router), vm.addr(ALICE_PK), uint256(n) - 1);
+    }
+
+    /// @dev ISO 20022 UETR carried in the envelope (informational; it is not the route id).
+    function _uetr(uint8 n) internal pure returns (bytes16) {
+        return bytes16(keccak256(abi.encodePacked("e2e-uetr", n)));
     }
 }

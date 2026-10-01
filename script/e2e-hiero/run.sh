@@ -51,7 +51,7 @@ DEPLOYER=$(cast wallet address --private-key "$DEPLOYER_PK")
 H_GAS_PRICE=$(cast gas-price --rpc-url "$RPC_H")
 echo "Solo H up: $RPC_H, gas price $H_GAS_PRICE weibar, deployer balance $(cast balance "$DEPLOYER" --rpc-url "$RPC_H" --ether) HBAR"
 [ "$(cast nonce "$DEPLOYER" --rpc-url "$RPC_H")" = 0 ] || {
-  echo "deployer already used on Solo H: libraries would not land at the anvil addresses (redeploy Solo)"
+  echo "deployer already used on Solo H: libraries and the ClprRouterDeployer would not land at the anvil addresses (redeploy Solo)"
   exit 1
 }
 
@@ -75,7 +75,8 @@ chain_flags() {
 }
 
 # The external libraries are deployed at the deployer's nonces 0 and 1 on every chain (fresh key on each), so
-# they have the same addresses everywhere and one link setting serves all chains (Hedera derives the address
+# they have the same addresses everywhere and one link setting serves all chains. deployStack then creates the
+# ClprRouterDeployer at nonce 2, so it too has one address on A, H and B and every Router is canonical (Hedera derives the address
 # of a contract created by an EthereumTransaction from sender and nonce, as Ethereum does; checked below).
 CODEC=$(cast compute-address --nonce 0 "$DEPLOYER" | awk '{print $NF}')
 LOGIC=$(cast compute-address --nonce 1 "$DEPLOYER" | awk '{print $NF}')
@@ -130,7 +131,7 @@ echo "== deploy"
 for i in 0 1 2; do fs "$i" deploy 'deployStack(uint8)' "$i" | grep -E '^  (router|service)' || true; done
 for s in 0 1 2; do
   f="$OUT/L$s.json"
-  for k in service router app; do
+  for k in service deployer router app; do
     a=$(jq -r ".$k" "$f")
     [ "$(cast code "$a" --rpc-url "${RPCS[$s]}")" != "0x" ] || { echo "no code for $k at $a on ${NAMES[$s]}"; exit 1; }
   done
