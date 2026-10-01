@@ -1,9 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {ClprTypes} from "@hiero-ledger/clpr/libraries/ClprTypes.sol";
 import {IClprService} from "@hiero-ledger/clpr/interfaces/IClprService.sol";
 import {ClprRouter} from "@clprouter/ClprRouter.sol";
+import {IClprRouter} from "@clprouter/interfaces/IClprRouter.sol";
 import {ProviderRegistry} from "@clprouter/ProviderRegistry.sol";
 import {QuarantineVault} from "@clprouter/QuarantineVault.sol";
 import {IProviderRegistry} from "@clprouter/interfaces/IProviderRegistry.sol";
@@ -14,6 +15,7 @@ import {RouteCodec} from "@clprouter/libraries/RouteCodec.sol";
 import {RouteLogic} from "@clprouter/libraries/RouteLogic.sol";
 import {Caip} from "@clprouter/libraries/Caip.sol";
 import {Committee} from "../../helpers/Committee.sol";
+import {RouterDeploy} from "../../helpers/RouterDeploy.sol";
 
 /// @notice CLPR Service stand-in for the Router security suite (docs/audit/router-findings.md). Like
 ///         test/helpers/MockRouteService, plus: delivery with a caller-chosen gas limit and try/catch (as the
@@ -158,8 +160,26 @@ contract ReturnBomb {
     }
 
     /// @dev Origin-side sender: sends a route from this contract (so refunds come back here).
-    function sendRoute(ClprRouter r, ClprRouter.SendRequest calldata req) external payable returns (bytes16) {
+    function sendRoute(ClprRouter r, IClprRouter.SendRequest calldata req) external payable returns (bytes16) {
         return r.send{value: msg.value}(req);
+    }
+}
+
+/// @notice Destination application whose response is a `bytes` of `SIZE` bytes (a return bomb into the Router).
+contract ResponseBomb {
+    uint256 public immutable SIZE;
+
+    constructor(uint256 size) {
+        SIZE = size;
+    }
+
+    fallback() external {
+        uint256 n = SIZE;
+        assembly {
+            mstore(0, 0x20)
+            mstore(0x20, n)
+            return(0, add(n, 0x40))
+        }
     }
 }
 
@@ -201,6 +221,11 @@ contract FakeRouter {
 
     function onClprResponse(bytes32, uint64, uint8, bytes calldata) external {}
 
+    /// @dev Hand the fake an envelope (e.g. a copy of one a real hop received) without CLPR delivery.
+    function setHeld(bytes calldata data) external {
+        held = data;
+    }
+
     function pump() external {
         RouteTypes.Envelope memory e = RouteCodec.decodeEnvelope(held);
         uint256 k = e.hopIndex;
@@ -220,7 +245,7 @@ contract FakeRouter {
 }
 
 /// @notice One origin Router (ledger A) on {SecMockService}, with helpers that play the rest of the route.
-abstract contract OriginHarness is Committee {
+abstract contract OriginHarness is Committee, RouterDeploy {
     string internal constant ID_A = "eip155:31001";
     string internal constant ID_B = "eip155:31002";
     string internal constant ID_C = "eip155:31003";
@@ -235,8 +260,8 @@ abstract contract OriginHarness is Committee {
     ProviderRegistry internal regA;
     QuarantineVault internal vaultA;
     ClprRouter internal routerA;
-    address internal routerB = makeAddr("router-B");
-    address internal routerC = makeAddr("router-C");
+    address internal routerB; // canonical Router addresses of B and C (not deployed in the origin harness)
+    address internal routerC;
     address internal destApp = makeAddr("dest-app");
 
     function _deployOrigin() internal {
@@ -245,7 +270,10 @@ abstract contract OriginHarness is Committee {
         svcA.setPeer(CH_AB, ID_B);
         regA = _deployRegistry();
         vaultA = new QuarantineVault(IProviderRegistry(address(regA)), 3 days, 7 days);
-        routerA = new ClprRouter(
+        _initRouterDeployer();
+        routerB = _routerAddr(ID_B);
+        routerC = _routerAddr(ID_C);
+        routerA = _deployRouter(
             IClprService(address(svcA)),
             IProviderRegistry(address(regA)),
             IQuarantineVault(address(vaultA)),
@@ -275,7 +303,7 @@ abstract contract OriginHarness is Committee {
     function _req(uint256 escrow, address payee_, uint64 fee0, address p0, uint64 fee1, address p1)
         internal
         view
-        returns (ClprRouter.SendRequest memory req)
+        returns (IClprRouter.SendRequest memory req)
     {
         req.destination = RouteTypes.Endpoint(ID_C, abi.encodePacked(destApp));
         req.recipient = Caip.account(ID_C, destApp);
@@ -311,7 +339,7 @@ abstract contract OriginHarness is Committee {
         return RouteCodec.encodeEnvelope(re);
     }
 
-    function _status(bytes16 id) internal view returns (ClprRouter.RouteStatus s) {
-        (,, s,,,,,,,) = routerA.routes(id);
+    function _status(bytes16 id) internal view returns (IClprRouter.RouteStatus s) {
+        (,, s,,,,,,,,,,,) = routerA.routes(id);
     }
 }

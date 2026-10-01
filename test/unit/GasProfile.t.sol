@@ -1,9 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
 import {ClprRouter} from "@clprouter/ClprRouter.sol";
+import {IClprRouter} from "@clprouter/interfaces/IClprRouter.sol";
 import {RouteTypes} from "@clprouter/libraries/RouteTypes.sol";
 import {ThreeLedgerFixture} from "../helpers/ThreeLedgerFixture.sol";
 
@@ -20,7 +21,7 @@ contract GasProfileTest is ThreeLedgerFixture {
         (uint256 submitRB, uint256 forwardRB) = _step(C, B, chBC);
         (uint256 settleA,) = _step(B, A, chAB);
 
-        assertEq(uint8(_routeStatus(id)), uint8(ClprRouter.RouteStatus.DELIVERED));
+        assertEq(uint8(_routeStatus(id)), uint8(IClprRouter.RouteStatus.DELIVERED));
         console.log("send on A                    ", sendGas);
         console.log("hop B: submitBundle          ", submitB);
         console.log("hop B: forward               ", forwardB);
@@ -41,12 +42,12 @@ contract GasProfileTest is ThreeLedgerFixture {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics.length == 0) continue;
-            if (logs[i].topics[0] == ClprRouter.ForwardPending.selector) {
+            if (logs[i].topics[0] == IClprRouter.ForwardPending.selector) {
                 (, bytes memory env) = abi.decode(logs[i].data, (uint32, bytes));
                 g = gasleft();
                 ClprRouter(logs[i].emitter).forward(env, new RouteTypes.Hop[](0));
                 pump += g - gasleft();
-            } else if (logs[i].topics[0] == ClprRouter.OutboxQueued.selector) {
+            } else if (logs[i].topics[0] == IClprRouter.OutboxQueued.selector) {
                 (bytes32 c, bytes32 k, bytes memory target, bytes memory data) =
                     abi.decode(logs[i].data, (bytes32, bytes32, bytes, bytes));
                 g = gasleft();

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 /// @title IClprRouteApplication
@@ -7,13 +7,16 @@ pragma solidity ^0.8.28;
 ///      strong as the weakest hop of the route (every verifier and every Router on it).
 interface IClprRouteApplication {
     /// @notice Deliver a routed message. Reverting makes the destination Router send a FAILED receipt.
-    /// @param routeId Route id (the UETR under the ISO 20022 filter).
+    /// @param routeId Route id, derived by the origin Router (unique per origin Router; the ISO 20022 UETR travels
+    ///        separately in the envelope's `iso_uetr` and inside the ISO payload).
     /// @param originLedger CAIP-2 id of the origin ledger.
     /// @param originApplication Application (Router caller) on the origin ledger.
     /// @param sender CAIP-10 id of the paying sender, stamped by the origin Router.
     /// @param payloadType RouteTypes.PayloadType.
     /// @param payload Application bytes.
-    /// @return response Bytes whose keccak256 is reported back to the origin in the DELIVERED receipt.
+    /// @return response Bytes whose keccak256 is reported back to the origin in the DELIVERED receipt. The Router
+    ///         copies at most `ClprRouter.MAX_RESPONSE` (4096) bytes of it; a longer response is hashed over its
+    ///         first 4096 bytes. A return value that is not an ABI-encoded `bytes` counts as a failure.
     function onRouteMessage(
         bytes16 routeId,
         string calldata originLedger,

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {IClprService} from "@hiero-ledger/clpr/interfaces/IClprService.sol";
@@ -14,10 +14,77 @@ import {Caip} from "./Caip.sol";
 /// @dev Deployed as an external library (public functions) to keep ClprRouter under EIP-170.
 library RouteLogic {
     error InvalidRoute(RouteTypes.Reason reason);
+    /// @notice A hop (or receipt-path hop) names a Router that is not its ledger's canonical deployment.
+    error NonCanonicalRouter(string ledgerId);
 
-    /// @notice At least one edge, at most min(max_hops, ABSOLUTE_MAX_HOPS) edges, no ledger twice, and no fee
-    ///         budget on a loose route (loose routes carry no value; see ClprRouter.send).
-    function validateStructure(RouteTypes.Envelope memory e) public pure {
+    /// @notice Domain tags of the two id namespaces (route ids and receipt ids never collide).
+    bytes32 internal constant ROUTE_TAG = keccak256("clprouter.v1.route");
+    bytes32 internal constant RECEIPT_TAG = keccak256("clprouter.v1.receipt");
+
+    /// @notice What fixes the canonical Router addresses of a deployment (see ClprRouterDeployer).
+    struct Canon {
+        address deployer;
+        bytes32 salt;
+        bytes32 initCodeHash;
+    }
+
+    // ── Ids, keys and canonical Routers ────────────────────────────────────
+
+    /// @notice Route id of the `nonce`-th route `sender` sends through `router` on `ledgerHash` (never chosen by
+    ///         the sender, so it cannot be squatted).
+    function routeId(bytes32 originLedger, address router, address sender, uint256 nonce)
+        internal
+        pure
+        returns (bytes16)
+    {
+        return bytes16(keccak256(abi.encode(ROUTE_TAG, originLedger, router, sender, nonce)));
+    }
+
+    /// @notice Replay / hop-state key of an envelope: its origin (hops[0]) and its id. Ids are unique per origin
+    ///         Router, and hops[0] of a receipt is the reporting Router, so routes and receipts of different
+    ///         origins never share a key.
+    function inboundKey(RouteTypes.Envelope memory e) internal pure returns (bytes32) {
+        return keccak256(abi.encode(keccak256(bytes(e.hops[0].ledgerId)), keccak256(e.hops[0].router), e.routeId));
+    }
+
+    /// @notice keccak256 of a CAIP-2 ledger id, normalising a bare EIP-155 chain id ("296") to "eip155:296"
+    ///         (CLPR Services may report either form).
+    function ledgerHash(string memory id) public pure returns (bytes32) {
+        bytes memory b = bytes(id);
+        if (b.length == 0) return keccak256(b);
+        for (uint256 i = 0; i < b.length; i++) {
+            if (b[i] < "0" || b[i] > "9") return keccak256(b);
+        }
+        return keccak256(bytes.concat("eip155:", b));
+    }
+
+    /// @notice Canonical Router address of `ledgerId` in the deployment `c`.
+    function canonicalRouter(Canon memory c, string memory ledgerId) public pure returns (address) {
+        bytes32 salt = keccak256(abi.encode(c.salt, keccak256(bytes(ledgerId))));
+        return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), c.deployer, salt, c.initCodeHash)))));
+    }
+
+    /// @dev Every Router named in `hops` is the canonical deployment of its ledger.
+    ///      EVM ledgers (20-byte Router addresses) use the CREATE2 address. Non-EVM ledgers need a
+    ///      provider-certified Router address from the registry, which it does not expose yet: until it does they
+    ///      fail closed here (hook: replace the `length != 20` branch with that registry lookup).
+    function _checkRouters(RouteTypes.Hop[] memory hops, Canon memory c) private pure {
+        for (uint256 i = 0; i < hops.length; i++) {
+            bytes memory r = hops[i].router;
+            if (r.length != 20 || address(bytes20(r)) != canonicalRouter(c, hops[i].ledgerId)) {
+                revert NonCanonicalRouter(hops[i].ledgerId);
+            }
+        }
+    }
+
+    // ── Structure ───────────────────────────────────────────────────────────
+
+    /// @notice At least one edge, at most min(max_hops, ABSOLUTE_MAX_HOPS) edges, no ledger twice, no fee
+    ///         budget on a loose route (loose routes carry no value; see ClprRouter.send), and every Router of
+    ///         the route and of its receipt path canonical.
+    function validateStructure(RouteTypes.Envelope memory e, Canon memory c) public pure {
+        _checkRouters(e.hops, c);
+        _checkRouters(e.receiptPath, c);
         if (e.constraints.loose && e.constraints.remainingFeeBudget != 0) {
             revert InvalidRoute(RouteTypes.Reason.FEE_BUDGET);
         }
@@ -81,6 +148,47 @@ library RouteLogic {
         return RouteTypes.Reason.NONE;
     }
 
+    /// @notice Checks about the ledger holding a route that arrived from `prev`: route safety ({hereSafety}),
+    ///         deadline, blacklist (sender, recipient, destination application). Receipts get route safety only.
+    /// @return status Receipt status to stop with (UNSPECIFIED when `reason` is NONE).
+    function checkHere(
+        IProviderRegistry registry,
+        bytes32 selfRouterKey,
+        uint32 version,
+        string memory here,
+        RouteTypes.Envelope memory e
+    ) public view returns (RouteTypes.ReceiptStatus status, RouteTypes.Reason reason, bytes32 caseId) {
+        reason = hereSafety(registry, selfRouterKey, version, here, e.hops[e.hopIndex - 1]);
+        if (reason != RouteTypes.Reason.NONE) return (RouteTypes.ReceiptStatus.FAILED, reason, 0);
+        if (e.payloadType == RouteTypes.PayloadType.RECEIPT) return (status, reason, 0);
+        if (block.timestamp > e.constraints.deadline) {
+            return (RouteTypes.ReceiptStatus.EXPIRED, RouteTypes.Reason.DEADLINE, 0);
+        }
+        bool listed;
+        (listed, caseId) = screen(registry, e.sender, e.recipient, e.destination, "");
+        if (listed) return (RouteTypes.ReceiptStatus.QUARANTINED, RouteTypes.Reason.BLACKLIST, caseId);
+    }
+
+    /// @notice Checks on the edge leaving hop `idx` of `e` (whose Channel the caller already matched with the next
+    ///         ledger): disabled edge, ledger or Router; for routes also filters on the next ledger at the pinned
+    ///         registry version, the edge's trust tier against the trust floor, and the fee budget.
+    function checkNext(IProviderRegistry registry, RouteTypes.Envelope memory e, uint256 idx)
+        public
+        view
+        returns (RouteTypes.Reason)
+    {
+        RouteTypes.Hop memory h = e.hops[idx];
+        RouteTypes.Hop memory next = e.hops[idx + 1];
+        RouteTypes.Reason r = edgeSafety(registry, h, next);
+        if (r != RouteTypes.Reason.NONE || e.payloadType == RouteTypes.PayloadType.RECEIPT) return r;
+        if (!filtersPass(registry, next.ledgerId, e.constraints, e.filterRegistryVersions)) {
+            return RouteTypes.Reason.FILTER;
+        }
+        if (!edgeTrusted(registry, h, next, e.constraints.trustFloor)) return RouteTypes.Reason.TRUST_FLOOR;
+        if (e.constraints.remainingFeeBudget < h.fee) return RouteTypes.Reason.FEE_BUDGET;
+        return RouteTypes.Reason.NONE;
+    }
+
     /// @notice Every active filter passes for `ledger` at its pinned registry version.
     /// @dev Unfiltered routes never read the certification registry.
     function filtersPass(
@@ -133,15 +241,17 @@ library RouteLogic {
     }
 
     /// @notice Loose re-routing: hops[0..idx) followed by `tail` (tail[0] = this ledger and Router).
-    function splice(RouteTypes.Envelope memory e, RouteTypes.Hop[] memory tail, bytes32 ledgerHash, bytes32 selfHash)
-        public
-        pure
-        returns (RouteTypes.Envelope memory)
-    {
+    ///         Every Router of the tail must be canonical (checked with the whole structure).
+    function splice(
+        RouteTypes.Envelope memory e,
+        RouteTypes.Hop[] memory tail,
+        bytes32 hereHash,
+        bytes32 selfHash,
+        Canon memory c
+    ) public pure returns (RouteTypes.Envelope memory) {
         uint256 idx = e.hopIndex;
         if (
-            tail.length == 0 || keccak256(bytes(tail[0].ledgerId)) != ledgerHash
-                || keccak256(tail[0].router) != selfHash
+            tail.length == 0 || keccak256(bytes(tail[0].ledgerId)) != hereHash || keccak256(tail[0].router) != selfHash
                 || keccak256(bytes(tail[tail.length - 1].ledgerId)) != keccak256(bytes(e.destination.ledgerId))
         ) revert InvalidRoute(RouteTypes.Reason.BAD_ROUTE);
         RouteTypes.Hop[] memory hops = new RouteTypes.Hop[](idx + tail.length);
@@ -152,7 +262,7 @@ library RouteLogic {
             hops[idx + i] = tail[i];
         }
         e.hops = hops;
-        validateStructure(e);
+        validateStructure(e, c);
         return e;
     }
 
@@ -234,7 +344,11 @@ library RouteLogic {
     ) public pure returns (bytes16 receiptId, RouteTypes.Hop[] memory hops, bytes memory data) {
         RouteTypes.Envelope memory re;
         uint256 k = e.hopIndex;
-        receiptId = bytes16(keccak256(abi.encodePacked(e.routeId, "receipt", e.hopIndex)));
+        receiptId = bytes16(
+            keccak256(
+                abi.encode(RECEIPT_TAG, keccak256(bytes(e.hops[0].ledgerId)), keccak256(e.hops[0].router), e.routeId, k)
+            )
+        );
         re.routeId = receiptId;
         re.origin = RouteTypes.Endpoint({ledgerId: here, application: abi.encodePacked(self)});
         re.destination = e.origin;
@@ -265,7 +379,7 @@ library RouteLogic {
     /// @notice keccak256 of the CAIP-2 id of the peer ledger of `channelId` on `service` (zero if unknown).
     function peerLedgerHash(IClprService service, bytes32 channelId) public returns (bytes32) {
         try service.getChannel(channelId) returns (ClprTypes.Channel memory c) {
-            return keccak256(bytes(c.chainId));
+            return ledgerHash(c.chainId);
         } catch {
             return bytes32(0);
         }
@@ -273,15 +387,17 @@ library RouteLogic {
 
     /// @notice Send-time checks on a freshly built envelope (structure, origin and destination hops, deadline,
     ///         filter bits, fee totals) and pinning of the current registry version for every active filter.
-    function prepareSend(RouteTypes.Envelope memory e, bytes32 ledgerHash, bytes32 selfHash, uint64 registryVersion)
-        public
-        view
-        returns (RouteTypes.Envelope memory)
-    {
-        validateStructure(e);
+    function prepareSend(
+        RouteTypes.Envelope memory e,
+        bytes32 hereHash,
+        bytes32 selfHash,
+        uint64 registryVersion,
+        Canon memory c
+    ) public view returns (RouteTypes.Envelope memory) {
+        validateStructure(e, c);
         uint256 n = e.hops.length;
         if (
-            keccak256(bytes(e.hops[0].ledgerId)) != ledgerHash || keccak256(e.hops[0].router) != selfHash
+            keccak256(bytes(e.hops[0].ledgerId)) != hereHash || keccak256(e.hops[0].router) != selfHash
                 || keccak256(bytes(e.hops[n - 1].ledgerId)) != keccak256(bytes(e.destination.ledgerId))
         ) revert InvalidRoute(RouteTypes.Reason.BAD_ROUTE);
         if (e.constraints.deadline <= block.timestamp) revert InvalidRoute(RouteTypes.Reason.DEADLINE);
@@ -309,13 +425,16 @@ library RouteLogic {
         return e;
     }
 
-    /// @notice Origin-side authentication of a receipt envelope `re` carrying receipt `r`.
-    /// @param firstHop keccak256(channel of hop 0, router of hop 1) stored at send: the receipt must arrive
-    ///        from the route's first-hop Router over the route's first Channel.
-    /// @param commitment Strict routes: hopsCommitment(hops, 0) (zero = loose: nothing to check and, since loose
-    ///        routes carry no value, no fees to pay).
-    /// @param verifyPath Strict routes without an explicit receipt path: the receipt must have travelled the exact
-    ///        reverse of the route (no explicit prefix accepted).
+    /// @notice Origin-side authentication of a receipt envelope `re` carrying receipt `r`. Every Router on the
+    ///         way is canonical (checked hop by hop) and the reporter is `re.hops[0]` (= `re.origin`, checked on
+    ///         arrival); this binds the receipt to the stored route as well.
+    /// @param firstHop keccak256(channel of hop 0, router of hop 1) stored at send: a receipt travelling the
+    ///        reverse route must arrive from the route's first-hop Router over the route's first Channel.
+    /// @param commitment Strict routes: hopsCommitment(hops, 0) (zero = loose: the hops may have changed and,
+    ///        since loose routes carry no value, there are no fees to pay).
+    /// @param pathHash keccak256(abi.encode(receiptPath)) of a route with an explicit receipt path (else zero):
+    ///        a receipt that does not travel the reverse route must be the destination's DELIVERED receipt and
+    ///        must have travelled exactly that path (which fixes the Router and Channel it arrives from).
     /// @return ok Whether the receipt is authentic.
     /// @return prefix hops[0..r.hopIndex) of the route, whose fees are due (empty for loose routes).
     function checkReceipt(
@@ -323,26 +442,31 @@ library RouteLogic {
         RouteTypes.Receipt memory r,
         bytes32 firstHop,
         bytes32 commitment,
-        bool verifyPath
+        bytes32 pathHash
     ) public pure returns (bool ok, RouteTypes.Hop[] memory prefix) {
         RouteTypes.Hop memory prev = re.hops[re.hopIndex - 1];
         uint256 k = r.hopIndex;
         if (
-            keccak256(abi.encodePacked(prev.channelId, prev.router)) != firstHop
-                || r.status == RouteTypes.ReceiptStatus.UNSPECIFIED || k == 0
+            r.status == RouteTypes.ReceiptStatus.UNSPECIFIED || k == 0
                 || (r.status == RouteTypes.ReceiptStatus.DELIVERED && r.routeRest != bytes32(0))
                 || (r.status == RouteTypes.ReceiptStatus.QUARANTINED && r.caseId == bytes32(0))
         ) return (false, prefix);
-        if (commitment == bytes32(0)) return (true, prefix);
 
-        bytes32 node = _node(re.origin.ledgerId, re.origin.application);
-        if (r.routePrefix.length > 0) {
-            if (verifyPath || r.routePrefix.length != k) return (false, prefix);
+        bytes32 node = _node(re.hops[0].ledgerId, re.hops[0].router);
+        bool viaPath = pathHash != bytes32(0) && keccak256(abi.encode(re.hops)) == pathHash;
+        if (viaPath) {
+            if (r.status != RouteTypes.ReceiptStatus.DELIVERED) return (false, prefix);
+            if (commitment == bytes32(0)) return (true, prefix);
+            if (r.routePrefix.length != k) return (false, prefix);
             prefix = r.routePrefix;
         } else {
+            if (keccak256(abi.encodePacked(prev.channelId, prev.router)) != firstHop || r.routePrefix.length > 0) {
+                return (false, prefix);
+            }
+            if (commitment == bytes32(0)) return (true, prefix);
             // Rebuild hops[0..k) from the reverse path the receipt travelled; its first hop is the reporter.
             RouteTypes.Hop[] memory p = re.hops;
-            if (p.length != k + 1 || _node(p[0].ledgerId, p[0].router) != node) return (false, prefix);
+            if (p.length != k + 1) return (false, prefix);
             prefix = new RouteTypes.Hop[](k);
             for (uint256 i = 0; i < k; i++) {
                 RouteTypes.Hop memory n = p[k - i];
@@ -358,5 +482,31 @@ library RouteLogic {
         }
         if (c != commitment) return (false, new RouteTypes.Hop[](0));
         ok = true;
+    }
+
+    // ── Blacklist ───────────────────────────────────────────────────────────
+
+    /// @notice Blacklist screen of a route on this ledger: the paying sender, the final recipient, the
+    ///         destination application (CAIP-10 of `destination`, EVM addresses only) and `extra` (the payee at
+    ///         the origin; empty elsewhere). Returns the first listing found.
+    function screen(
+        IProviderRegistry registry,
+        string memory sender,
+        string memory recipient,
+        RouteTypes.Endpoint memory destination,
+        string memory extra
+    ) public view returns (bool listed, bytes32 caseId) {
+        (listed, caseId) = _listed(registry, sender);
+        if (!listed) (listed, caseId) = _listed(registry, recipient);
+        if (!listed && destination.application.length == 20) {
+            (listed, caseId) =
+                _listed(registry, Caip.account(destination.ledgerId, address(bytes20(destination.application))));
+        }
+        if (!listed) (listed, caseId) = _listed(registry, extra);
+    }
+
+    function _listed(IProviderRegistry registry, string memory caip10) private view returns (bool, bytes32) {
+        if (bytes(caip10).length == 0) return (false, 0);
+        return registry.blacklisted(Caip.accountKey(caip10));
     }
 }

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
@@ -7,10 +7,14 @@ import {IClprService} from "@hiero-ledger/clpr/interfaces/IClprService.sol";
 import {ClprTypes} from "@hiero-ledger/clpr/libraries/ClprTypes.sol";
 import {IProviderRegistry} from "./interfaces/IProviderRegistry.sol";
 import {IQuarantineVault} from "./interfaces/IQuarantineVault.sol";
-import {IClprRouteApplication, IClprRouteSender} from "./interfaces/IClprRouteApplication.sol";
+import {IClprRouter, IClprRouterDeployer} from "./interfaces/IClprRouter.sol";
+import {IClprRouteApplication} from "./interfaces/IClprRouteApplication.sol";
 import {RouteTypes} from "./libraries/RouteTypes.sol";
 import {RouteCodec} from "./libraries/RouteCodec.sol";
 import {RouteLogic} from "./libraries/RouteLogic.sol";
+import {RouteSettlement} from "./libraries/RouteSettlement.sol";
+import {RouteOrigin} from "./libraries/RouteOrigin.sol";
+import {RouteReceipts} from "./libraries/RouteReceipts.sol";
 import {Caip} from "./libraries/Caip.sol";
 
 /// @title ClprRouter
@@ -18,9 +22,11 @@ import {Caip} from "./libraries/Caip.sol";
 ///         ledgers that share no CLPR Channel by forwarding a `ClprRouteEnvelope` across intermediate ledgers.
 ///         A CLPR application on top of an unchanged CLPR Service: it only calls `sendMessage` and implements
 ///         `IClprApplication`.
-/// @dev Immutable, no admin key, no pause. The only outside inputs that change behaviour are the provider
-///      registry (route disables, blacklist, filter certifications, edge trust tiers) whose address is fixed at
-///      deployment.
+/// @dev Immutable, no admin key, no pause. Deployed by {ClprRouterDeployer} at the canonical CREATE2 address of its
+///      ledger; it accepts envelopes only from, and forwards only to, the canonical Routers of the deployment, so
+///      every envelope on the wire was built by this code. The only outside inputs that change behaviour are the
+///      provider registry (route disables, blacklist, filter certifications, edge trust tiers) whose address is
+///      fixed at deployment.
 ///
 ///      Flow: `send` on the origin → forward inside CLPR application delivery on each intermediate ledger →
 ///      deliver to the destination application → receipt back to the origin as a new routed message → origin
@@ -30,38 +36,24 @@ import {Caip} from "./libraries/Caip.sol";
 ///      `sendMessage` on the next Channel. CLPR Service implementations that guard `sendMessage` and
 ///      `submitBundle` with one shared reentrancy lock (as the reference Solidity ClprService does) reject
 ///      that nested call; the Router then records the hop as pending and anyone may complete it with
-///      {forward} (or {flush} for receipts) in a later transaction. Every check is re-run at that point.
-contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
+///      {forward} (receipts: {flush}) in a later transaction. Every check is re-run at that point.
+///
+///      Receipts are never dropped: a receipt that cannot be sent (deferred, transient failure, blocked edge) or
+///      that CLPR rejects waits in the outbox until {flush} sends it; one that arrives over a disabled edge,
+///      ledger or Router is held until {forward} can process it.
+contract ClprRouter is IClprApplication, IClprRouter, ReentrancyGuardTransient {
     // ── Constants ───────────────────────────────────────────────────────────
 
     /// @notice Envelope and code version; every hop must run the same version.
     uint32 public constant VERSION = 1;
-
-    bytes4 private constant REENTRANT_CALL = bytes4(keccak256("ReentrancyGuardReentrantCall()"));
+    /// @notice Bytes of a destination application's response that are copied and hashed (the rest is ignored).
+    uint256 public constant MAX_RESPONSE = 4096;
 
     uint8 private constant RESP_ACCEPTED = 1;
     uint8 private constant RESP_REJECTED = 2;
-
-    // ── Types ───────────────────────────────────────────────────────────────
-
-    /// @notice Per-route state on a non-origin ledger (also the replay set: anything but NONE was seen).
-    enum HopState {
-        NONE,
-        SEEN,
-        FORWARD_PENDING,
-        FORWARDED,
-        NACKED,
-        DONE
-    }
-
-    enum RouteStatus {
-        NONE,
-        PENDING,
-        DELIVERED,
-        FAILED,
-        EXPIRED,
-        QUARANTINED
-    }
+    uint8 private constant KIND_ORIGIN = 0;
+    uint8 private constant KIND_HOP = 1;
+    uint8 private constant KIND_RECEIPT = 2;
 
     enum SendResult {
         SENT,
@@ -69,136 +61,14 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         FAILED
     }
 
-    /// @notice What the origin keeps for a route it sent.
-    struct OriginRoute {
-        address sender;
-        uint64 deadline;
-        RouteStatus status;
-        bool strict;
-        bool verifyPath;
-        address payee;
-        uint64 feeBudget;
-        uint256 escrow;
-        bytes32 hopsHash; // RouteLogic.hopsCommitment(hops, 0); checked for strict routes only
-        bytes32 firstHop; // keccak256(channelId of hop 0, router of hop 1)
-    }
-
-    /// @notice Arguments of {send}.
-    /// @param destination Destination ledger and application.
-    /// @param recipient CAIP-10 id of the final recipient (checked against the blacklist at every hop).
-    /// @param hops Full route from the planner, hops[0] = this ledger and this Router.
-    /// @param mode Objective the planner optimised.
-    /// @param constraints Filters, deadline, max fee, trust floor, max hops, strict/loose, energy cap.
-    ///        `remainingFeeBudget` is ignored: the fee budget is `msg.value - escrow`.
-    /// @param payloadType RAW, ISO20022 or ASSET.
-    /// @param payload Application bytes (hash or ciphertext under the ISO 20022 / MiCA filters).
-    /// @param receiptPath Explicit way back for the delivery receipt; empty = reverse of `hops`.
-    /// @param originSignature Optional end-to-end signature by the origin application.
-    /// @param routeId Optional caller-chosen 16-byte id (the UETR under ISO 20022); zero = generated.
-    /// @param escrow Part of `msg.value` held until the route settles (released to `payee` on delivery).
-    /// @param payee Origin-ledger account paid the escrow on a DELIVERED receipt.
-    struct SendRequest {
-        RouteTypes.Endpoint destination;
-        string recipient;
-        RouteTypes.Hop[] hops;
-        RouteTypes.Mode mode;
-        RouteTypes.Constraints constraints;
-        RouteTypes.PayloadType payloadType;
-        bytes payload;
-        RouteTypes.Hop[] receiptPath;
-        bytes originSignature;
-        bytes16 routeId;
-        uint256 escrow;
-        address payee;
-    }
-
-    // ── Errors ──────────────────────────────────────────────────────────────
-
-    error NotService();
-    error InvalidRoute(RouteTypes.Reason reason);
-    error RouteBlocked(uint256 hop, RouteTypes.Reason reason);
-    error DuplicateRouteId();
-    error InsufficientValue();
-    error ValueRoutesMustBeStrict();
-    error WrongVersion();
-    error NotForThisHop();
-    error UnexpectedSender();
-    error RouteReplayed();
-    error NothingPending();
-    error LooseRoutingRequired();
-    error NotReclaimable();
-    error LedgerMismatch();
-    error InsufficientGas();
-    error WithdrawFailed();
-
-    // ── Events ──────────────────────────────────────────────────────────────
-
-    event RouteSent(
-        bytes16 indexed routeId,
-        address indexed sender,
-        string destinationLedger,
-        uint256 escrow,
-        uint64 feeBudget,
-        uint64 deadline,
-        uint64 messageId
-    );
-    /// @notice `envelope` is the envelope as held on this ledger (keccak256 = `envelopeHash`, the key of a later
-    ///         {ForwardRejected}); empty for receipts.
-    event RouteForwarded(
-        bytes16 indexed routeId,
-        uint32 hopIndex,
-        bytes32 channelId,
-        uint64 messageId,
-        bytes32 envelopeHash,
-        bytes envelope
-    );
-    /// @notice A hop could not be sent inside CLPR delivery; complete it with {forward}(envelope, []).
-    event ForwardPending(bytes16 indexed routeId, uint32 hopIndex, bytes envelope);
-    /// @notice A forward was rejected; complete it with {forward}(envelope, tail) — an empty tail sends the FAILED
-    ///         receipt that refunds the origin. `clprStatus` is the CLPR reply status (0 = the local
-    ///         `sendMessage` failed, reason SEND_FAILED; otherwise reason NEXT_HOP_ERROR). `envelope` is empty when
-    ///         the rejection came in a CLPR Response: it is the one with `envelopeHash` in the earlier
-    ///         {RouteForwarded} (or {ForwardPending}) of this route on this Router.
-    event ForwardRejected(
-        bytes16 indexed routeId,
-        uint32 hopIndex,
-        bytes32 envelopeHash,
-        uint8 clprStatus,
-        RouteTypes.Reason reason,
-        bytes envelope
-    );
-    /// @notice A receipt could not be sent inside CLPR delivery; complete it with {flush}.
-    event OutboxQueued(bytes32 indexed key, bytes32 channelId, bytes32 connectorId, bytes target, bytes data);
-    event RouteDelivered(bytes16 indexed routeId, address indexed application, bytes32 responseHash);
-    event RouteStopped(
-        bytes16 indexed routeId, uint32 hopIndex, RouteTypes.ReceiptStatus status, RouteTypes.Reason reason
-    );
-    event ReceiptSent(
-        bytes16 indexed receiptId, bytes16 indexed routeId, RouteTypes.ReceiptStatus status, RouteTypes.Reason reason
-    );
-    event ReceiptUndeliverable(bytes16 indexed routeId, RouteTypes.Reason reason);
-    event ReceiptIgnored(bytes16 indexed routeId);
-    /// @notice Notice to the recipient that a transfer is held; no accusation, only whom to contact.
-    event QuarantineNotice(
-        bytes32 indexed recipientKey, bytes16 indexed routeId, string recipient, bytes32 caseId, string contact
-    );
-    event RouteSettled(
-        bytes16 indexed routeId,
-        RouteStatus status,
-        RouteTypes.Reason reason,
-        uint32 hopIndex,
-        bytes32 caseId,
-        string contact,
-        uint256 feesPaid
-    );
-    event HopResponse(bytes16 indexed routeId, bytes32 channelId, uint64 messageId, uint8 status);
-
     // ── Immutable configuration ─────────────────────────────────────────────
 
     IClprService public immutable SERVICE;
     IProviderRegistry public immutable REGISTRY;
     IQuarantineVault public immutable VAULT;
-    /// @notice Time after the deadline before the origin may reclaim a route that never got a receipt.
+    /// @notice Worst-case latency of one receipt edge (relay plus permissionless pump). The origin accepts a
+    ///         reclaim request after the deadline plus this much per edge of the way back, and finalises it this
+    ///         much later.
     uint64 public immutable RECLAIM_GRACE;
     /// @notice Gas given to destination applications and notice / receipt hooks.
     uint64 public immutable APP_GAS;
@@ -206,79 +76,78 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
     ///         of gas) a permissionless {forward} reverts as a whole, and a send inside delivery stays pending,
     ///         so nobody can fail a hop for good by under-funding the transaction.
     uint64 public immutable MIN_SEND_GAS;
+    /// @notice The {ClprRouterDeployer} of the deployment, its salt and the Router init-code hash: together they
+    ///         fix the canonical Router address of every EVM ledger ({canonicalRouter}).
+    address public immutable DEPLOYER;
+    bytes32 public immutable DEPLOYMENT_SALT;
+    bytes32 public immutable INIT_CODE_HASH;
 
     bytes32 private immutable _LEDGER_HASH;
     bytes32 private immutable _SELF_HASH;
     bytes32 private immutable _SELF_ROUTER_KEY;
 
-    /// @notice CAIP-2 id of the ledger this Router runs on (equals the CLPR Service's chain id).
+    /// @notice CAIP-2 id of the ledger this Router runs on (the CLPR Service's chain id, normalised to CAIP-2).
     string public ledgerId;
 
     // ── State ───────────────────────────────────────────────────────────────
 
+    /// @notice Routes this Router originated, by route id.
     mapping(bytes16 => OriginRoute) public routes;
-    mapping(bytes16 => HopState) public hopState;
-    /// @notice keccak256 of the envelope (as held on this ledger) of a pending, forwarded or rejected hop.
-    mapping(bytes16 => bytes32) public pendingHash;
-
-    /// @notice An outbound CLPR message: the route it carries and this Router's hop index on it.
-    struct Outbound {
-        bytes16 routeId;
-        uint32 hopIndex;
-    }
-
-    /// @notice keccak256(channelId, messageId) of an outbound CLPR message → route id and hop index.
+    /// @notice Received envelopes by RouteLogic.inboundKey (origin ledger, origin Router, id).
+    mapping(bytes32 => HopState) public hopState;
+    /// @notice keccak256 of the envelope (as held on this ledger) of a pending, held, forwarded or rejected hop.
+    mapping(bytes32 => bytes32) public pendingHash;
+    /// @notice keccak256(channelId, messageId) of an outbound CLPR message → what it carries.
     mapping(bytes32 => Outbound) public outbound;
-    /// @notice Deferred raw sends (receipts) by keccak256(abi.encode(channel, connector, target, data)).
+    /// @notice Receipt messages waiting to be sent, by keccak256(abi.encode(channel, connector, target, data)).
     mapping(bytes32 => bool) public outbox;
     /// @notice Pull payments that could not be pushed.
     mapping(address => uint256) public owed;
+    /// @notice Routes sent so far by each sender (the next route id's nonce).
+    mapping(address => uint256) public nonces;
 
     mapping(bytes32 => bytes32) private _peerLedger;
-    uint256 private _nonce;
-    /// @dev Set while handling CLPR delivery: a send that lacks gas is deferred instead of reverting delivery.
+    /// @dev Set while handling CLPR delivery: a send that cannot go through now is deferred instead of reverting.
     bool private transient _inDelivery;
 
-    /// @param service The CLPR Service on this ledger.
-    /// @param registry The provider registry on this ledger (fixed forever).
-    /// @param vault The quarantine vault on this ledger (fixed forever).
-    /// @param ledgerId_ CAIP-2 id of this ledger; must equal the Service's configured chain id.
-    /// @param reclaimGrace Seconds after a route's deadline before the origin may reclaim it.
-    /// @param appGas Gas stipend for application callbacks.
-    /// @param minSendGas Gas a hop must have left before `sendMessage` (measured cost on this ledger plus margin).
-    constructor(
-        IClprService service,
-        IProviderRegistry registry,
-        IQuarantineVault vault,
-        string memory ledgerId_,
-        uint64 reclaimGrace,
-        uint64 appGas,
-        uint64 minSendGas
-    ) {
-        if (keccak256(bytes(service.getLedgerConfiguration().chainId)) != keccak256(bytes(ledgerId_))) {
+    /// @dev Deployed only by {ClprRouterDeployer}, which supplies the parameters (see IClprRouterDeployer.Params).
+    constructor() {
+        IClprRouterDeployer d = IClprRouterDeployer(msg.sender);
+        IClprRouterDeployer.Params memory p = d.parameters();
+        if (RouteLogic.ledgerHash(p.service.getLedgerConfiguration().chainId) != keccak256(bytes(p.ledgerId))) {
             revert LedgerMismatch();
         }
-        SERVICE = service;
-        REGISTRY = registry;
-        VAULT = vault;
-        RECLAIM_GRACE = reclaimGrace;
-        APP_GAS = appGas;
-        MIN_SEND_GAS = minSendGas;
-        ledgerId = ledgerId_;
-        _LEDGER_HASH = keccak256(bytes(ledgerId_));
+        SERVICE = p.service;
+        REGISTRY = p.registry;
+        VAULT = p.vault;
+        RECLAIM_GRACE = p.reclaimGrace;
+        APP_GAS = p.appGas;
+        MIN_SEND_GAS = p.minSendGas;
+        DEPLOYER = msg.sender;
+        DEPLOYMENT_SALT = d.DEPLOYMENT_SALT();
+        INIT_CODE_HASH = d.INIT_CODE_HASH();
+        ledgerId = p.ledgerId;
+        _LEDGER_HASH = keccak256(bytes(p.ledgerId));
         _SELF_HASH = keccak256(abi.encodePacked(address(this)));
-        _SELF_ROUTER_KEY = Caip.routerKey(ledgerId_, abi.encodePacked(address(this)));
+        _SELF_ROUTER_KEY = Caip.routerKey(p.ledgerId, abi.encodePacked(address(this)));
+    }
+
+    /// @notice Canonical Router address of the EVM ledger `ledgerId_` in this deployment.
+    function canonicalRouter(string calldata ledgerId_) external view returns (address) {
+        return RouteLogic.canonicalRouter(_canon(), ledgerId_);
     }
 
     // ═════════════════════════════════════════════════════════════════════
-    // Origin: send
+    // Origin: send, reclaim, withdraw
     // ═════════════════════════════════════════════════════════════════════
 
     /// @notice Send a routed message, optionally with an escrowed payment.
-    /// @dev `msg.value = escrow + fee budget`. Reverts if the route is malformed, disabled or fails a filter
-    ///      (nothing moves), or if a loose route carries any value ({ValueRoutesMustBeStrict}). If the sender, recipient or payee is blacklisted the call succeeds but nothing is
-    ///      forwarded: all value goes to the quarantine vault and the route settles as QUARANTINED.
-    /// @return routeId The route id.
+    /// @dev `msg.value = escrow + fee budget`. Reverts if the route is malformed, names a non-canonical Router, is
+    ///      disabled or fails a filter (nothing moves), or if a loose route or a route with an explicit receipt
+    ///      path carries any value ({ValueRoutesMustBeStrict}). If the sender, recipient, destination application
+    ///      or payee is blacklisted the call succeeds but nothing is forwarded: all value goes to the quarantine
+    ///      vault and the route settles as QUARANTINED.
+    /// @return routeId The route id: derived from this ledger, this Router, the sender and its nonce.
     function send(SendRequest calldata req) external payable nonReentrant returns (bytes16 routeId) {
         if (msg.value < req.escrow) revert InsufficientValue();
         uint256 budget = msg.value - req.escrow;
@@ -292,22 +161,28 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         o.deadline = e.constraints.deadline;
         o.status = RouteStatus.PENDING;
         o.strict = !e.constraints.loose;
-        o.verifyPath = !e.constraints.loose && e.receiptPath.length == 0;
+        uint256 back = e.receiptPath.length > e.hops.length ? e.receiptPath.length : e.hops.length;
+        o.edges = uint8(back - 1);
         o.payee = req.payee;
         o.feeBudget = uint64(budget);
         o.escrow = req.escrow;
         o.hopsHash = RouteLogic.hopsCommitment(e.hops, 0);
         o.firstHop = keccak256(abi.encodePacked(e.hops[0].channelId, e.hops[1].router));
-        hopState[routeId] = HopState.DONE;
+        if (e.receiptPath.length > 0) o.pathHash = keccak256(abi.encode(e.receiptPath));
 
-        // Blacklist: the origin checks the sender, the final recipient and the payee before taking the funds.
-        (bool listed, bytes32 caseId) = _listed(e.sender);
-        if (!listed) (listed, caseId) = _listed(e.recipient);
-        if (!listed && req.payee != address(0)) (listed, caseId) = _listed(Caip.account(ledgerId, req.payee));
+        // Blacklist: the origin checks the sender, the final recipient, the destination application and the payee
+        // before taking the funds.
+        (bool listed, bytes32 caseId) = RouteLogic.screen(
+            REGISTRY,
+            e.sender,
+            e.recipient,
+            e.destination,
+            req.payee == address(0) ? "" : Caip.account(ledgerId, req.payee)
+        );
         if (listed) {
             emit RouteSent(routeId, msg.sender, e.destination.ledgerId, req.escrow, uint64(budget), o.deadline, 0);
             emit QuarantineNotice(Caip.accountKey(e.recipient), routeId, e.recipient, caseId, REGISTRY.contact());
-            _finish(routeId, RouteStatus.QUARANTINED, RouteTypes.Reason.BLACKLIST, 0, caseId, bytes32(0), _noHops());
+            _finish(routeId, RouteStatus.QUARANTINED, RouteTypes.Reason.BLACKLIST, caseId);
             return routeId;
         }
 
@@ -316,18 +191,16 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         uint64 messageId = SERVICE.sendMessage(
             e.hops[0].channelId, e.hops[0].connectorId, e.hops[1].router, RouteCodec.encodeEnvelope(e)
         );
-        outbound[keccak256(abi.encodePacked(e.hops[0].channelId, messageId))] = Outbound(routeId, 0);
+        outbound[_msgKey(e.hops[0].channelId, messageId)] = Outbound(routeId, 0, KIND_ORIGIN, 0);
         emit RouteSent(routeId, msg.sender, e.destination.ledgerId, req.escrow, uint64(budget), o.deadline, messageId);
     }
 
-    /// @notice Refund a route that never got a receipt, once its deadline plus {RECLAIM_GRACE} has passed.
-    /// @dev Anyone may call; the escrow and the whole fee budget go back to the sender.
+    /// @notice Refund a route that never got a receipt, in two calls: the first (after the deadline plus
+    ///         {RECLAIM_GRACE} per edge of the way back) requests it, the second ({RECLAIM_GRACE} later) refunds
+    ///         the escrow and the whole fee budget to the sender. A receipt arriving in between settles the route
+    ///         normally; one arriving later is recorded (`routes(id).late`, {LateReceipt}). Anyone may call.
     function reclaim(bytes16 routeId) external nonReentrant {
-        OriginRoute storage o = routes[routeId];
-        if (o.status != RouteStatus.PENDING || block.timestamp <= uint256(o.deadline) + RECLAIM_GRACE) {
-            revert NotReclaimable();
-        }
-        _finish(routeId, RouteStatus.EXPIRED, RouteTypes.Reason.DEADLINE, 0, bytes32(0), bytes32(0), _noHops());
+        RouteSettlement.reclaim(routes, owed, _ctx(), routeId);
     }
 
     /// @notice Withdraw payments that could not be pushed.
@@ -343,9 +216,10 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
     // ═════════════════════════════════════════════════════════════════════
 
     /// @notice CLPR delivery of an envelope from the previous hop's Router.
-    /// @dev Reverts (CLPR APPLICATION_ERROR to the previous hop) only if the envelope is malformed, not
-    ///      addressed to this hop, not from the Router named for the previous hop, or a replay. Every other
-    ///      outcome — forwarded, pending, delivered, or stopped with a receipt — returns normally.
+    /// @dev Reverts (CLPR APPLICATION_ERROR to the previous hop) only if the envelope is malformed, names a
+    ///      non-canonical Router, is not addressed to this hop, not from the Router named for the previous hop,
+    ///      or a replay (or if too little gas was given to run the destination application). Every other
+    ///      outcome — forwarded, pending, held, delivered, or stopped with a receipt — returns normally.
     /// @return response `abi.encodePacked(uint8 accepted|rejected, uint8 reason)`.
     function onClprMessage(bytes32 channelId, bytes calldata sender, bytes calldata messageData)
         external
@@ -354,44 +228,41 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
     {
         if (msg.sender != address(SERVICE)) revert NotService();
         RouteTypes.Envelope memory e = RouteCodec.decodeEnvelope(messageData);
-        _validateInbound(e, channelId, sender);
-        hopState[e.routeId] = HopState.SEEN;
+        bytes32 key = _validateInbound(e, channelId, sender);
+        hopState[key] = HopState.SEEN;
         _inDelivery = true;
-        RouteTypes.Reason reason = _advance(e, messageData);
+        RouteTypes.Reason reason = _advance(e, key, messageData, false);
         _inDelivery = false;
         return abi.encodePacked(reason == RouteTypes.Reason.NONE ? RESP_ACCEPTED : RESP_REJECTED, uint8(reason));
     }
 
     /// @notice CLPR Response to a message this Router sent.
-    /// @dev A non-SUCCESS response means the next hop never processed the envelope (connector failure or the
-    ///      next Router rejected it). The origin settles the route as FAILED; an intermediate hop marks it
-    ///      NACKED so anyone can re-route it (loose routing) or report the failure ({forward}).
+    /// @dev A non-SUCCESS response means the next hop never processed the message. A route sent from this
+    ///      origin settles as FAILED; a forwarded route is marked NACKED so anyone can re-route it (loose
+    ///      routing) or report the failure ({forward}); a receipt goes back to the outbox ({flush}).
     function onClprResponse(bytes32 channelId, uint64 messageId, uint8 status, bytes calldata) external nonReentrant {
         if (msg.sender != address(SERVICE)) revert NotService();
-        bytes32 k = keccak256(abi.encodePacked(channelId, messageId));
+        bytes32 k = _msgKey(channelId, messageId);
         Outbound memory out = outbound[k];
-        bytes16 routeId = out.routeId;
-        if (routeId == bytes16(0)) return;
+        if (out.routeId == bytes16(0)) return;
         delete outbound[k];
-        emit HopResponse(routeId, channelId, messageId, status);
-        bool ok = status == uint8(ClprTypes.ReplyStatus.SUCCESS);
-
-        if (routes[routeId].status == RouteStatus.PENDING) {
-            if (!ok) {
-                _finish(
-                    routeId, RouteStatus.FAILED, RouteTypes.Reason.NEXT_HOP_ERROR, 0, bytes32(0), bytes32(0), _noHops()
-                );
+        emit HopResponse(out.routeId, channelId, messageId, status);
+        if (status == uint8(ClprTypes.ReplyStatus.SUCCESS)) {
+            if (out.kind == KIND_HOP && hopState[out.key] == HopState.FORWARDED) {
+                hopState[out.key] = HopState.DONE;
+                delete pendingHash[out.key];
             }
-            return;
-        }
-        if (hopState[routeId] != HopState.FORWARDED) return;
-        if (ok) {
-            hopState[routeId] = HopState.DONE;
-            delete pendingHash[routeId];
-        } else {
-            hopState[routeId] = HopState.NACKED;
+        } else if (out.kind == KIND_RECEIPT) {
+            outbox[out.key] = true;
+            emit ReceiptRequeued(out.key, status);
+        } else if (out.kind == KIND_ORIGIN) {
+            if (routes[out.routeId].status == RouteStatus.PENDING) {
+                _finish(out.routeId, RouteStatus.FAILED, RouteTypes.Reason.NEXT_HOP_ERROR, bytes32(0));
+            }
+        } else if (hopState[out.key] == HopState.FORWARDED) {
+            hopState[out.key] = HopState.NACKED;
             emit ForwardRejected(
-                routeId, out.hopIndex, pendingHash[routeId], status, RouteTypes.Reason.NEXT_HOP_ERROR, ""
+                out.routeId, out.hopIndex, pendingHash[out.key], status, RouteTypes.Reason.NEXT_HOP_ERROR, ""
             );
         }
     }
@@ -400,34 +271,39 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
     // Permissionless completion of deferred hops
     // ═════════════════════════════════════════════════════════════════════
 
-    /// @notice Complete a pending or rejected hop. Anyone may call.
+    /// @notice Complete a pending or rejected hop, or a held receipt. Anyone may call.
     /// @param envelope The envelope as held on this ledger (from {ForwardPending} / the inbound CLPR message).
     /// @param newTail Loose routing only: replacement hops from this ledger to the destination
-    ///        (newTail[0] is this ledger with its new outgoing Channel). Empty = keep the route.
-    /// @dev A pending hop is re-checked and forwarded. A rejected hop is re-routed over `newTail` when the
-    ///      route is loose and a tail is given; otherwise a FAILED (NEXT_HOP_ERROR) receipt goes to the origin.
+    ///        (newTail[0] is this ledger with its new outgoing Channel; every Router canonical). Empty = keep the
+    ///        route.
+    /// @dev A pending hop is re-checked and forwarded; a transient send failure reverts the whole call (the hop
+    ///      stays pending until it can be sent or its deadline passes). A rejected hop is re-routed over
+    ///      `newTail` when the route is loose and a tail is given; otherwise a FAILED (NEXT_HOP_ERROR) receipt goes
+    ///      to the origin. A held receipt is processed once no disable blocks it ({ReceiptHeld} until then).
     function forward(bytes calldata envelope, RouteTypes.Hop[] calldata newTail) external nonReentrant {
         RouteTypes.Envelope memory e = RouteCodec.decodeEnvelope(envelope);
-        HopState st = hopState[e.routeId];
-        if ((st != HopState.FORWARD_PENDING && st != HopState.NACKED) || pendingHash[e.routeId] != keccak256(envelope))
-        {
+        if (e.hops.length == 0) revert NothingPending();
+        bytes32 key = RouteLogic.inboundKey(e);
+        HopState st = hopState[key];
+        if ((st != HopState.FORWARD_PENDING && st != HopState.NACKED) || pendingHash[key] != keccak256(envelope)) {
             revert NothingPending();
         }
-        delete pendingHash[e.routeId];
+        delete pendingHash[key];
         bytes memory held = envelope;
         if (newTail.length > 0) {
             if (!e.constraints.loose) revert LooseRoutingRequired();
-            e = RouteLogic.splice(e, newTail, _LEDGER_HASH, _SELF_HASH);
+            e = RouteLogic.splice(e, newTail, _LEDGER_HASH, _SELF_HASH, _canon());
             held = RouteCodec.encodeEnvelope(e);
         } else if (st == HopState.NACKED) {
-            _stop(e, RouteTypes.ReceiptStatus.FAILED, RouteTypes.Reason.NEXT_HOP_ERROR, bytes32(0));
+            _stop(e, key, RouteTypes.ReceiptStatus.FAILED, RouteTypes.Reason.NEXT_HOP_ERROR, bytes32(0));
             return;
         }
-        hopState[e.routeId] = HopState.SEEN;
-        _advance(e, held);
+        hopState[key] = HopState.SEEN;
+        _advance(e, key, held, true);
     }
 
-    /// @notice Send a deferred receipt. Anyone may call.
+    /// @notice Send a receipt message from the outbox. Anyone may call; reverts (and the message stays queued)
+    ///         while its outgoing edge is disabled or `sendMessage` fails.
     function flush(bytes32 channelId, bytes32 connectorId, bytes calldata target, bytes calldata data)
         external
         nonReentrant
@@ -435,7 +311,13 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         bytes32 k = keccak256(abi.encode(channelId, connectorId, target, data));
         if (!outbox[k]) revert NothingPending();
         delete outbox[k];
-        SERVICE.sendMessage(channelId, connectorId, target, data);
+        RouteTypes.Envelope memory re = RouteCodec.decodeEnvelope(data);
+        uint32 idx = re.hopIndex - 1;
+        RouteTypes.Reason blocked = RouteLogic.edgeSafety(REGISTRY, re.hops[idx], re.hops[idx + 1]);
+        if (blocked != RouteTypes.Reason.NONE) revert RouteBlocked(idx, blocked);
+        uint64 messageId = SERVICE.sendMessage(channelId, connectorId, target, data);
+        outbound[_msgKey(channelId, messageId)] = Outbound(re.routeId, idx, KIND_RECEIPT, k);
+        emit RouteForwarded(re.routeId, idx, channelId, messageId, k, "");
     }
 
     // ═════════════════════════════════════════════════════════════════════
@@ -443,150 +325,127 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
     // ═════════════════════════════════════════════════════════════════════
 
     /// @dev Process an envelope held on this ledger at `e.hopIndex`: stop it, deliver it, settle it (receipt at
-    ///      the origin), or forward it. Returns NONE unless the route was stopped here.
-    function _advance(RouteTypes.Envelope memory e, bytes memory held) private returns (RouteTypes.Reason) {
+    ///      the origin), hold it, or forward it. Returns NONE unless the route was stopped here.
+    /// @param wasPending The envelope comes from {forward} (it was pending or held here).
+    function _advance(RouteTypes.Envelope memory e, bytes32 key, bytes memory held, bool wasPending)
+        private
+        returns (RouteTypes.Reason)
+    {
         bool isReceipt = e.payloadType == RouteTypes.PayloadType.RECEIPT;
         uint256 idx = e.hopIndex;
         uint256 last = e.hops.length - 1;
 
-        (RouteTypes.ReceiptStatus st, RouteTypes.Reason reason, bytes32 caseId) = _checkHere(e, isReceipt);
+        (RouteTypes.ReceiptStatus st, RouteTypes.Reason reason, bytes32 caseId) =
+            RouteLogic.checkHere(REGISTRY, _SELF_ROUTER_KEY, VERSION, ledgerId, e);
         if (reason != RouteTypes.Reason.NONE) {
-            _stop(e, st, reason, caseId);
+            if (isReceipt) return _hold(e, key, held, reason, idx == last);
+            _stop(e, key, st, reason, caseId);
             return reason;
         }
 
         if (idx == last) {
-            hopState[e.routeId] = HopState.DONE;
-            if (isReceipt) _settle(e);
-            else _deliver(e);
+            hopState[key] = HopState.DONE;
+            if (isReceipt) RouteSettlement.settle(routes, owed, _ctx(), e, wasPending);
+            else _deliver(e, key);
             return RouteTypes.Reason.NONE;
         }
 
-        reason = _checkNext(e, idx, isReceipt);
-        if (reason != RouteTypes.Reason.NONE) {
-            _stop(e, RouteTypes.ReceiptStatus.FAILED, reason, bytes32(0));
-            return reason;
+        RouteTypes.Hop memory h = e.hops[idx];
+        // The next Channel must lead to the next ledger; then route safety (and, for routes, filters, trust
+        // floor and fee budget) on the edge.
+        reason = _peerLedgerHash(h.channelId) != keccak256(bytes(e.hops[idx + 1].ledgerId))
+            ? RouteTypes.Reason.BAD_ROUTE
+            : RouteLogic.checkNext(REGISTRY, e, idx);
+        if (!isReceipt) {
+            if (reason != RouteTypes.Reason.NONE) {
+                _stop(e, key, RouteTypes.ReceiptStatus.FAILED, reason, bytes32(0));
+                return reason;
+            }
+            e.constraints.remainingFeeBudget -= h.fee;
+        }
+        e.hopIndex = uint32(idx + 1);
+        bytes memory data = RouteCodec.encodeEnvelope(e);
+        if (isReceipt) {
+            // A receipt in transit is never dropped: a blocked next edge only queues it.
+            hopState[key] = HopState.DONE;
+            _sendReceiptMessage(
+                h, e.hops[idx + 1].router, data, e.routeId, uint32(idx), reason == RouteTypes.Reason.NONE
+            );
+            return RouteTypes.Reason.NONE;
         }
 
-        RouteTypes.Hop memory h = e.hops[idx];
-        if (!isReceipt) e.constraints.remainingFeeBudget -= h.fee;
-        e.hopIndex = uint32(idx + 1);
-        (SendResult r, uint64 messageId) =
-            _trySend(h.channelId, h.connectorId, e.hops[idx + 1].router, RouteCodec.encodeEnvelope(e));
-
+        (SendResult r, uint64 messageId) = _trySend(h.channelId, h.connectorId, e.hops[idx + 1].router, data, true);
+        bytes32 hh = keccak256(held);
         if (r == SendResult.SENT) {
-            if (isReceipt) {
-                hopState[e.routeId] = HopState.DONE;
-                emit RouteForwarded(e.routeId, uint32(idx), h.channelId, messageId, 0, "");
-            } else {
-                bytes32 hh = keccak256(held);
-                hopState[e.routeId] = HopState.FORWARDED;
-                pendingHash[e.routeId] = hh;
-                outbound[keccak256(abi.encodePacked(h.channelId, messageId))] = Outbound(e.routeId, uint32(idx));
-                emit RouteForwarded(e.routeId, uint32(idx), h.channelId, messageId, hh, held);
-            }
+            hopState[key] = HopState.FORWARDED;
+            pendingHash[key] = hh;
+            outbound[_msgKey(h.channelId, messageId)] = Outbound(e.routeId, uint32(idx), KIND_HOP, key);
+            emit RouteForwarded(e.routeId, uint32(idx), h.channelId, messageId, hh, held);
         } else if (r == SendResult.DEFERRED) {
-            hopState[e.routeId] = HopState.FORWARD_PENDING;
-            pendingHash[e.routeId] = keccak256(held);
+            hopState[key] = HopState.FORWARD_PENDING;
+            pendingHash[key] = hh;
             emit ForwardPending(e.routeId, uint32(idx), held);
-        } else if (!isReceipt && e.constraints.loose) {
-            hopState[e.routeId] = HopState.NACKED;
-            pendingHash[e.routeId] = keccak256(held);
-            emit ForwardRejected(e.routeId, uint32(idx), keccak256(held), 0, RouteTypes.Reason.SEND_FAILED, held);
+        } else if (e.constraints.loose) {
+            hopState[key] = HopState.NACKED;
+            pendingHash[key] = hh;
+            emit ForwardRejected(e.routeId, uint32(idx), hh, 0, RouteTypes.Reason.SEND_FAILED, held);
         } else {
             e.hopIndex = uint32(idx);
-            _stop(e, RouteTypes.ReceiptStatus.FAILED, RouteTypes.Reason.SEND_FAILED, bytes32(0));
+            _stop(e, key, RouteTypes.ReceiptStatus.FAILED, RouteTypes.Reason.SEND_FAILED, bytes32(0));
             return RouteTypes.Reason.SEND_FAILED;
         }
         return RouteTypes.Reason.NONE;
     }
 
-    /// @dev Checks about the ledger holding the message: own Router disabled, arrived over a disabled edge /
-    ///      ledger / Router, deadline, blacklist. Receipts only get the route-safety checks.
-    function _checkHere(RouteTypes.Envelope memory e, bool isReceipt)
-        private
-        view
-        returns (RouteTypes.ReceiptStatus, RouteTypes.Reason, bytes32)
-    {
-        RouteTypes.Reason safety =
-            RouteLogic.hereSafety(REGISTRY, _SELF_ROUTER_KEY, VERSION, ledgerId, e.hops[e.hopIndex - 1]);
-        if (safety != RouteTypes.Reason.NONE) return (RouteTypes.ReceiptStatus.FAILED, safety, 0);
-        if (isReceipt) return (RouteTypes.ReceiptStatus.UNSPECIFIED, RouteTypes.Reason.NONE, 0);
-
-        if (block.timestamp > e.constraints.deadline) {
-            return (RouteTypes.ReceiptStatus.EXPIRED, RouteTypes.Reason.DEADLINE, 0);
+    /// @dev A receipt arrived over (or at) something disabled: hold it instead of dropping it. Inside delivery it
+    ///      is recorded (and, at the origin, blocks reclaim of its route); from {forward} the call reverts so it
+    ///      stays held.
+    function _hold(
+        RouteTypes.Envelope memory e,
+        bytes32 key,
+        bytes memory held,
+        RouteTypes.Reason reason,
+        bool atOrigin
+    ) private returns (RouteTypes.Reason) {
+        if (!_inDelivery) revert ReceiptHeld(reason);
+        hopState[key] = HopState.FORWARD_PENDING;
+        pendingHash[key] = keccak256(held);
+        if (atOrigin) {
+            OriginRoute storage o = routes[RouteCodec.decodeReceipt(e.payload).routeId];
+            if (o.status == RouteStatus.PENDING) o.held++;
         }
-        (bool listed, bytes32 caseId) = _listed(e.sender);
-        if (!listed) (listed, caseId) = _listed(e.recipient);
-        if (listed) return (RouteTypes.ReceiptStatus.QUARANTINED, RouteTypes.Reason.BLACKLIST, caseId);
-        return (RouteTypes.ReceiptStatus.UNSPECIFIED, RouteTypes.Reason.NONE, 0);
-    }
-
-    /// @dev Checks on the edge leaving hop `idx`: disabled edge, ledger or Router; Channel goes to the named
-    ///      ledger; (routes only) filters on the next ledger at the pinned registry version, the edge's trust tier
-    ///      against the route's trust floor, and fee budget.
-    function _checkNext(RouteTypes.Envelope memory e, uint256 idx, bool isReceipt) private returns (RouteTypes.Reason) {
-        RouteTypes.Hop memory h = e.hops[idx];
-        RouteTypes.Hop memory next = e.hops[idx + 1];
-        RouteTypes.Reason r = RouteLogic.edgeSafety(REGISTRY, h, next);
-        if (r != RouteTypes.Reason.NONE) return r;
-        if (_peerLedgerHash(h.channelId) != keccak256(bytes(next.ledgerId))) return RouteTypes.Reason.BAD_ROUTE;
-        if (isReceipt) return RouteTypes.Reason.NONE;
-        // Unfiltered routes and routes without a floor skip the library calls altogether.
-        if (
-            e.constraints.filters != 0
-                && !RouteLogic.filtersPass(REGISTRY, next.ledgerId, e.constraints, e.filterRegistryVersions)
-        ) return RouteTypes.Reason.FILTER;
-        if (e.constraints.trustFloor != 0 && !RouteLogic.edgeTrusted(REGISTRY, h, next, e.constraints.trustFloor)) {
-            return RouteTypes.Reason.TRUST_FLOOR;
-        }
-        if (e.constraints.remainingFeeBudget < h.fee) return RouteTypes.Reason.FEE_BUDGET;
+        emit ForwardPending(e.routeId, e.hopIndex, held);
         return RouteTypes.Reason.NONE;
     }
 
-    /// @dev Deliver to the destination application and send the DELIVERED (or FAILED) receipt.
-    function _deliver(RouteTypes.Envelope memory e) private {
+    /// @dev Deliver to the destination application and send the DELIVERED (or FAILED) receipt. The application
+    ///      gets exactly APP_GAS (delivery reverts as a whole if that much is not available, so a starved
+    ///      application call never turns into a FAILED receipt) and at most {MAX_RESPONSE} bytes of its response
+    ///      are copied and hashed.
+    function _deliver(RouteTypes.Envelope memory e, bytes32 key) private {
         address app = _toAddress(e.destination.application);
         if (keccak256(bytes(e.destination.ledgerId)) != _LEDGER_HASH || app.code.length == 0) {
-            _stop(e, RouteTypes.ReceiptStatus.FAILED, RouteTypes.Reason.BAD_ROUTE, bytes32(0));
+            _stop(e, key, RouteTypes.ReceiptStatus.FAILED, RouteTypes.Reason.BAD_ROUTE, bytes32(0));
             return;
         }
-        try IClprRouteApplication(app).onRouteMessage{gas: APP_GAS}(
-            e.routeId, e.origin.ledgerId, e.origin.application, e.sender, uint8(e.payloadType), e.payload
-        ) returns (
-            bytes memory resp
-        ) {
-            bytes32 respHash = keccak256(resp);
+        (bool ok, bytes32 respHash) = RouteOrigin.callApplication(app, e, APP_GAS, MAX_RESPONSE);
+        if (ok) {
             emit RouteDelivered(e.routeId, app, respHash);
             _sendReceipt(e, RouteTypes.ReceiptStatus.DELIVERED, RouteTypes.Reason.NONE, bytes32(0), respHash);
-        } catch {
-            _stop(e, RouteTypes.ReceiptStatus.FAILED, RouteTypes.Reason.APPLICATION_ERROR, bytes32(0));
+        } else {
+            _stop(e, key, RouteTypes.ReceiptStatus.FAILED, RouteTypes.Reason.APPLICATION_ERROR, bytes32(0));
         }
     }
 
-    /// @dev Stop a route here. Routes get a receipt to the origin (and quarantine notices); receipts are dropped.
+    /// @dev Stop a route here and send its receipt to the origin (with a quarantine notice when QUARANTINED).
     function _stop(
         RouteTypes.Envelope memory e,
+        bytes32 key,
         RouteTypes.ReceiptStatus status,
         RouteTypes.Reason reason,
         bytes32 caseId
     ) private {
-        hopState[e.routeId] = HopState.DONE;
-        if (e.payloadType == RouteTypes.PayloadType.RECEIPT) {
-            emit ReceiptUndeliverable(e.routeId, reason);
-            return;
-        }
-        emit RouteStopped(e.routeId, e.hopIndex, status, reason);
-        if (status == RouteTypes.ReceiptStatus.QUARANTINED) {
-            string memory contact_ = REGISTRY.contact();
-            emit QuarantineNotice(Caip.accountKey(e.recipient), e.routeId, e.recipient, caseId, contact_);
-            if (e.hopIndex == e.hops.length - 1) {
-                address app = _toAddress(e.destination.application);
-                if (app.code.length > 0) {
-                    try IClprRouteApplication(app).onRouteNotice{gas: APP_GAS}(e.routeId, caseId, contact_) {} catch {}
-                }
-            }
-        }
+        hopState[key] = HopState.DONE;
         _sendReceipt(e, status, reason, caseId, bytes32(0));
     }
 
@@ -603,104 +462,32 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         r.reason = reason;
         r.caseId = caseId;
         r.responseHash = responseHash;
-        if (status == RouteTypes.ReceiptStatus.QUARANTINED) r.contact = REGISTRY.contact();
-        (bytes16 receiptId, RouteTypes.Hop[] memory hops, bytes memory data) =
-            RouteLogic.buildReceipt(e, r, ledgerId, address(this), VERSION);
-        hopState[receiptId] = HopState.DONE;
-        emit ReceiptSent(receiptId, e.routeId, status, reason);
-
-        RouteTypes.Hop memory h = hops[0];
-        RouteTypes.Reason blocked = RouteLogic.edgeSafety(REGISTRY, h, hops[1]);
-        if (blocked != RouteTypes.Reason.NONE) {
-            emit ReceiptUndeliverable(e.routeId, blocked);
-            return;
-        }
-        (SendResult res,) = _trySend(h.channelId, h.connectorId, hops[1].router, data);
-        if (res == SendResult.DEFERRED) {
-            bytes32 k = keccak256(abi.encode(h.channelId, h.connectorId, hops[1].router, data));
-            outbox[k] = true;
-            emit OutboxQueued(k, h.channelId, h.connectorId, hops[1].router, data);
-        } else if (res == SendResult.FAILED) {
-            emit ReceiptUndeliverable(e.routeId, RouteTypes.Reason.SEND_FAILED);
-        }
+        (RouteTypes.Hop memory h, bytes memory target, bytes memory data, bytes16 receiptId, bool open) =
+            RouteReceipts.report(REGISTRY, e, r, ledgerId, APP_GAS, VERSION);
+        _sendReceiptMessage(h, target, data, receiptId, 0, open);
     }
 
-    /// @dev A receipt envelope reached the origin: authenticate it against the stored route and settle.
-    function _settle(RouteTypes.Envelope memory re) private {
-        RouteTypes.Receipt memory r = RouteCodec.decodeReceipt(re.payload);
-        OriginRoute storage o = routes[r.routeId];
-        bool ok;
-        RouteTypes.Hop[] memory prefix;
-        if (o.status == RouteStatus.PENDING) {
-            (ok, prefix) = RouteLogic.checkReceipt(re, r, o.firstHop, o.strict ? o.hopsHash : bytes32(0), o.verifyPath);
-        }
-        if (!ok) {
-            emit ReceiptIgnored(r.routeId);
-            return;
-        }
-        RouteStatus s = r.status == RouteTypes.ReceiptStatus.DELIVERED
-            ? RouteStatus.DELIVERED
-            : r.status == RouteTypes.ReceiptStatus.EXPIRED
-                ? RouteStatus.EXPIRED
-                : r.status == RouteTypes.ReceiptStatus.QUARANTINED ? RouteStatus.QUARANTINED : RouteStatus.FAILED;
-        _finish(r.routeId, s, r.reason, r.hopIndex, r.caseId, r.responseHash, prefix);
-    }
-
-    /// @dev Pay the fees of `forwarded` (the hops before the reporting one), then release, refund or quarantine
-    ///      the rest.
-    function _finish(
-        bytes16 routeId,
-        RouteStatus status,
-        RouteTypes.Reason reason,
-        uint32 reachedHop,
-        bytes32 caseId,
-        bytes32 responseHash,
-        RouteTypes.Hop[] memory forwarded
+    /// @dev Send a receipt message, or queue it in the outbox (for {flush}) when its edge is blocked or the send
+    ///      does not go through now.
+    function _sendReceiptMessage(
+        RouteTypes.Hop memory h,
+        bytes memory target,
+        bytes memory data,
+        bytes16 receiptId,
+        uint32 idx,
+        bool open
     ) private {
-        OriginRoute storage o = routes[routeId];
-        uint256 budget = o.feeBudget;
-        uint256 escrow = o.escrow;
-        address sender = o.sender;
-        address payee = o.payee;
-
-        // Late blacklist entries still catch a route that is about to pay out.
-        if (status == RouteStatus.DELIVERED) {
-            (bool listed, bytes32 cid) = _listed(Caip.account(ledgerId, sender));
-            if (!listed && payee != address(0)) (listed, cid) = _listed(Caip.account(ledgerId, payee));
-            if (listed) {
-                status = RouteStatus.QUARANTINED;
-                reason = RouteTypes.Reason.BLACKLIST;
-                caseId = cid;
+        bytes32 k = keccak256(abi.encode(h.channelId, h.connectorId, target, data));
+        if (open) {
+            (SendResult r, uint64 messageId) = _trySend(h.channelId, h.connectorId, target, data, false);
+            if (r == SendResult.SENT) {
+                outbound[_msgKey(h.channelId, messageId)] = Outbound(receiptId, idx, KIND_RECEIPT, k);
+                emit RouteForwarded(receiptId, idx, h.channelId, messageId, k, data);
+                return;
             }
         }
-        o.status = status;
-
-        uint256 paid;
-        for (uint256 i = 0; i < forwarded.length; i++) {
-            uint256 fee = forwarded[i].fee;
-            if (fee == 0 || forwarded[i].feePayee.length != 20 || paid + fee > budget) continue;
-            paid += fee;
-            _pay(_toAddress(forwarded[i].feePayee), fee);
-        }
-        uint256 rest = budget - paid;
-        string memory contact_;
-        if (status == RouteStatus.QUARANTINED) {
-            contact_ = REGISTRY.contact();
-            if (escrow + rest > 0) VAULT.deposit{value: escrow + rest}(routeId, caseId, sender, payee);
-        } else if (status == RouteStatus.DELIVERED) {
-            _pay(payee, escrow);
-            _pay(sender, rest);
-        } else {
-            _pay(sender, escrow + rest);
-        }
-        emit RouteSettled(routeId, status, reason, reachedHop, caseId, contact_, paid);
-
-        if (sender.code.length > 0) {
-            try IClprRouteSender(sender).onRouteReceipt{gas: APP_GAS}(
-                routeId, uint8(status), uint8(reason), caseId, responseHash
-            ) {}
-                catch {}
-        }
+        outbox[k] = true;
+        emit OutboxQueued(k, h.channelId, h.connectorId, target, data);
     }
 
     // ═════════════════════════════════════════════════════════════════════
@@ -708,47 +495,35 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
     // ═════════════════════════════════════════════════════════════════════
 
     function _buildEnvelope(SendRequest calldata req, uint64 budget) private returns (RouteTypes.Envelope memory e) {
-        if (req.payloadType == RouteTypes.PayloadType.RECEIPT) revert InvalidRoute(RouteTypes.Reason.BAD_ROUTE);
-        // Value routes are strict: the origin settles fees and escrow against the hop list it stored, which a
-        // loose route may change. So a loose route carries no value at all (no escrow and no fee budget).
-        if (
-            (req.constraints.loose && msg.value > 0)
-                || (req.escrow > 0 && (req.receiptPath.length > 0 || req.payee == address(0)))
-        ) revert ValueRoutesMustBeStrict();
-        e.routeId = req.routeId == bytes16(0)
-            ? bytes16(keccak256(abi.encodePacked(address(this), ledgerId, msg.sender, ++_nonce)))
-            : req.routeId;
-        if (hopState[e.routeId] != HopState.NONE || routes[e.routeId].status != RouteStatus.NONE) {
-            revert DuplicateRouteId();
-        }
-        e.origin = RouteTypes.Endpoint({ledgerId: ledgerId, application: abi.encodePacked(msg.sender)});
-        e.destination = req.destination;
-        e.sender = Caip.account(ledgerId, msg.sender);
-        e.recipient = req.recipient;
-        e.hops = req.hops;
-        e.mode = req.mode;
-        e.constraints = req.constraints;
-        e.constraints.remainingFeeBudget = budget;
-        e.payloadType = req.payloadType;
-        e.payload = req.payload;
-        e.receiptPath = req.receiptPath;
-        e.originSignature = req.originSignature;
-        e.routerVersion = VERSION;
-
-        e = RouteLogic.prepareSend(e, _LEDGER_HASH, _SELF_HASH, req.constraints.filters == 0 ? 0 : REGISTRY.version());
-
-        // Route safety and filters on every ledger and edge, before any value moves.
-        (uint256 hop, RouteTypes.Reason blocked) = RouteLogic.checkRoute(REGISTRY, _SELF_ROUTER_KEY, VERSION, e);
-        if (blocked != RouteTypes.Reason.NONE) revert RouteBlocked(hop, blocked);
+        e = RouteOrigin.buildSend(
+            req,
+            RouteOrigin.SendCtx({
+                ledgerId: ledgerId,
+                ledgerHash: _LEDGER_HASH,
+                selfHash: _SELF_HASH,
+                selfRouterKey: _SELF_ROUTER_KEY,
+                registry: REGISTRY,
+                canon: _canon(),
+                sender: msg.sender,
+                routeId: RouteLogic.routeId(_LEDGER_HASH, address(this), msg.sender, nonces[msg.sender]++),
+                value: msg.value,
+                budget: budget,
+                version: VERSION
+            })
+        );
         if (_peerLedgerHash(e.hops[0].channelId) != keccak256(bytes(e.hops[1].ledgerId))) {
             revert RouteBlocked(0, RouteTypes.Reason.BAD_ROUTE);
         }
     }
 
     /// @dev Inbound checks; any failure reverts so the previous hop sees a CLPR APPLICATION_ERROR.
-    function _validateInbound(RouteTypes.Envelope memory e, bytes32 channelId, bytes calldata sender) private {
+    /// @return key The envelope's inbound key (RouteLogic.inboundKey).
+    function _validateInbound(RouteTypes.Envelope memory e, bytes32 channelId, bytes calldata sender)
+        private
+        returns (bytes32 key)
+    {
         if (e.routerVersion != VERSION) revert WrongVersion();
-        RouteLogic.validateStructure(e);
+        RouteLogic.validateStructure(e, _canon());
         uint256 idx = e.hopIndex;
         if (idx == 0 || idx >= e.hops.length) revert NotForThisHop();
         RouteTypes.Hop memory here = e.hops[idx];
@@ -758,17 +533,17 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         }
         if (prev.channelId != channelId || keccak256(prev.router) != keccak256(sender)) revert UnexpectedSender();
         if (_peerLedgerHash(channelId) != keccak256(bytes(prev.ledgerId))) revert UnexpectedSender();
-        if (e.payloadType != RouteTypes.PayloadType.RECEIPT && e.constraints.deadline == 0) {
+        if (e.payloadType == RouteTypes.PayloadType.RECEIPT) {
+            // A receipt is reported by the Router that built it: its origin is its first hop.
+            if (
+                keccak256(bytes(e.origin.ledgerId)) != keccak256(bytes(e.hops[0].ledgerId))
+                    || keccak256(e.origin.application) != keccak256(e.hops[0].router)
+            ) revert UnexpectedSender();
+        } else if (e.constraints.deadline == 0) {
             revert InvalidRoute(RouteTypes.Reason.DEADLINE);
         }
-        if (hopState[e.routeId] != HopState.NONE || routes[e.routeId].status != RouteStatus.NONE) {
-            revert RouteReplayed();
-        }
-    }
-
-    function _listed(string memory caip10) private view returns (bool, bytes32) {
-        if (bytes(caip10).length == 0) return (false, 0);
-        return REGISTRY.blacklisted(Caip.accountKey(caip10));
+        key = RouteLogic.inboundKey(e);
+        if (hopState[key] != HopState.NONE) revert RouteReplayed();
     }
 
     /// @dev keccak256 of the CAIP-2 id of the peer of `channelId`, cached after the first lookup.
@@ -779,41 +554,63 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         if (h != bytes32(0)) _peerLedger[channelId] = h;
     }
 
-    function _trySend(bytes32 channelId, bytes32 connectorId, bytes memory target, bytes memory data)
+    /// @dev Send over CLPR. DEFERRED = not now but maybe later (reentrancy lock, low gas, or a transient Service
+    ///      error such as a full queue, an exceeded quota, a paused Channel or a refusing Connector); FAILED = a
+    ///      definite rejection (unknown Channel or Connector, payload too large for the peer). A route sent from a
+    ///      permissionless call (`route` and not inside delivery) never defers: the call reverts with the cause,
+    ///      so nobody can turn a transient failure into a final one by choosing when to call.
+    function _trySend(bytes32 channelId, bytes32 connectorId, bytes memory target, bytes memory data, bool route)
         private
         returns (SendResult, uint64)
     {
+        bool mustSend = route && !_inDelivery;
         uint256 g = gasleft();
-        if (g < MIN_SEND_GAS) return (_lowGas(), 0);
+        if (g < MIN_SEND_GAS) {
+            if (mustSend) revert InsufficientGas();
+            return (SendResult.DEFERRED, 0);
+        }
         try SERVICE.sendMessage(channelId, connectorId, target, data) returns (uint64 id) {
             return (SendResult.SENT, id);
         } catch (bytes memory err) {
-            if (err.length >= 4 && bytes4(err) == REENTRANT_CALL) return (SendResult.DEFERRED, 0);
-            // Out of gas inside the call (only the 1/64 reserve is left): not a verdict on the hop.
-            if (gasleft() < g / 63) return (_lowGas(), 0);
-            return (SendResult.FAILED, 0);
+            // Out of gas inside the call (only the 1/64 reserve is left) is never a verdict on the hop.
+            bool starved = gasleft() < g / 63;
+            bytes4 sel = err.length >= 4 ? bytes4(err) : bytes4(0);
+            if (
+                !starved
+                    && (sel == ClprTypes.ClprChannelNotFound.selector
+                        || sel == ClprTypes.ClprConnectorNotFound.selector
+                        || sel == ClprTypes.ClprPayloadTooLarge.selector)
+            ) return (SendResult.FAILED, 0);
+            if (mustSend) {
+                if (starved) revert InsufficientGas();
+                assembly ("memory-safe") {
+                    revert(add(err, 0x20), mload(err))
+                }
+            }
+            return (SendResult.DEFERRED, 0);
         }
     }
 
-    /// @dev Not enough gas to send: inside delivery the hop stays pending (anyone completes it with {forward} /
-    ///      {flush}); in a permissionless call the whole transaction reverts and nothing changes.
-    function _lowGas() private view returns (SendResult) {
-        if (_inDelivery) return SendResult.DEFERRED;
-        revert InsufficientGas();
+    function _finish(bytes16 routeId, RouteStatus status, RouteTypes.Reason reason, bytes32 caseId) private {
+        RouteSettlement.finish(
+            routes, owed, _ctx(), routeId, status, reason, 0, caseId, bytes32(0), new RouteTypes.Hop[](0)
+        );
     }
 
-    function _pay(address to, uint256 amount) private {
-        if (amount == 0) return;
-        (bool ok,) = to.call{value: amount, gas: 30_000}("");
-        if (!ok) owed[to] += amount;
+    function _ctx() private view returns (RouteSettlement.Ctx memory) {
+        return RouteSettlement.Ctx(REGISTRY, VAULT, ledgerId, APP_GAS, RECLAIM_GRACE);
+    }
+
+    function _canon() private view returns (RouteLogic.Canon memory) {
+        return RouteLogic.Canon(DEPLOYER, DEPLOYMENT_SALT, INIT_CODE_HASH);
+    }
+
+    function _msgKey(bytes32 channelId, uint64 messageId) private pure returns (bytes32) {
+        return keccak256(abi.encodePacked(channelId, messageId));
     }
 
     function _toAddress(bytes memory b) private pure returns (address) {
         if (b.length != 20) return address(0);
         return address(bytes20(b));
-    }
-
-    function _noHops() private pure returns (RouteTypes.Hop[] memory) {
-        return new RouteTypes.Hop[](0);
     }
 }

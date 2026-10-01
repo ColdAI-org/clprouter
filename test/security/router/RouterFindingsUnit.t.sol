@@ -1,8 +1,9 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {IClprService} from "@hiero-ledger/clpr/interfaces/IClprService.sol";
 import {ClprRouter} from "@clprouter/ClprRouter.sol";
+import {IClprRouter} from "@clprouter/interfaces/IClprRouter.sol";
 import {ProviderRegistry} from "@clprouter/ProviderRegistry.sol";
 import {QuarantineVault} from "@clprouter/QuarantineVault.sol";
 import {IProviderRegistry} from "@clprouter/interfaces/IProviderRegistry.sol";
@@ -11,16 +12,17 @@ import {RouteTypes} from "@clprouter/libraries/RouteTypes.sol";
 import {RouteCodec} from "@clprouter/libraries/RouteCodec.sol";
 import {RouteLogic} from "@clprouter/libraries/RouteLogic.sol";
 import {Caip} from "@clprouter/libraries/Caip.sol";
-import {OriginHarness, SecMockService, GasHungryApp, ReturnBomb} from "./RouterAuditBase.sol";
+import {Vm} from "forge-std/Vm.sol";
+import {OriginHarness, SecMockService, GasHungryApp, ReturnBomb, ResponseBomb} from "./RouterAuditBase.sol";
 
 /// @notice Router findings reproduced on single Routers over {SecMockService} (docs/audit/router-findings.md).
-///         Each `test_<ID>_...` asserts the SECURE behaviour, so it fails until the finding is fixed.
+///         Regression tests: each `test_<ID>_...` asserts the secure behaviour of the fixed Router.
 contract RouterFindingsUnitTest is OriginHarness {
     SecMockService internal svcB;
     ClprRouter internal hopB;
     SecMockService internal svcC;
     ClprRouter internal destC;
-    address internal routerAaddr = makeAddr("router-A-remote");
+    address internal routerAaddr; // = routerA: hops must name canonical Routers
     address internal originApp = makeAddr("origin-app");
     address internal destApp0 = makeAddr("dest-app");
     address internal pA = makeAddr("pA");
@@ -29,6 +31,7 @@ contract RouterFindingsUnitTest is OriginHarness {
     function setUp() public {
         vm.warp(1_800_000_000);
         _deployOrigin();
+        routerAaddr = address(routerA);
         (svcB, hopB) = _router(ID_B);
         svcB.setPeer(CH_AB, ID_A);
         svcB.setPeer(CH_BC, ID_C);
@@ -40,7 +43,7 @@ contract RouterFindingsUnitTest is OriginHarness {
         s = new SecMockService(id);
         ProviderRegistry reg = _deployRegistry();
         QuarantineVault v = new QuarantineVault(IProviderRegistry(address(reg)), 3 days, 7 days);
-        r = new ClprRouter(
+        r = _deployRouter(
             IClprService(address(s)),
             IProviderRegistry(address(reg)),
             IQuarantineVault(address(v)),
@@ -80,14 +83,31 @@ contract RouterFindingsUnitTest is OriginHarness {
         svcB.setGuard(true);
         bytes memory held = RouteCodec.encodeEnvelope(_inbound(1, destApp0));
         svcB.deliver(hopB, CH_AB, abi.encodePacked(routerAaddr), held);
-        bytes16 id = _inbound(1, address(0)).routeId;
-        assertEq(uint8(hopB.hopState(id)), uint8(ClprRouter.HopState.FORWARD_PENDING));
+        bytes32 key = _key(ID_A, routerAaddr, _inbound(1, address(0)).routeId);
+        assertEq(uint8(hopB.hopState(key)), uint8(IClprRouter.HopState.FORWARD_PENDING));
 
-        svcB.setFailChannel(CH_BC, true); // griefer-induced, transient
+        svcB.setFailChannel(CH_BC, true); // griefer-induced, transient (ClprQueueFull)
         vm.prank(makeAddr("griefer"));
-        try hopB.forward(held, new RouteTypes.Hop[](0)) {} catch {}
+        vm.expectRevert(abi.encodeWithSignature("ClprQueueFull()"));
+        hopB.forward(held, new RouteTypes.Hop[](0));
+        assertEq(uint8(hopB.hopState(key)), uint8(IClprRouter.HopState.FORWARD_PENDING), "M-02: route failed for good");
+        assertEq(hopB.pendingHash(key), keccak256(held));
 
-        assertEq(uint8(hopB.hopState(id)), uint8(ClprRouter.HopState.FORWARD_PENDING), "M-02: route failed for good");
+        // Once the queue drains, anyone completes the hop.
+        svcB.setFailChannel(CH_BC, false);
+        hopB.forward(held, new RouteTypes.Hop[](0));
+        assertEq(uint8(hopB.hopState(key)), uint8(IClprRouter.HopState.FORWARDED));
+    }
+
+    /// @dev Inside delivery a transient failure defers the hop (it never becomes SEND_FAILED).
+    function test_M02c_transientFailureInsideDelivery_defers() public {
+        svcB.setFailChannel(CH_BC, true);
+        bytes memory held = RouteCodec.encodeEnvelope(_inbound(1, destApp0));
+        bytes memory resp = svcB.deliver(hopB, CH_AB, abi.encodePacked(routerAaddr), held);
+        assertEq(resp, abi.encodePacked(uint8(1), uint8(0)), "accepted, not rejected");
+        bytes32 key = _key(ID_A, routerAaddr, _inbound(1, address(0)).routeId);
+        assertEq(uint8(hopB.hopState(key)), uint8(IClprRouter.HopState.FORWARD_PENDING));
+        assertEq(svcB.sentCount(), 0, "no FAILED receipt");
     }
 
     /// @dev Worse for receipts: a pending receipt whose send fails is dropped (ReceiptUndeliverable, DONE).
@@ -97,19 +117,34 @@ contract RouterFindingsUnitTest is OriginHarness {
         RouteTypes.Envelope memory e = _inbound(2, makeAddr("dest-app"));
         RouteTypes.Receipt memory r;
         r.status = RouteTypes.ReceiptStatus.DELIVERED;
-        (bytes16 receiptId,, bytes memory data) = RouteLogic.buildReceipt(e, r, ID_C, address(destC), 1);
-        // The receipt arrives at B (its hop 1) from C's Router over CH_BC.
+        (,, bytes memory data) = RouteLogic.buildReceipt(e, r, ID_C, address(destC), 1);
+        // The receipt arrives at B (its hop 1) from C's Router over CH_BC; the guard defers it to the outbox.
         svcB.setGuard(true);
+        vm.recordLogs();
         svcB.deliver(hopB, CH_BC, abi.encodePacked(address(destC)), data);
-        assertEq(uint8(hopB.hopState(receiptId)), uint8(ClprRouter.HopState.FORWARD_PENDING));
-        bytes memory held = data; // the envelope as held on B
+        (bytes32 ch, bytes32 conn, bytes memory target, bytes memory out) = _queued(vm.getRecordedLogs());
+        assertTrue(hopB.outbox(keccak256(abi.encode(ch, conn, target, out))));
 
         svcB.setFailChannel(CH_AB, true);
-        try hopB.forward(held, new RouteTypes.Hop[](0)) {} catch {}
+        try hopB.flush(ch, conn, target, out) {} catch {}
+        assertEq(svcB.sentCount(), 0);
+        assertTrue(hopB.outbox(keccak256(abi.encode(ch, conn, target, out))), "still queued");
         svcB.setFailChannel(CH_AB, false);
-        try hopB.forward(held, new RouteTypes.Hop[](0)) {} catch {}
+        hopB.flush(ch, conn, target, out);
 
         assertEq(svcB.sentCount(), 1, "M-02: DELIVERED receipt dropped by a transient send failure");
+    }
+
+    function _queued(Vm.Log[] memory logs)
+        internal
+        pure
+        returns (bytes32 ch, bytes32 conn, bytes memory target, bytes memory data)
+    {
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == IClprRouter.OutboxQueued.selector) {
+                (ch, conn, target, data) = abi.decode(logs[i].data, (bytes32, bytes32, bytes, bytes));
+            }
+        }
     }
 
     // ═════════════════════════════════════════════════════════════════════
@@ -125,7 +160,7 @@ contract RouterFindingsUnitTest is OriginHarness {
         GasHungryApp app = new GasHungryApp(address(destC), 150_000); // needs half of APP_GAS
         svcC.setGuard(true);
         bytes memory data = RouteCodec.encodeEnvelope(_inbound(2, address(app)));
-        bytes16 id = _inbound(2, address(0)).routeId;
+        bytes32 id = _key(ID_A, routerAaddr, _inbound(2, address(0)).routeId);
 
         // Sanity: with enough gas the application accepts the message.
         uint256 s0 = vm.snapshotState();
@@ -137,7 +172,7 @@ contract RouterFindingsUnitTest is OriginHarness {
         for (uint256 g = 100_000; g <= 1_500_000; g += 5_000) {
             uint256 snap = vm.snapshotState();
             (bool ok,) = svcC.deliverWithGas(destC, CH_BC, abi.encodePacked(address(hopB)), data, g);
-            bool wronglyFailed = ok && app.accepted() == 0 && destC.hopState(id) == ClprRouter.HopState.DONE;
+            bool wronglyFailed = ok && app.accepted() == 0 && destC.hopState(id) == IClprRouter.HopState.DONE;
             vm.revertToState(snap);
             if (wronglyFailed) {
                 badGas = g;
@@ -162,14 +197,20 @@ contract RouterFindingsUnitTest is OriginHarness {
         this.decodeExt(b);
     }
 
-    /// @dev Protobuf merges a repeated embedded singular message; the Solidity codec replaces it. An envelope
-    ///      with two `constraints` fields decodes to different routes on-chain and in protobuf-based tooling.
-    function test_L02b_duplicateEmbeddedMessage_mergesLikeProtobuf() public view {
+    /// @dev Protobuf merges a repeated embedded singular message; the old codec replaced it, so tooling and chain
+    ///      could read different envelopes. The codec now rejects any repeated singular field (and anything
+    ///      else that is not the canonical encoding).
+    function test_L02b_duplicateEmbeddedMessage_isRejected() public {
         // constraints { loose: true } appended after the canonical constraints { deadline, budget }
         bytes memory b = bytes.concat(_canonical(), hex"4a023801");
-        RouteTypes.Envelope memory e = RouteCodec.decodeEnvelope(b);
-        assertTrue(e.constraints.loose);
-        assertEq(e.constraints.deadline, uint64(block.timestamp + 1 hours), "L-02: deadline lost on merge");
+        vm.expectRevert(RouteCodec.MalformedProtobuf.selector);
+        this.decodeExt(b);
+    }
+
+    /// @dev Every accepted encoding is canonical: re-encoding gives back the same bytes.
+    function test_L02c_acceptedBytes_reEncodeIdentically() public view {
+        bytes memory b = _canonical();
+        assertEq(RouteCodec.encodeEnvelope(this.decodeExt(b)), b);
     }
 
     function decodeExt(bytes calldata b) external pure returns (RouteTypes.Envelope memory) {
@@ -186,14 +227,14 @@ contract RouterFindingsUnitTest is OriginHarness {
         address badApp = makeAddr("blacklisted-app");
         _apply(regA, A_BLACKLIST, _blacklistPayload(Caip.account(ID_C, badApp), keccak256("case")));
 
-        ClprRouter.SendRequest memory req = _req(0, address(0), 1, makeAddr("p0"), 1, makeAddr("p1"));
+        IClprRouter.SendRequest memory req = _req(0, address(0), 1, makeAddr("p0"), 1, makeAddr("p1"));
         req.destination = RouteTypes.Endpoint(ID_C, abi.encodePacked(badApp));
         req.recipient = Caip.account(ID_C, makeAddr("innocent-label"));
         address s = makeAddr("sender");
         vm.deal(s, 1 ether);
         vm.prank(s);
         bytes16 id = routerA.send{value: 2}(req);
-        assertEq(uint8(_status(id)), uint8(ClprRouter.RouteStatus.QUARANTINED), "L-03: sent to a blacklisted app");
+        assertEq(uint8(_status(id)), uint8(IClprRouter.RouteStatus.QUARANTINED), "L-03: sent to a blacklisted app");
     }
 
     // ═════════════════════════════════════════════════════════════════════
@@ -212,11 +253,12 @@ contract RouterFindingsUnitTest is OriginHarness {
         uint256 n = 9; // 8 edges, the absolute maximum
         ReturnBomb sender = new ReturnBomb(BOMB);
         vm.deal(address(sender), 10 ether);
-        ClprRouter.SendRequest memory req;
+        IClprRouter.SendRequest memory req;
         req.hops = new RouteTypes.Hop[](n);
         for (uint256 i = 0; i < n; i++) {
             string memory id = i == 0 ? ID_A : string.concat("eip155:4", vm.toString(i));
-            address r = i == 0 ? address(routerA) : makeAddr(string.concat("r", vm.toString(i)));
+            address r =
+                i == 0 ? address(routerA) : _routerAddr(i == 1 ? ID_B : string.concat("eip155:4", vm.toString(i)));
             bytes32 ch = i == 0 ? CH_AB : (i + 1 < n ? keccak256(abi.encode(i)) : bytes32(0));
             req.hops[i] = _hop(id, r, ch, i + 1 < n ? 1 : 0, i + 1 < n ? address(new ReturnBomb(BOMB)) : address(0));
         }
@@ -235,6 +277,24 @@ contract RouterFindingsUnitTest is OriginHarness {
         (bool ok,) = svcA.deliverWithGas(routerA, CH_AB, sent.hops[1].router, rec, 3_000_000);
         emit log_named_uint("settlement gas with return bombs", g0 - gasleft());
         assertTrue(ok, "M-05: settlement ran out of 3M gas, receipt lost");
-        assertEq(uint8(_status(id)), uint8(ClprRouter.RouteStatus.DELIVERED));
+        assertEq(uint8(_status(id)), uint8(IClprRouter.RouteStatus.DELIVERED));
+    }
+
+    /// @dev I-06 / M-05: a destination application's response is copied and hashed only up to MAX_RESPONSE bytes,
+    ///      so a huge response neither breaks delivery nor costs the Router more than a bounded copy.
+    function test_M05b_destinationResponseBomb_isBounded() public {
+        ResponseBomb app = new ResponseBomb(150_000);
+        bytes memory data = RouteCodec.encodeEnvelope(_inbound(2, address(app)));
+        uint256 g0 = gasleft();
+        (bool ok,) = svcC.deliverWithGas(destC, CH_BC, abi.encodePacked(address(hopB)), data, 3_000_000);
+        uint256 used = g0 - gasleft();
+        emit log_named_uint("delivery gas with a 150 KB response", used);
+        assertTrue(ok);
+        RouteTypes.Envelope memory re = RouteCodec.decodeEnvelope(svcC.sent(0).data);
+        RouteTypes.Receipt memory r = RouteCodec.decodeReceipt(re.payload);
+        assertEq(uint8(r.status), uint8(RouteTypes.ReceiptStatus.DELIVERED));
+        // The bomb's data starts at its memory offset 0x40, which holds Solidity's free-memory pointer (0x80).
+        bytes memory head = bytes.concat(bytes32(uint256(0x80)), new bytes(destC.MAX_RESPONSE() - 32));
+        assertEq(r.responseHash, keccak256(head), "hash of the first MAX_RESPONSE bytes");
     }
 }

@@ -1,8 +1,9 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {IClprRouteApplication, IClprRouteSender} from "@clprouter/interfaces/IClprRouteApplication.sol";
 import {ClprRouter} from "@clprouter/ClprRouter.sol";
+import {IClprRouter} from "@clprouter/interfaces/IClprRouter.sol";
 
 /// @notice Test application: origin sender (receives receipts) and destination receiver (records messages).
 contract RouteApp is IClprRouteApplication, IClprRouteSender {
@@ -41,7 +42,7 @@ contract RouteApp is IClprRouteApplication, IClprRouteSender {
         shouldRevert = v;
     }
 
-    function sendRoute(ClprRouter r, ClprRouter.SendRequest calldata req) external payable returns (bytes16) {
+    function sendRoute(ClprRouter r, IClprRouter.SendRequest calldata req) external payable returns (bytes16) {
         return r.send{value: msg.value}(req);
     }
 

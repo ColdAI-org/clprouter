@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {Vm} from "forge-std/Vm.sol";
@@ -12,6 +12,7 @@ import {E2EVerifier} from "@test/E2EVerifier.sol";
 import {MockClprConnector} from "@test/mocks/MockClprConnector.sol";
 
 import {ClprRouter} from "@clprouter/ClprRouter.sol";
+import {IClprRouter} from "@clprouter/interfaces/IClprRouter.sol";
 import {ProviderRegistry} from "@clprouter/ProviderRegistry.sol";
 import {QuarantineVault} from "@clprouter/QuarantineVault.sol";
 import {IQuarantineVault} from "@clprouter/interfaces/IQuarantineVault.sol";
@@ -19,6 +20,7 @@ import {IProviderRegistry} from "@clprouter/interfaces/IProviderRegistry.sol";
 import {RouteTypes} from "@clprouter/libraries/RouteTypes.sol";
 import {Caip} from "@clprouter/libraries/Caip.sol";
 import {Committee} from "./Committee.sol";
+import {RouterDeploy} from "./RouterDeploy.sol";
 import {RouteApp} from "./RouteApp.sol";
 import "./ClprArtifacts.sol";
 
@@ -26,7 +28,7 @@ import "./ClprArtifacts.sol";
 ///         registry, a quarantine vault, a CLPRouter and a test app. Channels A↔B and B↔C use the CLPR repo's
 ///         E2EVerifier (decodes real bundle protobufs, no crypto). An in-process relay plays the endpoints:
 ///         it copies queued messages into bundles, submits them, and completes pending Router hops.
-abstract contract ThreeLedgerFixture is Committee {
+abstract contract ThreeLedgerFixture is Committee, RouterDeploy {
     struct Ledger {
         string id;
         ClprService service;
@@ -110,7 +112,7 @@ abstract contract ThreeLedgerFixture is Committee {
         l.service.setClprEnabled(true);
         l.registry = _deployRegistry();
         l.vault = new QuarantineVault(IProviderRegistry(address(l.registry)), 3 days, 7 days);
-        l.router = new ClprRouter(
+        l.router = _deployRouter(
             IClprService(address(l.service)),
             IProviderRegistry(address(l.registry)),
             IQuarantineVault(address(l.vault)),
@@ -189,7 +191,7 @@ abstract contract ThreeLedgerFixture is Committee {
         h[2] = _hop(C, bytes32(0), bytes32(0), 0, address(0));
     }
 
-    function _request(uint256 escrow) internal view returns (ClprRouter.SendRequest memory req) {
+    function _request(uint256 escrow) internal view returns (IClprRouter.SendRequest memory req) {
         req.destination = RouteTypes.Endpoint({ledgerId: C.id, application: abi.encodePacked(address(C.app))});
         req.recipient = Caip.account(C.id, address(C.app));
         req.hops = _hopsABC();
@@ -201,7 +203,7 @@ abstract contract ThreeLedgerFixture is Committee {
         req.payee = escrow > 0 ? payee : address(0);
     }
 
-    function _sendAs(address who, ClprRouter.SendRequest memory req, uint256 value) internal returns (bytes16) {
+    function _sendAs(address who, IClprRouter.SendRequest memory req, uint256 value) internal returns (bytes16) {
         vm.prank(who);
         return A.router.send{value: value}(req);
     }
@@ -271,15 +273,19 @@ abstract contract ThreeLedgerFixture is Committee {
         uint256 g = gasleft();
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics.length == 0) continue;
-            if (logs[i].topics[0] == ClprRouter.ForwardPending.selector) {
+            if (logs[i].topics[0] == IClprRouter.ForwardPending.selector) {
                 (, bytes memory env) = abi.decode(logs[i].data, (uint32, bytes));
                 vm.recordLogs();
-                ClprRouter(logs[i].emitter).forward(env, new RouteTypes.Hop[](0));
+                // A held receipt stays held (reverts) while its disable is in force; tests retry it explicitly.
+                try ClprRouter(logs[i].emitter).forward(env, new RouteTypes.Hop[](0)) {} catch {}
                 _pump(vm.getRecordedLogs()); // a pumped hop may itself stop and queue a receipt
-            } else if (logs[i].topics[0] == ClprRouter.OutboxQueued.selector) {
+            } else if (logs[i].topics[0] == IClprRouter.OutboxQueued.selector) {
                 (bytes32 c, bytes32 k, bytes memory target, bytes memory data) =
                     abi.decode(logs[i].data, (bytes32, bytes32, bytes, bytes));
-                ClprRouter(logs[i].emitter).flush(c, k, target, data);
+                vm.recordLogs();
+                // A queued receipt stays queued (reverts) while its edge is blocked or the send fails.
+                try ClprRouter(logs[i].emitter).flush(c, k, target, data) {} catch {}
+                _pump(vm.getRecordedLogs());
             }
         }
         lastPumpGas = g - gasleft();
@@ -304,8 +310,13 @@ abstract contract ThreeLedgerFixture is Committee {
         }
     }
 
-    function _routeStatus(bytes16 id) internal view returns (ClprRouter.RouteStatus s) {
-        (,, s,,,,,,,) = A.router.routes(id);
+    /// @dev Hop-state key (on B or C) of route `id` sent from A.
+    function _hk(bytes16 id) internal view returns (bytes32) {
+        return _key(ID_A, address(A.router), id);
+    }
+
+    function _routeStatus(bytes16 id) internal view returns (IClprRouter.RouteStatus s) {
+        (,, s,,,,,,,,,,,) = A.router.routes(id);
     }
 
     receive() external payable {}

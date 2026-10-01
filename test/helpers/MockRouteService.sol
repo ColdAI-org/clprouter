@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {ClprTypes} from "@hiero-ledger/clpr/libraries/ClprTypes.sol";
@@ -20,6 +20,7 @@ contract MockRouteService {
     string public chainId;
     mapping(bytes32 => string) public peerOf;
     mapping(bytes32 => bool) public failChannel;
+    mapping(bytes32 => bool) public transientChannel;
     bool public guardActive;
     /// @dev Gas sendMessage burns before doing anything (type(uint256).max = until it runs out).
     uint256 public burnGas;
@@ -37,6 +38,10 @@ contract MockRouteService {
 
     function setFailChannel(bytes32 ch, bool v) external {
         failChannel[ch] = v;
+    }
+
+    function setTransientChannel(bytes32 ch, bool v) external {
+        transientChannel[ch] = v;
     }
 
     /// @dev When true, sendMessage during deliver() reverts like the reference ClprService.
@@ -63,7 +68,8 @@ contract MockRouteService {
         returns (uint64)
     {
         if (guardActive && _inDelivery) revert ReentrancyGuardReentrantCall();
-        if (failChannel[ch]) revert("channel paused");
+        if (failChannel[ch]) revert ClprTypes.ClprChannelNotFound(); // a definite rejection
+        if (transientChannel[ch]) revert ClprTypes.ClprQueueFull();
         if (burnGas > 0) {
             uint256 stop = gasleft() > burnGas ? gasleft() - burnGas : 0;
             while (gasleft() > stop) {}

@@ -1,9 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {ClprRouter} from "@clprouter/ClprRouter.sol";
+import {IClprRouter} from "@clprouter/interfaces/IClprRouter.sol";
 import {QuarantineVault} from "@clprouter/QuarantineVault.sol";
 import {RouteTypes} from "@clprouter/libraries/RouteTypes.sol";
 import {RouteCodec} from "@clprouter/libraries/RouteCodec.sol";
@@ -24,6 +25,7 @@ contract OriginHandler is Test {
     ClprRouter public router;
     SecMockService public svc;
     address public routerB;
+    address public routerC;
     address[] public senders;
     address[] public payees;
     address[] public feePayees;
@@ -46,6 +48,7 @@ contract OriginHandler is Test {
         ClprRouter r,
         SecMockService s,
         address b,
+        address c,
         address[] memory s_,
         address[] memory p_,
         address[] memory f_
@@ -53,6 +56,7 @@ contract OriginHandler is Test {
         router = r;
         svc = s;
         routerB = b;
+        routerC = c;
         senders = s_;
         payees = p_;
         feePayees = f_;
@@ -66,8 +70,8 @@ contract OriginHandler is Test {
         return _routes[i].id;
     }
 
-    function _status(bytes16 id) internal view returns (ClprRouter.RouteStatus s) {
-        (,, s,,,,,,,) = router.routes(id);
+    function _status(bytes16 id) internal view returns (IClprRouter.RouteStatus s) {
+        (,, s,,,,,,,,,,,) = router.routes(id);
     }
 
     /// @dev After every action: a route that reached a terminal status never changes again.
@@ -76,7 +80,7 @@ contract OriginHandler is Test {
         for (uint256 i = 0; i < _routes.length; i++) {
             bytes16 id = _routes[i].id;
             uint8 s = uint8(_status(id));
-            if (s == uint8(ClprRouter.RouteStatus.PENDING)) {
+            if (s == uint8(IClprRouter.RouteStatus.PENDING)) {
                 if (terminal[id] != 0) doubleSettle = true;
             } else if (terminal[id] == 0) {
                 terminal[id] = s;
@@ -104,7 +108,7 @@ contract OriginHandler is Test {
     {
         address sender = senders[who % senders.length];
         bool loose = mode % 4 == 0;
-        ClprRouter.SendRequest memory req;
+        IClprRouter.SendRequest memory req;
         req.destination = RouteTypes.Endpoint("eip155:31003", abi.encodePacked(address(0xDE57)));
         req.recipient = Caip.account("eip155:31003", address(0xDE57));
         f0 = loose ? 0 : uint64(bound(f0, 0, 1 ether));
@@ -128,7 +132,7 @@ contract OriginHandler is Test {
             f1,
             abi.encodePacked(feePayees[(payeeIdx + 1) % feePayees.length])
         );
-        req.hops[2] = RouteTypes.Hop("eip155:31003", abi.encodePacked(address(0xC0C)), 0, 0, 0, "");
+        req.hops[2] = RouteTypes.Hop("eip155:31003", abi.encodePacked(routerC), 0, 0, 0, "");
         req.constraints.deadline = uint64(block.timestamp + 1 hours);
         req.constraints.loose = loose;
         req.payload = "p";
@@ -174,9 +178,9 @@ contract OriginHandler is Test {
         if (r.wire.length == 0) return;
         uint256 k = 1 + kSeed % 2;
         (bytes memory data,) = _receipt(r, k, statusSeed);
-        bool wasPending = _status(r.id) == ClprRouter.RouteStatus.PENDING;
+        bool wasPending = _status(r.id) == IClprRouter.RouteStatus.PENDING;
         try svc.deliver(router, CH_AB, abi.encodePacked(routerB), data) {
-            if (wasPending && _status(r.id) == ClprRouter.RouteStatus.PENDING) honestIgnored = true;
+            if (wasPending && _status(r.id) == IClprRouter.RouteStatus.PENDING) honestIgnored = true;
         } catch {
             // Only an exact replay of an earlier receipt (same receipt id) may be refused.
         }
@@ -189,12 +193,14 @@ contract OriginHandler is Test {
         uint256 pick = type(uint256).max;
         for (uint256 j = 0; j < n; j++) {
             Route storage c = _routes[(idx + j) % n];
-            if (c.wire.length != 0 && !c.loose && _status(c.id) == ClprRouter.RouteStatus.PENDING) {
+            if (c.wire.length != 0 && !c.loose && _status(c.id) == IClprRouter.RouteStatus.PENDING) {
                 pick = (idx + j) % n;
                 break;
             }
         }
-        if (pick == type(uint256).max) return; // loose routes are excluded: known, finding M-03
+        // Loose routes are excluded: they keep no hop commitment, so a receipt the canonical first-hop Router relays
+        // is taken as is. Third parties cannot inject one any more (M-03: every Router on the way is canonical).
+        if (pick == type(uint256).max) return;
         Route storage r = _routes[pick];
         uint256 k = 1 + kSeed % 2;
         (bytes memory data,) = _receipt(r, k, statusSeed);
@@ -215,7 +221,7 @@ contract OriginHandler is Test {
         bytes memory forged = RouteCodec.encodeEnvelope(re);
 
         forgedTried++;
-        ClprRouter.RouteStatus before = _status(r.id);
+        IClprRouter.RouteStatus before = _status(r.id);
         uint256 bal = address(router).balance;
         try svc.deliver(router, CH_AB, abi.encodePacked(routerB), forged) {} catch {}
         if (_status(r.id) != before || address(router).balance != bal) forgedAccepted = true;
@@ -300,7 +306,7 @@ contract RouterInvariantsTest is StdInvariant, OriginHarness {
         // Sender 3 is blacklisted: its routes are quarantined at send.
         _apply(regA, A_BLACKLIST, _blacklistPayload(Caip.account(ID_A, s[3]), keccak256("case-s3")));
 
-        handler = new OriginHandler(routerA, svcA, routerB, s, p, f);
+        handler = new OriginHandler(routerA, svcA, routerB, routerC, s, p, f);
         for (uint256 i = 0; i < 4; i++) {
             actors.push(s[i]);
         }
@@ -328,8 +334,8 @@ contract RouterInvariantsTest is StdInvariant, OriginHarness {
     function invariant_routerSolvent() public view {
         uint256 need;
         for (uint256 i = 0; i < handler.routeCount(); i++) {
-            (,, ClprRouter.RouteStatus st,,,, uint64 budget, uint256 escrow,,) = routerA.routes(handler.routeId(i));
-            if (st == ClprRouter.RouteStatus.PENDING) need += escrow + budget;
+            (,, IClprRouter.RouteStatus st,,,,, uint64 budget,,, uint256 escrow,,,) = routerA.routes(handler.routeId(i));
+            if (st == IClprRouter.RouteStatus.PENDING) need += escrow + budget;
         }
         for (uint256 i = 0; i < actors.length; i++) {
             need += routerA.owed(actors[i]);
@@ -360,8 +366,8 @@ contract RouterInvariantsTest is StdInvariant, OriginHarness {
         handler.forgedReceipt(0, k, st, m, junk);
         assertEq(handler.forgedTried(), 1);
         assertFalse(handler.forgedAccepted());
-        (,, ClprRouter.RouteStatus s,,,,,,,) = routerA.routes(handler.routeId(0));
-        assertEq(uint8(s), uint8(ClprRouter.RouteStatus.PENDING));
+        (,, IClprRouter.RouteStatus s,,,,,,,,,,,) = routerA.routes(handler.routeId(0));
+        assertEq(uint8(s), uint8(IClprRouter.RouteStatus.PENDING));
     }
 
     /// @dev Coverage report for each run (not a property).
