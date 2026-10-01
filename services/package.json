@@ -1,0 +1,28 @@
+{
+  "name": "@clprouter/services",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CLPRouter off-chain services: event indexer, route status API, quote service and forward trigger. Optional and re-checkable: every answer carries the block numbers and registry versions it was built from.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "abi": "node scripts/gen-abi.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude test/integration/**",
+    "test:integration": "vitest run test/integration"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "viem": "^2.57.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "tsx": "^4.20.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}

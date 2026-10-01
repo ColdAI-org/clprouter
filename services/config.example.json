@@ -1,0 +1,31 @@
+{
+  "database": "clprouter-services.sqlite",
+  "http": { "host": "127.0.0.1", "port": 8787 },
+  "registryLedger": "eip155:31001",
+  "routerVersions": [1],
+  "ledgers": [
+    {
+      "id": "eip155:31001",
+      "rpcUrl": "http://127.0.0.1:8545",
+      "confirmations": 0,
+      "startBlock": 0,
+      "contracts": {
+        "router": "0x0000000000000000000000000000000000000001",
+        "registry": "0x0000000000000000000000000000000000000002",
+        "vault": "0x0000000000000000000000000000000000000003"
+      }
+    },
+    {
+      "id": "eip155:31002",
+      "rpcUrl": "http://127.0.0.1:8546",
+      "confirmations": 2,
+      "contracts": {
+        "router": "0x0000000000000000000000000000000000000004",
+        "registry": "0x0000000000000000000000000000000000000005",
+        "vault": "0x0000000000000000000000000000000000000006",
+        "clprService": "0x0000000000000000000000000000000000000007"
+      }
+    }
+  ],
+  "trigger": { "enabled": true, "keyEnv": "CLPROUTER_TRIGGER_KEY", "completeRejected": false }
+}
