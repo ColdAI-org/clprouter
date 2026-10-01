@@ -193,3 +193,82 @@ history, emissions figures (not yet imported from the MiCA white papers), operat
 
 XRPL → Hiero is `paused`. Hiero → chain edges are `projected` because they are blocked today, so chain → chain
 routes need `allowProjected: true`.
+
+## ISO 20022 module
+
+`@clprouter/sdk/iso20022` (`src/iso20022/`) implements the ISO 20022 filter's payload rules (phase 3).
+
+```ts
+import { buildIsoEnvelope, openIsoPayload, receiptToPacs002, paymentReference, assertNoClearPersonalData } from "@clprouter/sdk/iso20022";
+
+const { envelope } = buildIsoEnvelope(
+  { plan: isoPlan, originApp, destinationApp, sender, recipient, feeUnit, registryVersion },
+  { message: pacs008, recipientPublicKey: destinationBankX25519Key }, // or delivery: "off-chain"
+);
+assertNoClearPersonalData(envelope);                       // before Router.send
+const { message, travelRule } = openIsoPayload(envelope, bankSecretKey); // at the destination institution
+```
+
+**Messages.** Models and XML for the CBPR+ versions: pacs.008.001.08, pacs.009.001.08, pacs.002.001.10,
+camt.056.001.08, pacs.004.001.09 and camt.029.001.09 (one transaction per message). `toXml` validates and writes
+elements in XSD order; `fromXml` detects the message from the namespace and is strict: it rejects DOCTYPE/ENTITY
+declarations, unknown or repeated elements, and anything that fails validation. XML goes through `fast-xml-parser`.
+Validation covers required elements, lengths, FIN-X references, ISO 3166 countries, BIC (ISO 9362), LEI (ISO 17442
+check digits), IBAN (mod 97), active ISO 4217 currencies, amounts (positive, ≤ 14 digits, fraction digits ≤ the
+currency's minor units), ISODateTime with an offset, UUIDv4 UETRs, structured postal addresses only (`TwnNm` and
+`Ctry` required, no `AdrLine`), BICFI for instructing and instructed agents, and the travel-rule minimum for the
+debtor (name plus a structured address or an identification, and an account).
+
+**UETR.** `generateUetr`, `isUetr`, `uetrToRouteId` and `routeIdToUetr`. For a pacs.008 or pacs.009 the payment's
+UETR is the envelope `route_id`. Follow-ups (camt.056, pacs.004, camt.029) are new routes. They get a fresh UETR as
+their route id and carry the payment's UETR as `original_uetr`, because Routers never accept a route id twice.
+
+**Envelope binding.** The payload is a `ClprIsoPayload` protobuf header. In clear it holds the version, the message
+definition, the UETR (and original UETR), the amount and currency, and two salted keccak256 commitments: one to the
+XML and one to the canonical travel-rule JSON (originator, beneficiary, accounts and agents). Two delivery modes:
+
+- `encrypted` (default): the XML, the salt and the travel-rule data are sealed to the destination institution's
+  X25519 key. The scheme is X25519 → HKDF-SHA256 (salt = ephemeral key ‖ recipient key) → XChaCha20-Poly1305, with a
+  fresh ephemeral key per message. Header fields 1–10 are the AEAD's associated data, so changing the UETR, amount,
+  currency, commitments or key id breaks decryption. XChaCha was chosen over RFC 9180 HPKE because its 192-bit nonce
+  can be random with no counter state. The KDF still binds both public keys, as HPKE's DHKEM does. The primitives
+  come from `@noble/ciphers`, `@noble/curves` and `@noble/hashes`.
+- `off-chain`: the header carries hashes only. The endpoints deliver `{ xml, salt, travelRule }` off-chain, and
+  `verifyOffChainDelivery` checks it against the on-chain commitments.
+
+The random salt makes the commitments hiding, so an observer who knows the UETR and amount cannot confirm a guessed
+name. `openIsoPayload` checks the key id, decrypts, verifies both commitments, re-validates the XML, and checks that
+the message's UETR, amount and currency match the clear header and the envelope's `route_id`.
+
+**Receipts ↔ pacs.002.** `encodeRouteReceipt` and `decodeRouteReceipt` handle `ClprRouteReceipt`.
+`hopAcceptedStatus` gives ACSP for each `RouteForwarded` hop. `receiptToPacs002` maps receipts as follows:
+
+| Receipt | pacs.002 |
+| --- | --- |
+| `DELIVERED` | ACCC |
+| `EXPIRED` | RJCT AB05 |
+| `QUARANTINED` | RJCT RR04, with `AddtlInf` `CASE/<case id>` and `CONTACT/<provider contact>` |
+| `FAILED` | RJCT with `REJECT_REASON_CODES[reason]`: AB07 for disables, AB09 for an application error, AB10 for next-hop or send failures, AGNT for a filter failure, AM04 for the fee budget, FF02 for a bad route, NARR otherwise |
+
+`pacs002Outcome` reads a pacs.002 back into a Router outcome.
+
+**Cancellation and return.**
+
+- `cancellationRequest` builds a camt.056.
+- `resolveCancellation` builds a camt.029: `CNCL`/`ACCR`, or `RJCR` with a reason.
+- `returnPayment` builds a pacs.004. The return chain is reversed, and the reason is `FOCR` when it answers a camt.056.
+- `quarantineReturn` builds a pacs.004 with RR04 and the case id, for a vault release to the sender.
+
+Before settlement no pacs.004 is needed: the origin Router refunds the escrow on the failure receipt.
+
+**No personal data in the clear.** `findClearPersonalData(envelope)` and `assertNoClearPersonalData` check every
+field outside the ciphertext:
+
+- ledger ids must be CAIP-2;
+- `sender` and `recipient` must be CAIP-10, in an address format that fits their namespace;
+- binary fields must have the expected size and must not decode to text;
+- an `iso20022` payload must be a strict `ClprIsoPayload`: no unknown or repeated fields, no readable "ciphertext";
+- a receipt's contact must be a URL, an e-mail address or a CAIP-10 account.
+
+Each violation names the field and what leaked: free text, an account identifier (IBAN), ISO XML, plaintext or an
+unknown field. CAIP-10 addresses are checked for format only, which is how the spec allows them in clear.
