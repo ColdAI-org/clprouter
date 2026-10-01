@@ -7,8 +7,8 @@ they are used here only as the Router sees them.
 
 Method: manual review, Foundry proofs of concept, stateful invariant testing, codec fuzzing, Slither 0.11.6 and
 Aderyn 0.6.8. Every finding has a test under `test/security/router/`. Finding tests assert the **secure**
-behaviour, so they fail until the finding is fixed. Two design-level tests (`*_DESIGN_*`) run the exploit, assert
-today's behaviour, and then report as skipped.
+behaviour. They failed against the reviewed code and pass since the fixes; they now run as regression tests (the two
+former design-level tests for M-03 and M-04 are no longer skipped).
 
 ```
 forge test --match-path 'test/security/router/*'
@@ -16,19 +16,19 @@ forge test --match-path 'test/security/router/*'
 
 ## Summary
 
-| ID | Severity | Title | Test |
-| --- | --- | --- | --- |
-| H-01 | High | Receipt-id squatting lets the sender take back an escrow after delivery | `RouterFindingsFlow.t.sol:test_H01_*` |
-| H-02 | High | Anyone can forge receipts for strict routes that use `receipt_path` | `RouterFindingsFlow.t.sol:test_H02_*`, `test_H02b_*` |
-| M-01 | Medium | Route-id squatting on a downstream ledger censors a route | `RouterFindingsFlow.t.sol:test_M01_*` |
-| M-02 | Medium | `forward()` turns a transient `sendMessage` failure into a final outcome; pending receipts are dropped | `RouterFindingsUnit.t.sol:test_M02_*`, `test_M02b_*` |
-| M-03 | Medium (design) | Loose-route receipts are unauthenticated; anyone re-routes a rejected loose hop | `RouterFindingsFlow.t.sol:test_M03_DESIGN_*` |
-| M-04 | Medium (design) | A sender-chosen intermediate "Router" decides the settlement | `RouterFindingsFlow.t.sol:test_M04_DESIGN_*` |
-| M-05 | Medium | Return bombs from payment receivers push receipt settlement past the CLPR gas limit | `RouterFindingsUnit.t.sol:test_M05_*` |
-| L-01 | Low | A disable at the origin drops a DELIVERED receipt for good | `RouterFindingsFlow.t.sol:test_L01_*` |
-| L-02 | Low | The codec accepts non-canonical encodings and replaces (does not merge) repeated messages | `RouterFindingsUnit.t.sol:test_L02_*`, `test_L02b_*` |
-| L-03 | Low | The blacklist never checks the destination application | `RouterFindingsUnit.t.sol:test_L03_*` |
-| I-01 … I-06 | Info | See below | — |
+| ID | Severity | Title | Status | Regression test |
+| --- | --- | --- | --- | --- |
+| H-01 | High | Receipt-id squatting lets the sender take back an escrow after delivery | Fixed in `e6e74db` | `RouterFindingsFlow.t.sol:test_H01_receiptIdSquatting_payeeIsPaidAfterDelivery` |
+| H-02 | High | Anyone can forge receipts for strict routes that use `receipt_path` | Fixed in `e6e74db` | `RouterFindingsFlow.t.sol:test_H02_explicitReceiptPath_thirdPartyCannotForgeReceipt`, `test_H02b_explicitReceiptPath_forgedDeliveredBeforeDelivery` |
+| M-01 | Medium | Route-id squatting on a downstream ledger censors a route | Fixed in `e6e74db` | `RouterFindingsFlow.t.sol:test_M01_routeIdSquattingDownstream_cannotCensorRoute` |
+| M-02 | Medium | `forward()` turns a transient `sendMessage` failure into a final outcome; pending receipts are dropped | Fixed in `e6e74db` | `RouterFindingsUnit.t.sol:test_M02_forwardDuringTransientSendFailure_keepsHopPending`, `test_M02b_pendingReceipt_survivesTransientSendFailure`, `test_M02c_transientFailureInsideDelivery_defers` |
+| M-03 | Medium (design) | Loose-route receipts are unauthenticated; anyone re-routes a rejected loose hop | Fixed in `e6e74db` (canonical Routers) | `RouterFindingsFlow.t.sol:test_M03_looseRoute_thirdPartyCannotForgeStatus`, `test_M03b_looseReroute_tailMustBeCanonical` |
+| M-04 | Medium (design) | A sender-chosen intermediate "Router" decides the settlement | Fixed in `e6e74db` (canonical Routers) | `RouterFindingsFlow.t.sol:test_M04_fakeIntermediateRouter_cannotDecideSettlement` |
+| M-05 | Medium | Return bombs from payment receivers push receipt settlement past the CLPR gas limit | Fixed in `e6e74db` | `RouterFindingsUnit.t.sol:test_M05_returnBombs_doNotBreakSettlementUnder3MGas`, `test_M05b_destinationResponseBomb_isBounded` |
+| L-01 | Low | A disable at the origin drops a DELIVERED receipt for good | Fixed in `e6e74db` | `RouterFindingsFlow.t.sol:test_L01_disabledInboundAtOrigin_receiptIsHeldNotDropped` |
+| L-02 | Low | The codec accepts non-canonical encodings and replaces (does not merge) repeated messages | Fixed in `6bc3a2d` | `RouterFindingsUnit.t.sol:test_L02_decodeRejectsOverlongVarint`, `test_L02b_duplicateEmbeddedMessage_isRejected`, `test_L02c_acceptedBytes_reEncodeIdentically` |
+| L-03 | Low | The blacklist never checks the destination application | Fixed in `e6e74db` | `RouterFindingsUnit.t.sol:test_L03_blacklistedDestinationApp_isQuarantined` |
+| I-01 … I-06 | Info | See below | See below | — |
 
 H-01, M-02 and M-05 share one amplifier (I-01): a receipt is a fire-and-forget CLPR message. If any Router on its
 way rejects or fails it, nothing records that and nothing retries it; the origin can only `reclaim`, which refunds
@@ -232,21 +232,34 @@ at the destination; validate `recipient` as a canonical CAIP-10 id.
 
 ## Informational
 
-- **I-01 Receipts are fire-and-forget.** `_sendReceipt` and receipt hops in `_advance` do not record `outbound`,
+Status of the informational items: I-01, I-03, I-05 and I-06 are fixed in `e6e74db`; I-04 is partly addressed
+there; I-02 is acknowledged and unchanged.
+
+- **I-01 Receipts are fire-and-forget.** *Fixed in `e6e74db`: receipt messages are tracked; unsendable or rejected
+  ones wait in the outbox for `flush` (`RouterHop.t.sol:test_receiptRejectedByClpr_isRequeued`,
+  `test_receiptOverDisabledEdge_isQueuedNotDropped`).* `_sendReceipt` and receipt hops in `_advance` do not record `outbound`,
   so a CLPR rejection of a receipt (replay, out of gas, Router disabled) is invisible and never retried. Track
   receipt messages like route messages and let anyone resend a NACKED receipt.
 - **I-02 `Caip.routerKey` uses `abi.encodePacked` over two dynamic values** (`ledgerId`, `router`). Not
   exploitable while ledger ids are CAIP-2 (no `:` in the reference), but `abi.encode` removes the ambiguity.
+  *Acknowledged, unchanged: disable keys are part of the registry's published key scheme.*
 - **I-03 Clock skew and reclaim race.** Each hop checks the deadline on its own clock, and `reclaim` needs only
   `deadline + RECLAIM_GRACE` on the origin's clock. A DELIVERED receipt still waiting for a `forward` / `flush`
   pump when the grace ends is ignored. `RECLAIM_GRACE` must cover the worst receipt latency including pumps.
+  *Fixed in `e6e74db`: two-phase reclaim scaled by the edges of the way back; a receipt before the refund settles
+  the route, a later one is recorded (`RouterFlow.t.sol:test_reclaim_twoPhase_afterDeadlinePlusGracePerEdge_thenLateReceiptRecorded`,
+  `test_reclaim_requestThenDeliveredReceipt_paysPayee`).*
 - **I-04 Events.** `RouteSent` carries neither the envelope nor its hash; `ReceiptIgnored` has no reason; a route
   rejected by `_validateInbound` emits nothing on that ledger (only the CLPR reply shows it). Services must
-  combine CLPR events with Router events to follow a route.
+  combine CLPR events with Router events to follow a route. *Partly addressed in `e6e74db`: `RouteForwarded`
+  carries the envelope key and data, `ReceiptRequeued`, `ReclaimRequested` and `LateReceipt` are new; inbound
+  rejections still show only in the CLPR reply.*
 - **I-05 `flush()` does not re-check route safety.** A receipt queued before a disable is still sent after it.
+  *Fixed in `e6e74db`: `flush` re-checks the edge (`RouterHop.t.sol:test_receiptOverDisabledEdge_isQueuedNotDropped`).*
 - **I-06 Return data of `onRouteMessage` is copied and decoded in full** (see M-05). By estimate (not measured)
   a destination application can return a few hundred KB within `APP_GAS` and add on the order of 1M gas to its
-  own delivery; it only harms routes to itself.
+  own delivery; it only harms routes to itself. *Fixed in `e6e74db`: the response is copied and hashed up to
+  `MAX_RESPONSE` (4096) bytes (`test_M05b_destinationResponseBomb_isBounded`).*
 
 ## Checked without findings
 
@@ -295,10 +308,10 @@ bounds) are false positives. Low items are style.
 
 ## Test inventory
 
-| File | Tests | Status today |
+| File | Tests | Status (after `6bc3a2d`, `e6e74db`) |
 | --- | --- | --- |
-| `test/security/router/RouterFindingsFlow.t.sol` | 7 | 5 fail (H-01, H-02 ×2, M-01, L-01), 2 skipped (M-03, M-04 design) |
-| `test/security/router/RouterFindingsUnit.t.sol` | 7 | 6 fail (M-02 ×2, M-05, L-02 ×2, L-03), 1 pass (NF-01) |
+| `test/security/router/RouterFindingsFlow.t.sol` | 8 | all pass (H-01, H-02 ×2, M-01, M-03 ×2, M-04, L-01) |
+| `test/security/router/RouterFindingsUnit.t.sol` | 10 | all pass (M-02 ×3, M-05 ×2, L-02 ×3, L-03, NF-01) |
 | `test/security/router/RouterInvariants.t.sol` | 7 | 6 invariants + 1 fuzz, all pass |
-| `test/security/router/RouteCodecFuzz.t.sol` | 7 | all pass |
+| `test/security/router/RouteCodecFuzz.t.sol` | 8 | all pass |
 | `test/security/router/RouterAuditBase.sol` | — | mocks: `SecMockService`, `FakeRouter`, `ReturnBomb`, `ClprMessenger`, harness |

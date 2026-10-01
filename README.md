@@ -177,7 +177,7 @@ CLPRouter is **pre-release**. Do not use it with real funds.
 | | |
 |---|---|
 | Contracts, SDK, services | Built and tested locally; testnet deployment in progress |
-| Security | Two internal audits completed; their findings are being fixed with regression tests ([audit notes](docs/audit)). No external audit yet |
+| Security | Two internal audits; all findings fixed with regression tests; independent re-audit in progress. No external audit yet. |
 | Forwarding | On the reference CLPR Service each hop completes in a second transaction (`forward()`), because one reentrancy lock covers sending and receiving |
 | Hiero to other ledgers | Waits on a Hiero state-proof source; until then the Hiero → chain legs run on a test verifier in local tests only |
 | Provider | A real provider committee, its key ceremony and legal review of the quarantine vault are prerequisites for mainnet |

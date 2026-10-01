@@ -179,13 +179,16 @@ The provider committee (k of n) can do three things, and only through this regis
 | Disable a Channel direction, a ledger, a Router deployment or a Router version | k + 1 | immediately | after 7 days unless renewed |
 | Re-enable | k | after 7 days' notice | — |
 | Blacklist a CAIP-10 account under a case id | k + 1 | immediately | after 30 days unless renewed |
-| Delist | k | immediately | — |
-| Change the committee or the contact address | k (current committee) | immediately, new epoch | — |
+| Delist | k + 1 | immediately | — |
+| Change the contact address | k | immediately | — |
+| Change the committee | supermajority of the current committee, max(k + 1, ⌈2n/3⌉) | after 7 days' notice, when the new committee signs its first decision (new epoch) | — |
 
-Notice and lapse periods are constructor parameters; the values above are the spec's recommendations and the
-ones the tests use. A decision is signed once over a ledger-independent digest and can be relayed by anyone to
-the registry on any ledger. Every applied decision increments the registry **version** and must carry nonce
-`version + 1`, so every ledger's registry passes through the same versions. A route pins the version it was sent
+Notice and lapse periods are constructor parameters with enforced minimums; the values above are the spec's
+recommendations and the ones the tests use. A decision is signed once over an EIP-712 digest whose domain salt is
+the deployment id (no chain id or address) and can be relayed by anyone to the registry on any ledger of the
+deployment. Every applied decision increments the registry **version** and must carry nonce `version + 1`, and its
+digest commits to the head it extends, so the decisions form a hash chain and `headAt(v)` names one history on every
+ledger (the SDK's `checkRegistryHeads` compares it across ledgers). A route pins the version it was sent
 against in `filter_registry_versions`; each hop reads certifications as of that version (later entries are
 ignored, and a registry that has not reached the version fails closed). Notice periods and expiry are checked
 separately against the hop's clock. Routes without filters never read certifications. Every action emits an event
@@ -199,10 +202,18 @@ Router emits a notice to the recipient (and calls the recipient app's `onRouteNo
 sends a `QUARANTINED` receipt; the origin then puts the escrow and the unused fee budget into its vault under the
 route id and case id. In phase 1 only the origin holds funds, so that is where the vault deposit happens.
 
-Releases need a committee decision and go only to the original sender, the original recipient (the payee), or a
-recovery address the committee named for the case. A recovery release waits for a notice period and a challenge
-window, during which the sender or recipient can object, which blocks that address. Nothing can go to any past or
-present committee member, the registry or the vault, and nothing moves without a case id.
+Each vault is bound once to its ledger's Router (a k + 1 decision); from then on only that Router can deposit.
+Vault decisions are signed over a digest bound to the deployment, the chain and the vault's address. Releases need a
+committee decision and go only to the original sender, the original recipient (the payee), or a recovery address
+the committee named for the case. Nothing can go to any past, present or scheduled committee member, the registry
+or the vault, and nothing moves without a case id.
+
+Naming a vault recovery address needs k+1 committee signatures and waits `RECOVERY_NOTICE` + `CHALLENGE_WINDOW`.
+During that time the deposit's original sender or recipient can challenge, and a challenged deposit is paid out only
+by a supermajority override after a further `CHALLENGE_WINDOW`. So k+1 compromised keys can redirect an unchallenged
+deposit, and a supermajority can redirect any deposit. Separately, a supermajority can install any committee after
+`COMMITTEE_NOTICE`, and k compromised keys can fork a ledger that hasn't yet received the next decision. Such a fork
+is visible as differing `headAt` values but cannot be undone on-chain.
 
 ## Trust model
 
@@ -214,18 +225,23 @@ present committee member, the registry or the vault, and nothing moves without a
   delivery, or through the permissionless `forward` and `flush`.
 - **The provider's role is limited, and the contracts enforce the limits.** The committee can only certify and
   uncertify networks for filters, switch routes off and on, and blacklist accounts. It cannot change Router code,
-  fees, Connectors, Channels or verifiers. It cannot redirect funds: the only place it can send them is the
-  quarantine vault, and the vault only pays the original parties or a recovery address after a public notice and
-  challenge window, never a committee account. Certification changes cannot reach routes already under way,
-  because routes pin the registry version. Disables and blacklist entries are temporary unless renewed. Every
-  decision needs k (certifications) or k + 1 (disables, blacklist) committee signatures and is public.
+  fees, Connectors, Channels or verifiers. The only place it can send funds is the quarantine vault, and the vault
+  only pays the original parties, or a recovery address after a public notice and challenge window, never a
+  committee account. Certification changes cannot reach routes already under way, because routes pin the registry
+  version. Disables and blacklist entries are temporary unless renewed. Every decision needs k (certifications),
+  k + 1 (disables, blacklist, delist, recovery naming) or a supermajority (committee changes) and is public.
 - **Worst case.** If committee keys were compromised, filtered routes could carry false labels, and routes could be
-  stopped or funds parked in the vault until the committee is replaced. Funds could not be taken, and CLPR
-  verification would be unaffected.
-- **Fake Routers.** Anyone can deploy a Router, and the planner may use it. A hop authenticates the previous hop
-  as the Router named in the envelope, so a malicious Router can only affect routes that the sender chose to send
-  through it. For value routes, the origin also checks that receipts came back along the exact route it sent.
-  The provider can disable a malicious Router deployment or version.
+  stopped or funds parked in the vault until the committee is replaced. CLPR verification would be unaffected.
+  Naming a vault recovery address needs k+1 committee signatures and waits `RECOVERY_NOTICE` + `CHALLENGE_WINDOW`.
+  During that time the deposit's original sender or recipient can challenge, and a challenged deposit is paid out
+  only by a supermajority override after a further `CHALLENGE_WINDOW`. So k+1 compromised keys can redirect an
+  unchallenged deposit, and a supermajority can redirect any deposit. Separately, a supermajority can install any
+  committee after `COMMITTEE_NOTICE`, and k compromised keys can fork a ledger that hasn't yet received the next
+  decision. Such a fork is visible as differing `headAt` values but cannot be undone on-chain.
+- **Fake Routers.** Routers are deployed only by the deployment's `ClprRouterDeployer`, at each ledger's
+  canonical CREATE2 address, and every Router a route, receipt path or loose tail names must be canonical. A
+  Router deployed any other way is refused on every hop, so every envelope on the wire was built by this code. The
+  provider can disable a Router deployment or version.
 
 ## Running the tests
 
@@ -234,7 +250,7 @@ Requires Foundry (tested with forge 1.5.1).
 ```sh
 git submodule update --init --recursive
 forge build --sizes --skip 'test/**' --skip 'script/**'   # contract sizes (all under 24,576 B)
-forge test                                                # 146 unit and in-process integration tests
+forge test                                                # 278 unit, security and in-process integration tests
 script/e2e/run.sh                                         # three anvil chains, five routes (~9 minutes)
 ```
 

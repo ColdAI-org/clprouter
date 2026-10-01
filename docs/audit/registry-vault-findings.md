@@ -4,22 +4,32 @@ Scope: `src/ProviderRegistry.sol`, `src/QuarantineVault.sol`, and how `src/ClprR
 `src/libraries/RouteLogic.sol` read and call them. Commit reviewed: `271188d`.
 Tests: `test/security/registry/` (run with `forge test --match-path 'test/security/registry/*'`).
 
-Every finding has a demonstrating test named `test_RVxx_*`. Each one passes while the issue is present.
-Once a finding is fixed, change its test to expect the revert, or delete it. Properties that were
-checked and hold are pinned by `test_ok_*`, the fuzz tests and the invariants.
+Every finding had a demonstrating test named `test_RVxx_*` that passed while the issue was present. All ten
+findings are fixed in `3537cc8`, and those tests now assert the fixed behaviour and run as regression tests. One
+test pins the residual risk that remains by design (`test_RV02_residual_kKeysForkLaggingLedgerWithKAction_detectable`;
+see the threat model, R2 and R8). Properties that were checked and hold are pinned by `test_ok_*`, the fuzz tests
+and the invariants.
 
-| ID | Severity | Title |
-|----|----------|-------|
-| RV-01 | High | k signatures rotate the committee immediately, which bypasses every k+1 rule and every bound on what compromised keys can do |
-| RV-02 | High | Nonce equivocation: two decisions with the same nonce split ledgers, and leaked keys can win the race against a rotation |
-| RV-03 | Medium | A decision that applies on one ledger can revert on another, and that ledger then halts for good |
-| RV-04 | Medium | The digest binds no deployment, so registry and vault decisions replay across registries and vaults |
-| RV-05 | Low | DELIST (k, immediate) undoes a BLACKLIST that needed k+1 |
-| RV-06 | Low | A far-future CERTIFY delays every later UNCERTIFY of that key, and an extreme `effectiveAt` bricks it |
-| RV-07 | Info | Notice periods, lapses and vault windows are not validated |
-| RV-08 | Medium | Naming the same recovery address again wipes a challenge |
-| RV-09 | Medium | Anyone joins a case for 1 wei and can then veto every recovery, so some deposits lock forever |
-| RV-10 | Info | The vault ignores `effectiveAt`, and the vault holds native value only |
+| ID | Severity | Title | Status | Regression test |
+|----|----------|-------|--------|-----------------|
+| RV-01 | High | k signatures rotate the committee immediately, which bypasses every k+1 rule and every bound on what compromised keys can do | Fixed in `3537cc8` | `RegistryFindings.t.sol:test_RV01_kSignaturesCannotRotate_supermajorityOnlySchedules`, `test_RV01_kSignaturesCannotNameRecovery_partiesCanBlock_overrideNeedsSupermajority` |
+| RV-02 | High | Nonce equivocation: two decisions with the same nonce split ledgers, and leaked keys can win the race against a rotation | Fixed in `3537cc8` (residual: k-key fork of a lagging ledger, detectable) | `RegistryFindings.t.sol:test_RV02_sameNonceOnOtherHeadRejected_andForkIsVisibleInHead`, `test_RV02_removedKeysCannotRaceRotation_rotationAppliesOnLaggingLedger`, `test_RV02_residual_kKeysForkLaggingLedgerWithKAction_detectable` |
+| RV-03 | Medium | A decision that applies on one ledger can revert on another, and that ledger then halts for good | Fixed in `3537cc8` | `RegistryFindings.t.sol:test_RV03_lateRelayApplies_ledgerKeepsGoing`, `test_RV03_effectiveAtNearMaxRejected_keyStaysUsable` |
+| RV-04 | Medium | The digest binds no deployment, so registry and vault decisions replay across registries and vaults | Fixed in `3537cc8` | `RegistryFindings.t.sol:test_RV04_decisionDoesNotReplayOntoOtherDeployment`; `VaultFindings.t.sol:test_RV04_recoveryNamingAndReleaseDoNotReplayOntoAnotherLedgersVault`, `test_RV04_releaseToSenderDoesNotReplayOntoSameIdOtherLedger` |
+| RV-05 | Low | DELIST (k, immediate) undoes a BLACKLIST that needed k+1 | Fixed in `3537cc8` | `RegistryFindings.t.sol:test_RV05_kMembersCannotUndoKPlusOneBlacklist` |
+| RV-06 | Low | A far-future CERTIFY delays every later UNCERTIFY of that key, and an extreme `effectiveAt` bricks it | Fixed in `3537cc8` | `RegistryFindings.t.sol:test_RV06_farFutureCertifyCannotBlockRemoval` |
+| RV-07 | Info | Notice periods, lapses and vault windows are not validated | Fixed in `3537cc8` | `RegistryFindings.t.sol:test_RV07_zeroNoticesRejected`; `QuarantineVault.t.sol:test_constructor_enforcesMinimumWindows` |
+| RV-08 | Medium | Naming the same recovery address again wipes a challenge | Fixed in `3537cc8` | `VaultFindings.t.sol:test_RV08_renamingSameAddressKeepsChallenge` |
+| RV-09 | Medium | Anyone joins a case for 1 wei and can then veto every recovery, so some deposits lock forever | Fixed in `3537cc8` | `VaultFindings.t.sol:test_RV09_strangerCannotJoinCase_partyOfOtherDepositCannotBlockThisOne`, `test_RV09_noReceiveSenderAndNoRecipient_recoveryCannotBeVetoedForever` |
+| RV-10 | Info | The vault ignores `effectiveAt`, and the vault holds native value only | Fixed in `3537cc8` (`effectiveAt`; native value only stays by design) | `VaultFindings.t.sol:test_RV10_vaultHonoursEffectiveAt` |
+
+**Residual risk after the fixes.** Naming a vault recovery address needs k+1 committee signatures and waits
+`RECOVERY_NOTICE` + `CHALLENGE_WINDOW`. During that time the deposit's original sender or recipient can challenge,
+and a challenged deposit is paid out only by a supermajority override after a further `CHALLENGE_WINDOW`. So k+1
+compromised keys can redirect an unchallenged deposit, and a supermajority can redirect any deposit. Separately, a
+supermajority can install any committee after `COMMITTEE_NOTICE`, and k compromised keys can fork a ledger that
+hasn't yet received the next decision. Such a fork is visible as differing `headAt` values but cannot be undone
+on-chain.
 
 ---
 
