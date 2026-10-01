@@ -41,6 +41,8 @@ abstract contract ThreeLedgerFixture is Committee {
     string internal constant ID_C = "eip155:31003";
     uint64 internal constant RECLAIM_GRACE = 1 hours;
     uint64 internal constant APP_GAS = 300_000;
+    /// @dev Reference ClprService sendMessage with the mock connector costs ~1.2M gas; margin on top.
+    uint64 internal constant MIN_SEND_GAS = 1_500_000;
     uint256 internal constant CHANNEL_PK = 0xC1A;
 
     Ledger internal A;
@@ -114,7 +116,8 @@ abstract contract ThreeLedgerFixture is Committee {
             IQuarantineVault(address(l.vault)),
             id,
             RECLAIM_GRACE,
-            APP_GAS
+            APP_GAS,
+            MIN_SEND_GAS
         );
         l.app = new RouteApp();
         l.app.setRouter(address(l.router));

@@ -106,7 +106,8 @@ contract E2EHiero is Script {
             IQuarantineVault(address(vault)),
             L[here].id,
             1 hours,
-            300_000
+            300_000,
+            1_500_000
         );
         RouteApp app = new RouteApp();
         app.setRouter(address(router));

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.28;
 
+import {Vm} from "forge-std/Vm.sol";
 import {IClprService} from "@hiero-ledger/clpr/interfaces/IClprService.sol";
 import {ClprRouter} from "@clprouter/ClprRouter.sol";
 import {ProviderRegistry} from "@clprouter/ProviderRegistry.sol";
@@ -49,7 +50,8 @@ contract RouterHopTest is Committee {
             IQuarantineVault(address(vault)),
             ID_B,
             1 hours,
-            300_000
+            300_000,
+            200_000
         );
     }
 
@@ -180,6 +182,107 @@ contract RouterHopTest is Committee {
         assertEq(out.hops.length, 4);
         assertEq(out.hops[2].ledgerId, ID_D);
         assertEq(out.hopIndex, 2);
+    }
+
+    /// @dev A NACK from a CLPR Response names the route, hop and envelope hash; the envelope itself is in the
+    ///      earlier RouteForwarded, and forward() with it sends the FAILED receipt that refunds the origin.
+    function test_nack_eventCarriesEnoughToCompleteTheRefund() public {
+        vm.recordLogs();
+        (bytes memory held,) = _deliver(_env(false));
+        bytes16 id = _env(false).routeId;
+        bytes memory fromEvent;
+        bytes32 hashFromEvent;
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == ClprRouter.RouteForwarded.selector) {
+                (,,, hashFromEvent, fromEvent) = abi.decode(logs[i].data, (uint32, bytes32, uint64, bytes32, bytes));
+            }
+        }
+        assertEq(fromEvent, held, "RouteForwarded carries the held envelope");
+        assertEq(hashFromEvent, keccak256(held));
+
+        vm.expectEmit(true, false, false, true, address(router));
+        emit ClprRouter.ForwardRejected(id, 1, keccak256(held), 3, RouteTypes.Reason.NEXT_HOP_ERROR, "");
+        svc.respond(router, CH_BC, svc.lastId(), 3);
+        (, uint32 hopIdx) = router.outbound(keccak256(abi.encodePacked(CH_BC, svc.lastId())));
+        assertEq(hopIdx, 0, "outbound entry cleared");
+
+        vm.prank(makeAddr("services"));
+        router.forward(fromEvent, new RouteTypes.Hop[](0));
+        RouteTypes.Receipt memory r = _sentReceipt(1);
+        assertEq(uint8(r.status), uint8(RouteTypes.ReceiptStatus.FAILED));
+        assertEq(uint8(r.reason), uint8(RouteTypes.Reason.NEXT_HOP_ERROR));
+        assertEq(svc.sent(1).target, abi.encodePacked(routerA), "receipt goes to the origin Router");
+    }
+
+    function test_sendFailure_loose_eventCarriesEnvelope() public {
+        svc.setFailChannel(CH_BC, true);
+        RouteTypes.Envelope memory e = _env(true);
+        bytes memory held = RouteCodec.encodeEnvelope(e);
+        vm.expectEmit(true, false, false, true, address(router));
+        emit ClprRouter.ForwardRejected(e.routeId, 1, keccak256(held), 0, RouteTypes.Reason.SEND_FAILED, held);
+        svc.deliver(router, CH_AB, abi.encodePacked(routerA), held);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // Gas griefing: an under-funded forward() cannot fail a hop for good
+    // ═════════════════════════════════════════════════════════════════════
+
+    function _pendingHop() internal returns (bytes memory held, bytes16 id) {
+        svc.setGuard(true);
+        (held,) = _deliver(_env(false));
+        svc.setGuard(false);
+        id = _env(false).routeId;
+        assertEq(uint8(router.hopState(id)), uint8(ClprRouter.HopState.FORWARD_PENDING));
+    }
+
+    function test_forward_belowMinSendGas_revertsAndKeepsHopPending() public {
+        (bytes memory held, bytes16 id) = _pendingHop();
+        vm.expectRevert(ClprRouter.InsufficientGas.selector);
+        router.forward{gas: 250_000}(held, new RouteTypes.Hop[](0));
+        assertEq(uint8(router.hopState(id)), uint8(ClprRouter.HopState.FORWARD_PENDING));
+        assertEq(router.pendingHash(id), keccak256(held));
+        assertEq(svc.sentCount(), 0);
+
+        router.forward(held, new RouteTypes.Hop[](0));
+        assertEq(uint8(router.hopState(id)), uint8(ClprRouter.HopState.FORWARDED));
+        assertEq(svc.sent(0).channelId, CH_BC);
+    }
+
+    /// @dev Enough gas for the pre-check, but sendMessage runs out of gas (63/64 rule): before the fix the catch
+    ///      turned this into a permanent SEND_FAILED; now the whole call reverts.
+    function test_forward_outOfGasInsideSend_revertsAndKeepsHopPending() public {
+        (bytes memory held, bytes16 id) = _pendingHop();
+        svc.setBurn(type(uint256).max);
+        vm.expectRevert(ClprRouter.InsufficientGas.selector);
+        router.forward{gas: 1_000_000}(held, new RouteTypes.Hop[](0));
+        assertEq(uint8(router.hopState(id)), uint8(ClprRouter.HopState.FORWARD_PENDING));
+        assertEq(svc.sentCount(), 0);
+
+        svc.setBurn(0);
+        router.forward{gas: 1_000_000}(held, new RouteTypes.Hop[](0));
+        assertEq(uint8(router.hopState(id)), uint8(ClprRouter.HopState.FORWARDED));
+    }
+
+    /// @dev Inside CLPR delivery an out-of-gas send defers the hop instead of failing it.
+    function test_delivery_outOfGasInsideSend_defers() public {
+        svc.setBurn(type(uint256).max);
+        (bytes memory held, bytes memory resp) = _deliver(_env(false));
+        assertEq(resp, abi.encodePacked(uint8(1), uint8(0)), "accepted, not rejected");
+        bytes16 id = _env(false).routeId;
+        assertEq(uint8(router.hopState(id)), uint8(ClprRouter.HopState.FORWARD_PENDING));
+        svc.setBurn(0);
+        router.forward(held, new RouteTypes.Hop[](0));
+        assertEq(uint8(router.hopState(id)), uint8(ClprRouter.HopState.FORWARDED));
+    }
+
+    /// @dev A definite revert from the Service still fails the hop (strict) with a receipt.
+    function test_definiteServiceRevert_stillFailsTheHop() public {
+        (bytes memory held, bytes16 id) = _pendingHop();
+        svc.setFailChannel(CH_BC, true);
+        router.forward{gas: 1_000_000}(held, new RouteTypes.Hop[](0));
+        assertEq(uint8(router.hopState(id)), uint8(ClprRouter.HopState.DONE));
+        assertEq(uint8(_sentReceipt(0).reason), uint8(RouteTypes.Reason.SEND_FAILED));
     }
 
     function test_loose_tailMustStartHereAndEndAtDestination() public {

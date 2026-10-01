@@ -21,6 +21,8 @@ contract MockRouteService {
     mapping(bytes32 => string) public peerOf;
     mapping(bytes32 => bool) public failChannel;
     bool public guardActive;
+    /// @dev Gas sendMessage burns before doing anything (type(uint256).max = until it runs out).
+    uint256 public burnGas;
     bool private _inDelivery;
     Sent[] private _sent;
     uint64 private _nextId;
@@ -42,6 +44,10 @@ contract MockRouteService {
         guardActive = v;
     }
 
+    function setBurn(uint256 g) external {
+        burnGas = g;
+    }
+
     function getLedgerConfiguration() external view returns (ClprTypes.LedgerConfiguration memory c) {
         c.chainId = chainId;
     }
@@ -58,6 +64,10 @@ contract MockRouteService {
     {
         if (guardActive && _inDelivery) revert ReentrancyGuardReentrantCall();
         if (failChannel[ch]) revert("channel paused");
+        if (burnGas > 0) {
+            uint256 stop = gasleft() > burnGas ? gasleft() - burnGas : 0;
+            while (gasleft() > stop) {}
+        }
         _sent.push(Sent(ch, conn, target, data));
         return ++_nextId;
     }

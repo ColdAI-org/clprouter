@@ -128,6 +128,8 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
     error LooseRoutingRequired();
     error NotReclaimable();
     error LedgerMismatch();
+    error InsufficientGas();
+    error WithdrawFailed();
 
     // ── Events ──────────────────────────────────────────────────────────────
 
@@ -140,11 +142,31 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         uint64 deadline,
         uint64 messageId
     );
-    event RouteForwarded(bytes16 indexed routeId, uint32 hopIndex, bytes32 channelId, uint64 messageId);
+    /// @notice `envelope` is the envelope as held on this ledger (keccak256 = `envelopeHash`, the key of a later
+    ///         {ForwardRejected}); empty for receipts.
+    event RouteForwarded(
+        bytes16 indexed routeId,
+        uint32 hopIndex,
+        bytes32 channelId,
+        uint64 messageId,
+        bytes32 envelopeHash,
+        bytes envelope
+    );
     /// @notice A hop could not be sent inside CLPR delivery; complete it with {forward}(envelope, []).
     event ForwardPending(bytes16 indexed routeId, uint32 hopIndex, bytes envelope);
-    /// @notice A forward was rejected by the next hop at the CLPR level; complete it with {forward}.
-    event ForwardRejected(bytes16 indexed routeId, uint8 clprStatus, bytes envelope);
+    /// @notice A forward was rejected; complete it with {forward}(envelope, tail) — an empty tail sends the FAILED
+    ///         receipt that refunds the origin. `clprStatus` is the CLPR reply status (0 = the local
+    ///         `sendMessage` failed, reason SEND_FAILED; otherwise reason NEXT_HOP_ERROR). `envelope` is empty when
+    ///         the rejection came in a CLPR Response: it is the one with `envelopeHash` in the earlier
+    ///         {RouteForwarded} (or {ForwardPending}) of this route on this Router.
+    event ForwardRejected(
+        bytes16 indexed routeId,
+        uint32 hopIndex,
+        bytes32 envelopeHash,
+        uint8 clprStatus,
+        RouteTypes.Reason reason,
+        bytes envelope
+    );
     /// @notice A receipt could not be sent inside CLPR delivery; complete it with {flush}.
     event OutboxQueued(bytes32 indexed key, bytes32 channelId, bytes32 connectorId, bytes target, bytes data);
     event RouteDelivered(bytes16 indexed routeId, address indexed application, bytes32 responseHash);
@@ -180,6 +202,10 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
     uint64 public immutable RECLAIM_GRACE;
     /// @notice Gas given to destination applications and notice / receipt hooks.
     uint64 public immutable APP_GAS;
+    /// @notice Gas that must be left before calling `sendMessage` from a hop. Below it (or when the call runs out
+    ///         of gas) a permissionless {forward} reverts as a whole, and a send inside delivery stays pending,
+    ///         so nobody can fail a hop for good by under-funding the transaction.
+    uint64 public immutable MIN_SEND_GAS;
 
     bytes32 private immutable _LEDGER_HASH;
     bytes32 private immutable _SELF_HASH;
@@ -194,8 +220,15 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
     mapping(bytes16 => HopState) public hopState;
     /// @notice keccak256 of the envelope (as held on this ledger) of a pending, forwarded or rejected hop.
     mapping(bytes16 => bytes32) public pendingHash;
-    /// @notice keccak256(channelId, messageId) of an outbound CLPR message → route id.
-    mapping(bytes32 => bytes16) public outbound;
+
+    /// @notice An outbound CLPR message: the route it carries and this Router's hop index on it.
+    struct Outbound {
+        bytes16 routeId;
+        uint32 hopIndex;
+    }
+
+    /// @notice keccak256(channelId, messageId) of an outbound CLPR message → route id and hop index.
+    mapping(bytes32 => Outbound) public outbound;
     /// @notice Deferred raw sends (receipts) by keccak256(abi.encode(channel, connector, target, data)).
     mapping(bytes32 => bool) public outbox;
     /// @notice Pull payments that could not be pushed.
@@ -203,6 +236,8 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
 
     mapping(bytes32 => bytes32) private _peerLedger;
     uint256 private _nonce;
+    /// @dev Set while handling CLPR delivery: a send that lacks gas is deferred instead of reverting delivery.
+    bool private transient _inDelivery;
 
     /// @param service The CLPR Service on this ledger.
     /// @param registry The provider registry on this ledger (fixed forever).
@@ -210,13 +245,15 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
     /// @param ledgerId_ CAIP-2 id of this ledger; must equal the Service's configured chain id.
     /// @param reclaimGrace Seconds after a route's deadline before the origin may reclaim it.
     /// @param appGas Gas stipend for application callbacks.
+    /// @param minSendGas Gas a hop must have left before `sendMessage` (measured cost on this ledger plus margin).
     constructor(
         IClprService service,
         IProviderRegistry registry,
         IQuarantineVault vault,
         string memory ledgerId_,
         uint64 reclaimGrace,
-        uint64 appGas
+        uint64 appGas,
+        uint64 minSendGas
     ) {
         if (keccak256(bytes(service.getLedgerConfiguration().chainId)) != keccak256(bytes(ledgerId_))) {
             revert LedgerMismatch();
@@ -226,6 +263,7 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         VAULT = vault;
         RECLAIM_GRACE = reclaimGrace;
         APP_GAS = appGas;
+        MIN_SEND_GAS = minSendGas;
         ledgerId = ledgerId_;
         _LEDGER_HASH = keccak256(bytes(ledgerId_));
         _SELF_HASH = keccak256(abi.encodePacked(address(this)));
@@ -278,7 +316,7 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         uint64 messageId = SERVICE.sendMessage(
             e.hops[0].channelId, e.hops[0].connectorId, e.hops[1].router, RouteCodec.encodeEnvelope(e)
         );
-        outbound[keccak256(abi.encodePacked(e.hops[0].channelId, messageId))] = routeId;
+        outbound[keccak256(abi.encodePacked(e.hops[0].channelId, messageId))] = Outbound(routeId, 0);
         emit RouteSent(routeId, msg.sender, e.destination.ledgerId, req.escrow, uint64(budget), o.deadline, messageId);
     }
 
@@ -297,7 +335,7 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         uint256 amount = owed[msg.sender];
         owed[msg.sender] = 0;
         (bool ok,) = msg.sender.call{value: amount}("");
-        require(ok, "withdraw failed");
+        if (!ok) revert WithdrawFailed();
     }
 
     // ═════════════════════════════════════════════════════════════════════
@@ -318,7 +356,9 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         RouteTypes.Envelope memory e = RouteCodec.decodeEnvelope(messageData);
         _validateInbound(e, channelId, sender);
         hopState[e.routeId] = HopState.SEEN;
+        _inDelivery = true;
         RouteTypes.Reason reason = _advance(e, messageData);
+        _inDelivery = false;
         return abi.encodePacked(reason == RouteTypes.Reason.NONE ? RESP_ACCEPTED : RESP_REJECTED, uint8(reason));
     }
 
@@ -329,7 +369,8 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
     function onClprResponse(bytes32 channelId, uint64 messageId, uint8 status, bytes calldata) external nonReentrant {
         if (msg.sender != address(SERVICE)) revert NotService();
         bytes32 k = keccak256(abi.encodePacked(channelId, messageId));
-        bytes16 routeId = outbound[k];
+        Outbound memory out = outbound[k];
+        bytes16 routeId = out.routeId;
         if (routeId == bytes16(0)) return;
         delete outbound[k];
         emit HopResponse(routeId, channelId, messageId, status);
@@ -349,7 +390,9 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
             delete pendingHash[routeId];
         } else {
             hopState[routeId] = HopState.NACKED;
-            emit ForwardRejected(routeId, status, "");
+            emit ForwardRejected(
+                routeId, out.hopIndex, pendingHash[routeId], status, RouteTypes.Reason.NEXT_HOP_ERROR, ""
+            );
         }
     }
 
@@ -432,13 +475,15 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
             _trySend(h.channelId, h.connectorId, e.hops[idx + 1].router, RouteCodec.encodeEnvelope(e));
 
         if (r == SendResult.SENT) {
-            emit RouteForwarded(e.routeId, uint32(idx), h.channelId, messageId);
             if (isReceipt) {
                 hopState[e.routeId] = HopState.DONE;
+                emit RouteForwarded(e.routeId, uint32(idx), h.channelId, messageId, 0, "");
             } else {
+                bytes32 hh = keccak256(held);
                 hopState[e.routeId] = HopState.FORWARDED;
-                pendingHash[e.routeId] = keccak256(held);
-                outbound[keccak256(abi.encodePacked(h.channelId, messageId))] = e.routeId;
+                pendingHash[e.routeId] = hh;
+                outbound[keccak256(abi.encodePacked(h.channelId, messageId))] = Outbound(e.routeId, uint32(idx));
+                emit RouteForwarded(e.routeId, uint32(idx), h.channelId, messageId, hh, held);
             }
         } else if (r == SendResult.DEFERRED) {
             hopState[e.routeId] = HopState.FORWARD_PENDING;
@@ -447,7 +492,7 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         } else if (!isReceipt && e.constraints.loose) {
             hopState[e.routeId] = HopState.NACKED;
             pendingHash[e.routeId] = keccak256(held);
-            emit ForwardRejected(e.routeId, 0, held);
+            emit ForwardRejected(e.routeId, uint32(idx), keccak256(held), 0, RouteTypes.Reason.SEND_FAILED, held);
         } else {
             e.hopIndex = uint32(idx);
             _stop(e, RouteTypes.ReceiptStatus.FAILED, RouteTypes.Reason.SEND_FAILED, bytes32(0));
@@ -738,12 +783,23 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         private
         returns (SendResult, uint64)
     {
+        uint256 g = gasleft();
+        if (g < MIN_SEND_GAS) return (_lowGas(), 0);
         try SERVICE.sendMessage(channelId, connectorId, target, data) returns (uint64 id) {
             return (SendResult.SENT, id);
         } catch (bytes memory err) {
             if (err.length >= 4 && bytes4(err) == REENTRANT_CALL) return (SendResult.DEFERRED, 0);
+            // Out of gas inside the call (only the 1/64 reserve is left): not a verdict on the hop.
+            if (gasleft() < g / 63) return (_lowGas(), 0);
             return (SendResult.FAILED, 0);
         }
+    }
+
+    /// @dev Not enough gas to send: inside delivery the hop stays pending (anyone completes it with {forward} /
+    ///      {flush}); in a permissionless call the whole transaction reverts and nothing changes.
+    function _lowGas() private view returns (SendResult) {
+        if (_inDelivery) return SendResult.DEFERRED;
+        revert InsufficientGas();
     }
 
     function _pay(address to, uint256 amount) private {
