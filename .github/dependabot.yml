@@ -23,7 +23,7 @@ updates:
     commit-message:
       prefix: "build(services)"
   - package-ecosystem: docker
-    directory: /.github/docker
+    directory: /services
     schedule:
       interval: weekly
     commit-message:
