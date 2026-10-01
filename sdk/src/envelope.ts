@@ -105,6 +105,11 @@ export interface BuildEnvelopeInput {
   /** Deadline as seconds from `now`; defaults to the route's p90 time × 2 (at least 10 minutes). */
   deadlineS?: number;
   maxFeeUsd?: number;
+  /**
+   * On-chain trust floor (`constraints.trust_floor`). Default `attested` (0): no on-chain check and no dependence on
+   * provider labels. Anything higher makes every Router require a provider TRUST_TIER label on the next edge at or
+   * above this tier, so pick it only when those labels exist for the whole route.
+   */
   trustFloor?: TrustTier;
   maxHops?: number;
   /**
@@ -132,6 +137,13 @@ export interface BuildEnvelopeInput {
   routeId?: Hex;
   now?: Date;
 }
+
+/**
+ * Default `constraints.trust_floor` written into envelopes: 0 (`attested`), meaning no on-chain trust check. A sender
+ * opts into on-chain enforcement by passing a higher `trustFloor`; every hop's Router then requires the provider's
+ * TRUST_TIER label on the next edge at or above it (an unlabelled edge fails with TRUST_FLOOR).
+ */
+export const DEFAULT_ONCHAIN_TRUST_FLOOR: TrustTier = "attested";
 
 const CAIP10 = /^([-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}):([-.%a-zA-Z0-9]{1,128})$/;
 
@@ -209,7 +221,9 @@ export function buildEnvelope(input: BuildEnvelopeInput): ClprRouteEnvelope {
 
   const maxHops = input.maxHops ?? Math.max(3, route.hops.length);
   if (route.hops.length > maxHops) throw new Error(`route has ${route.hops.length} hops, above maxHops ${maxHops}`);
-  const trustFloor = input.trustFloor ?? route.effectiveTrustTier;
+  // Default on-chain floor is 0 (attested): Routers then never read the provider's TRUST_TIER labels, so the default
+  // router stays independent of the provider. The planner already ranked the route by trust tier.
+  const trustFloor = input.trustFloor ?? DEFAULT_ONCHAIN_TRUST_FLOOR;
   if (trustRank(route.effectiveTrustTier) < trustRank(trustFloor)) {
     throw new Error(`route trust tier ${route.effectiveTrustTier} is below the floor ${trustFloor}`);
   }

@@ -25,6 +25,7 @@ export type { FallbackRoute, Objective, PlanFailure, PlanResult, PlanSuccess } f
 export { WeightedGraph, pathKey, yenKShortest } from "./yen.js";
 export type { WEdge, WPath } from "./yen.js";
 export {
+  DEFAULT_ONCHAIN_TRUST_FLOOR,
   advanceEnvelope,
   buildEnvelope,
   decodeEnvelope,

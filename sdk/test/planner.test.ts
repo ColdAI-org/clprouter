@@ -271,7 +271,7 @@ describe("compliance filters", () => {
     const r = ok(run({ mode: "fastest", filters: { iso20022: true } }));
     expect(r.route.ledgers).toEqual([A, Y, B]);
     expect(r.filters).toEqual(["ISO20022"]);
-    expect(r.filterRegistryVersions).toEqual({ ISO20022: 1790812800 }); // pinned to the planning time
+    expect(r.plannedAt).toBe(1790812800);
   });
 
   it("cheapest + ISO20022 skips the uncertified cheap route", () => {
@@ -285,7 +285,6 @@ describe("compliance filters", () => {
   it("greenest + MICA + ENERGY", () => {
     const r = ok(run({ mode: "greenest", filters: { mica: true, energy: true } }));
     expect(r.route.ledgers).toEqual([A, Z, B]);
-    expect(r.filterRegistryVersions).toEqual({ MICA: 1790812800, ENERGY: 1790812800 });
     expect(r.plannedAt).toBe(1790812800);
     for (const s of r.route.emissions.sources) expect(s.basis).toBe("MICA");
   });
@@ -364,7 +363,7 @@ describe("compliance filters", () => {
     const g = fixtureGraph();
     for (const l of g.ledgers) l.certifications = {};
     const r = ok(run({ mode: "cheapest" }, g));
-    expect(r.filterRegistryVersions).toEqual({});
+    expect(r.filters).toEqual([]);
     expect(r.route.ledgers).toEqual([A, X, B]);
   });
 });

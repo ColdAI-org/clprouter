@@ -59,11 +59,14 @@ export {
   RECEIPT_STATUSES,
   REJECT_REASON_CODES,
   decodeRouteReceipt,
+  edgeDigest,
   encodeRouteReceipt,
+  hopsCommitment,
   hopAcceptedStatus,
   makeReceipt,
   pacs002Outcome,
   paymentReference,
+  receiptCommitment,
   receiptToPacs002,
 } from "./receipts.js";
 export type { Pacs002Outcome, PaymentReference, ReceiptReason, ReceiptStatus, RouteReceipt, StatusReportOptions } from "./receipts.js";

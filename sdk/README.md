@@ -36,9 +36,11 @@ const envelope = buildEnvelope({
   destinationApp: "0x…",
   sender: "stellar:pubnet:G…",
   recipient: "hedera:mainnet:0x…",
-  payload: uetrHashOfPacs008, // under ISO 20022: a hash or ciphertext only
+  payload: uetrHashOfPacs008, // under ISO 20022: a hash or ciphertext only (see "ISO 20022 module")
   payloadProtection: "hash",
   feeUnit: { nativeUsd: 0.3, decimals: 7 },
+  registryVersion, // ProviderRegistry.version() on the origin ledger; required when a filter is on
+  // trustFloor: "light-client", // opt-in on-chain floor; the default is 0 (see "Trust floor")
 });
 const bytes = encodeEnvelope(envelope); // proto3, for Router.send
 ```
@@ -123,7 +125,8 @@ planner never reads certifications.
 - **Emissions sources:** per ledger, with the data source and date.
 - **Synthetic figures:** every placeholder the quote relies on.
 
-`PlanSuccess` also carries `pareto`, `fallback`, `plannedAt`, `filterRegistryVersions` and `warnings`.
+`PlanSuccess` also carries `pareto`, `fallback`, `plannedAt` (the time certifications were judged at, not a registry
+version), `energyCapKgPerTx` and `warnings`.
 
 ## Envelope
 
@@ -149,10 +152,31 @@ Rules the builder enforces:
   - Assets must be EMTs or ARTs, so a USDT transfer is refused.
 - Fees: each hop's USD quote becomes origin-native smallest units, rounded up. The fee budget is the larger of
   `maxFeeUsd` and the summed hop fees.
-- `filter_registry_versions` pins each active filter to the planning time. The `ProviderRegistry` is versioned by
-  effective time (`certificationAt(key, asOf)`).
-- Routing mode: strict for assets, loose for data.
+- `filter_registry_versions` pins each active filter to `registryVersion`: `ProviderRegistry.version()` on the origin
+  ledger, a counter of registry decisions (read it with `ViemOnChainReader`, `RegistryState.version`). It is
+  required when any filter is on, and mirrors what the origin Router stamps at `send`; every hop checks the next
+  ledger against the registry as of that version.
+- `energy_cap` is in µgCO2e per transaction (the registry's unit); `energyCapKgPerTx` is converted and rounded up.
+- Routing mode: Routers accept loose routing only for routes that carry no value, i.e. no asset and no fee budget
+  (every hop fee zero), because receipts of loose routes cannot be checked against the stored hop-list commitment.
+  The builder defaults to loose only for such routes and to strict otherwise; asking for loose with fees or assets
+  is refused.
+- `trust_floor` defaults to 0 (`attested`); see below.
 - `receipt_path` is empty (reverse hops) unless you pass `receiptPath: "reverse"`.
+
+### Trust floor: decentralised by default
+
+The planner ranks and filters routes by verifier trust tier from the graph (`constraints.trustFloor` in
+`plan`, the `reliable` mode's success model, and `route.effectiveTrustTier` in every quote). That is off-chain and
+needs nobody's permission.
+
+On-chain, every Router can also enforce `constraints.trust_floor`: for a floor above 0 it requires the provider's
+`TRUST_TIER` label on each next edge (Channel direction) at or above the floor, and fails the hop with
+`TRUST_FLOOR` when the edge is unlabelled or labelled lower. **The SDK's default on-chain floor is 0**
+(`DEFAULT_ONCHAIN_TRUST_FLOOR = "attested"`), at which Routers skip the check and never read provider labels, so a
+default route does not depend on the provider. A sender opts in explicitly with
+`buildEnvelope({ ..., trustFloor: "light-client" })`, and should do so only when every edge of the route is
+labelled; the builder still refuses a floor above the route's effective tier.
 
 `signEnvelope` and `recoverEnvelopeSigner` implement the optional origin signature: EIP-191 over the
 keccak256 of the encoded envelope at hop 0 with the full budget. The signature stays valid as `advanceEnvelope`
@@ -169,7 +193,8 @@ moves `hop_index` and spends the budget.
   - `IClprService.getChannel` (status from the static head) and `getConnector`, plus the connector contract's
     balance.
   - `ProviderRegistry.certificationLog` and `isDisabled`, keyed with `registryKeys`, which mirror `Caip.sol`.
-  - The registry stores emissions in gCO2e per transaction.
+  - The registry stores emissions in µgCO2e per transaction; `version()` is its decision counter, and
+    `trustTier(edgeKey)` gives the provider's TRUST_TIER label per Channel direction.
 
 ## Sample graph
 
@@ -240,7 +265,13 @@ The random salt makes the commitments hiding, so an observer who knows the UETR 
 name. `openIsoPayload` checks the key id, decrypts, verifies both commitments, re-validates the XML, and checks that
 the message's UETR, amount and currency match the clear header and the envelope's `route_id`.
 
-**Receipts ↔ pacs.002.** `encodeRouteReceipt` and `decodeRouteReceipt` handle `ClprRouteReceipt`.
+**Receipts ↔ pacs.002.** `encodeRouteReceipt` and `decodeRouteReceipt` handle `ClprRouteReceipt` byte for byte
+with the Solidity codec. Receipts no longer carry the hop list: the origin stores a hop-list commitment at send, and
+a receipt from hop k carries `route_edge` (field 10, the edge digest of hop k) and `route_rest` (field 11, the
+commitment to the hops after k, zero at the destination), plus `route_prefix` (field 9, hops before k) only when it
+did not travel the reverse route. `edgeDigest`, `hopsCommitment` and `receiptCommitment` mirror `RouteLogic`, so an
+off-chain watcher can verify a receipt the way the origin Router does. A DELIVERED receipt with a non-zero
+`route_rest` is refused (it did not come from the destination).
 `hopAcceptedStatus` gives ACSP for each `RouteForwarded` hop. `receiptToPacs002` maps receipts as follows:
 
 | Receipt | pacs.002 |
@@ -248,7 +279,7 @@ the message's UETR, amount and currency match the clear header and the envelope'
 | `DELIVERED` | ACCC |
 | `EXPIRED` | RJCT AB05 |
 | `QUARANTINED` | RJCT RR04, with `AddtlInf` `CASE/<case id>` and `CONTACT/<provider contact>` |
-| `FAILED` | RJCT with `REJECT_REASON_CODES[reason]`: AB07 for disables, AB09 for an application error, AB10 for next-hop or send failures, AGNT for a filter failure, AM04 for the fee budget, FF02 for a bad route, NARR otherwise |
+| `FAILED` | RJCT with `REJECT_REASON_CODES[reason]`: AB07 for disables, AB09 for an application error, AB10 for next-hop or send failures, AGNT for a filter or trust-floor failure, AM04 for the fee budget, FF02 for a bad route, NARR otherwise |
 
 `pacs002Outcome` reads a pacs.002 back into a Router outcome.
 

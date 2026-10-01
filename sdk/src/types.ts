@@ -215,7 +215,10 @@ export interface Constraints {
   deadlineS?: number;
   /** Maximum total fee, USD. */
   maxFeeUsd?: number;
-  /** Minimum trust tier every hop must meet. */
+  /**
+   * Minimum trust tier every hop must meet, applied by the planner (off-chain) from the graph's verifier tiers. It is
+   * not written on-chain: the envelope's on-chain floor is `BuildEnvelopeInput.trustFloor`, which defaults to 0.
+   */
   trustFloor?: TrustTier;
   excludedLedgers?: Caip2[];
   /** ISO 3166-1 alpha-2 codes; excludes ledgers whose operated Router or governing entity is there. */

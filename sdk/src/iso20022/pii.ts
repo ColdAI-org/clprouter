@@ -163,7 +163,9 @@ class Scan {
     if (r.ledger_id) this.caip2(r.ledger_id, "payload.ledger_id");
     this.binary(r.case_id, "payload.case_id", [32]);
     this.binary(r.response_hash, "payload.response_hash", [32]);
-    r.route_hops.forEach((h, i) => this.hop(h, `payload.route_hops[${i}]`));
+    r.route_prefix.forEach((h, i) => this.hop(h, `payload.route_prefix[${i}]`));
+    this.binary(r.route_edge, "payload.route_edge", [32]);
+    this.binary(r.route_rest, "payload.route_rest", [32]);
     if (r.contact && !/^(https?:\/\/[^\s]{1,200}|mailto:[^\s@]+@[^\s@]+|[^\s@]+@[^\s@]+\.[a-z]{2,})$/i.test(r.contact) && !CAIP10.test(r.contact)) {
       this.add("payload.contact", "free-text", "provider contact must be a URL, e-mail or CAIP-10 account");
     }

@@ -14,7 +14,7 @@
  * reporting ledger's CAIP-2 id, and for quarantine the case id and the provider's (institutional) contact.
  */
 import type { Hex } from "viem";
-import { bytesToHex, hexToBytes, isHex } from "viem";
+import { bytesToHex, encodeAbiParameters, hexToBytes, isHex, keccak256, pad, stringToBytes } from "viem";
 import type { RouteHop } from "../envelope.js";
 import { ProtoWriter, fieldString, readFields } from "../proto.js";
 import type { FinancialInstitution, IsoMessage, Pacs002, ReasonInfo } from "./model.js";
@@ -40,6 +40,7 @@ export const RECEIPT_REASONS = [
   "NEXT_HOP_ERROR",
   "SEND_FAILED",
   "BAD_ROUTE",
+  "TRUST_FLOOR",
 ] as const;
 export type ReceiptReason = (typeof RECEIPT_REASONS)[number];
 
@@ -50,7 +51,8 @@ export type ReceiptReason = (typeof RECEIPT_REASONS)[number];
  * - AB07 OfflineAgent: the provider disabled the edge, ledger or Router version, or the inbound edge.
  * - AB09 ErrorCreditorAgent: the destination application rejected the delivery.
  * - AB10 ErrorInstructedAgent: the next hop could not be sent or failed.
- * - AGNT IncorrectAgent: the next ledger is not eligible under the route's filters (not ISO 20022 certified).
+ * - AGNT IncorrectAgent: the next ledger is not eligible under the route's filters (not ISO 20022 certified), or
+ *   the next edge is unlabelled or labelled below the route's on-chain trust floor.
  * - AM04 InsufficientFunds: the fee budget ran out.
  * - FF02 SyntaxError: the envelope or route is malformed.
  * - RR04 RegulatoryReason: blacklist quarantine (and screening hits).
@@ -70,6 +72,7 @@ export const REJECT_REASON_CODES: Record<ReceiptReason, string> = {
   NEXT_HOP_ERROR: "AB10",
   SEND_FAILED: "AB10",
   BAD_ROUTE: "FF02",
+  TRUST_FLOOR: "AGNT",
 };
 
 /** proto `ClprRouteReceipt`: the payload of a `receipt` envelope travelling back to the origin. */
@@ -84,11 +87,25 @@ export interface RouteReceipt {
   contact: string;
   /** 32 bytes, or `0x`. */
   response_hash: Hex;
-  route_hops: RouteHop[];
+  /**
+   * hops[0..hop_index) as the reporter held them. Only set when the receipt does not travel the reverse of the route
+   * (a delivery receipt over an explicit `receipt_path`); otherwise the origin rebuilds them from the receipt
+   * envelope's own hops.
+   */
+  route_prefix: RouteHop[];
+  /** 32 bytes: `edgeDigest` of the reporting hop's outgoing edge (`0x` when unset). */
+  route_edge: Hex;
+  /** 32 bytes: `hopsCommitment(hops, hop_index + 1)`; `0x` (zero) at the destination, which DELIVERED requires. */
+  route_rest: Hex;
 }
 
 function hopWriter(h: RouteHop): ProtoWriter {
   return new ProtoWriter().string(1, h.ledger_id).bytes(2, h.router).bytes(3, h.channel_id).bytes(4, h.connector_id).uint(5, h.fee).bytes(6, h.fee_payee);
+}
+
+/** The Solidity codec omits zero bytes32 fields; mirror that so encodings match byte for byte. */
+function nonZero(h: Hex): Hex {
+  return /^0x0*$/.test(h) ? "0x" : h;
 }
 
 export function encodeRouteReceipt(r: RouteReceipt): Hex {
@@ -98,11 +115,11 @@ export function encodeRouteReceipt(r: RouteReceipt): Hex {
     .uint(3, r.hop_index)
     .string(4, r.ledger_id)
     .uint(5, RECEIPT_REASONS.indexOf(r.reason))
-    .bytes(6, r.case_id)
+    .bytes(6, nonZero(r.case_id))
     .string(7, r.contact)
-    .bytes(8, r.response_hash);
-  for (const h of r.route_hops) w.element(9, hopWriter(h));
-  return w.hex();
+    .bytes(8, nonZero(r.response_hash));
+  for (const h of r.route_prefix) w.element(9, hopWriter(h));
+  return w.bytes(10, nonZero(r.route_edge)).bytes(11, nonZero(r.route_rest)).hex();
 }
 
 export function decodeRouteReceipt(data: Hex | Uint8Array): RouteReceipt {
@@ -117,7 +134,9 @@ export function decodeRouteReceipt(data: Hex | Uint8Array): RouteReceipt {
     case_id: "0x",
     contact: "",
     response_hash: "0x",
-    route_hops: [],
+    route_prefix: [],
+    route_edge: "0x",
+    route_rest: "0x",
   };
   for (const f of readFields(bytes)) {
     const b = f.bytes;
@@ -141,12 +160,69 @@ export function decodeRouteReceipt(data: Hex | Uint8Array): RouteReceipt {
           else if (x.field === 5) h.fee = x.int!;
           else if (x.field === 6) h.fee_payee = bytesToHex(x.bytes!);
         }
-        r.route_hops.push(h);
+        r.route_prefix.push(h);
         break;
       }
+      case 10: if (b) r.route_edge = bytesToHex(b); break;
+      case 11: if (b) r.route_rest = bytesToHex(b); break;
     }
   }
   return r;
+}
+
+// ── Hop-list commitment (mirrors RouteLogic.hopsCommitment) ─────────────────
+//
+// The origin stores C_0 instead of receiving the hop list back. C_n = 0 and
+// C_i = keccak256(abi.encode(node_i, keccak256(abi.encode(edge_i, C_{i+1})))), with node_i over (ledger id, router)
+// and edge_i over (channel, connector, fee, keccak256(fee payee)). A receipt from hop k carries edge_k (`route_edge`)
+// and C_{k+1} (`route_rest`).
+
+const B32 = (h: Hex): Hex => (h === "0x" ? pad("0x", { size: 32 }) : pad(h, { size: 32 }));
+const ZERO32 = pad("0x", { size: 32 });
+
+function nodeDigest(ledgerId: string, router: Hex): Hex {
+  return keccak256(
+    encodeAbiParameters([{ type: "bytes32" }, { type: "bytes32" }], [keccak256(stringToBytes(ledgerId)), keccak256(router)]),
+  );
+}
+
+/** `RouteLogic.edgeDigest`: digest of a hop's outgoing edge (Channel, Connector, fee, fee payee). */
+export function edgeDigest(h: RouteHop): Hex {
+  return keccak256(
+    encodeAbiParameters(
+      [{ type: "bytes32" }, { type: "bytes32" }, { type: "uint64" }, { type: "bytes32" }],
+      [B32(h.channel_id), B32(h.connector_id), h.fee, keccak256(h.fee_payee)],
+    ),
+  );
+}
+
+function link(node: Hex, edge: Hex, next: Hex): Hex {
+  const inner = keccak256(encodeAbiParameters([{ type: "bytes32" }, { type: "bytes32" }], [edge, next]));
+  return keccak256(encodeAbiParameters([{ type: "bytes32" }, { type: "bytes32" }], [node, inner]));
+}
+
+/** `RouteLogic.hopsCommitment(hops, k)`: commitment to hops[k..] (zero for k ≥ hops.length); C_0 is stored at send. */
+export function hopsCommitment(hops: readonly RouteHop[], k = 0): Hex {
+  let c = ZERO32;
+  for (let i = hops.length; i > k; i--) {
+    const h = hops[i - 1]!;
+    c = link(nodeDigest(h.ledger_id, h.router), edgeDigest(h), c);
+  }
+  return c;
+}
+
+/**
+ * Recompute C_0 from a receipt the way the origin Router does: `prefix` is hops[0..hop_index) (the receipt's
+ * `route_prefix`, or the hops rebuilt from the reverse path it travelled), `reporter` is the receipt envelope's origin.
+ */
+export function receiptCommitment(r: RouteReceipt, reporter: { ledger_id: string; application: Hex }, prefix: readonly RouteHop[] = r.route_prefix): Hex {
+  if (prefix.length !== r.hop_index) throw new Error(`receipt from hop ${r.hop_index} needs ${r.hop_index} prefix hops, got ${prefix.length}`);
+  let c = link(nodeDigest(reporter.ledger_id, reporter.application), B32(r.route_edge), B32(r.route_rest));
+  for (let i = prefix.length; i > 0; i--) {
+    const h = prefix[i - 1]!;
+    c = link(nodeDigest(h.ledger_id, h.router), edgeDigest(h), c);
+  }
+  return c;
 }
 
 // ── pacs.002 builders ───────────────────────────────────────────────────────
@@ -225,6 +301,8 @@ export function receiptToPacs002(receipt: RouteReceipt, ref: PaymentReference, o
   if (routeIdToUetr(receipt.route_id) !== ref.uetr) throw new Error("receipt route_id is not the payment's UETR");
   switch (receipt.status) {
     case "DELIVERED":
+      // Only the destination may report delivery: it has no hops after it, so its rest commitment is zero.
+      if (!/^0x0*$/.test(receipt.route_rest)) throw new Error("DELIVERED receipt must come from the destination (route_rest must be zero)");
       return report(ref, "ACCC", undefined, o);
     case "EXPIRED":
       return report(ref, "RJCT", [{ code: "AB05", additionalInfo: [`CLPR/DEADLINE/HOP/${receipt.hop_index}/${receipt.ledger_id}`.slice(0, 105)] }], o);
@@ -298,7 +376,9 @@ export function makeReceipt(uetr: string, r: Partial<Omit<RouteReceipt, "route_i
     case_id: "0x",
     contact: "",
     response_hash: "0x",
-    route_hops: [],
+    route_prefix: [],
+    route_edge: "0x",
+    route_rest: "0x",
     ...r,
   };
 }

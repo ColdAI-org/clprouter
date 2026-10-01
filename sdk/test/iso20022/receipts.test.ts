@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
+import type { RouteHop } from "../../src/index.js";
 import {
   RECEIPT_REASONS,
   REJECT_REASON_CODES,
   cancellationRequest,
   decodeRouteReceipt,
+  edgeDigest,
   encodeRouteReceipt,
+  hopsCommitment,
+  receiptCommitment,
   fromXml,
   hopAcceptedStatus,
   makeReceipt,
@@ -25,21 +29,64 @@ const opts = { messageId: "STS-1", creationDateTime: AT };
 const CASE = `0x${"c4".repeat(32)}` as const;
 const CONTACT = "https://provider.example/clprouter/cases";
 
-describe("ClprRouteReceipt codec", () => {
-  it("round trips, including the route hops", () => {
-    const r = makeReceipt(UETR, {
-      status: "QUARANTINED",
-      hop_index: 1,
-      ledger_id: "hedera:mainnet",
-      reason: "BLACKLIST",
-      case_id: CASE,
-      contact: CONTACT,
-      route_hops: [
-        { ledger_id: "stellar:pubnet", router: "0x", channel_id: `0x${"11".repeat(32)}`, connector_id: `0x${"22".repeat(32)}`, fee: 5n, fee_payee: "0x" },
-        { ledger_id: "hedera:mainnet", router: "0x", channel_id: "0x", connector_id: "0x", fee: 0n, fee_payee: "0x" },
-      ],
-    });
-    expect(decodeRouteReceipt(encodeRouteReceipt(r))).toEqual(r);
+/** Reference values from RouteCodec.encodeReceipt / RouteLogic.hopsCommitment (forge, same hops as below). */
+const SOL = {
+  c0: "0x3ee4d2b8b3fc5981c39622832606e69e02e8181fe652f9e71065db58f997cb1a",
+  c2: "0xf68a86534fe1209a7f386d5b1ca41dc697e1cfcebe0f5101917ce5621d7a6dfa",
+  edge1: "0x38b40e72cbe7ce753bbc493821fd4307271082e719bf9798f11d90973be6fb21",
+  receipt:
+    "0x0a108a562c67ca1648bab07465581be6f00110041801220e6865646572613a6d61696e6e6574280d322000000000000000000000000000000000000000000000000000000000000000c43a1868747470733a2f2f70726f76696465722e6578616d706c654a82010a0e7374656c6c61723a7075626e6574121400000000000000000000000000000000000000a11a200000000000000000000000000000000000000000000000000000000000000011222000000000000000000000000000000000000000000000000000000000000000222805321400000000000000000000000000000000000000f1522038b40e72cbe7ce753bbc493821fd4307271082e719bf9798f11d90973be6fb215a20f68a86534fe1209a7f386d5b1ca41dc697e1cfcebe0f5101917ce5621d7a6dfa",
+} as const;
+
+const b32 = (n: number) => `0x${n.toString(16).padStart(64, "0")}` as const;
+const HOPS: RouteHop[] = [
+  { ledger_id: "stellar:pubnet", router: "0x00000000000000000000000000000000000000a1", channel_id: b32(0x11), connector_id: b32(0x22), fee: 5n, fee_payee: "0x00000000000000000000000000000000000000f1" },
+  { ledger_id: "hedera:mainnet", router: "0x00000000000000000000000000000000000000a2", channel_id: b32(0x33), connector_id: b32(0x44), fee: 7n, fee_payee: "0x" },
+  { ledger_id: "eip155:1", router: "0x00000000000000000000000000000000000000a3", channel_id: "0x", connector_id: "0x", fee: 0n, fee_payee: "0x" },
+];
+
+describe("ClprRouteReceipt codec and hop-list commitment", () => {
+  const r = makeReceipt(UETR, {
+    status: "QUARANTINED",
+    hop_index: 1,
+    ledger_id: "hedera:mainnet",
+    reason: "TRUST_FLOOR",
+    case_id: b32(0xc4),
+    contact: "https://provider.example",
+    route_prefix: [HOPS[0]!],
+    route_edge: edgeDigest(HOPS[1]!),
+    route_rest: hopsCommitment(HOPS, 2),
+  });
+
+  it("matches the Solidity commitment and receipt encoding byte for byte", () => {
+    expect(hopsCommitment(HOPS)).toBe(SOL.c0);
+    expect(hopsCommitment(HOPS, 2)).toBe(SOL.c2);
+    expect(hopsCommitment(HOPS, 3)).toBe(b32(0));
+    expect(edgeDigest(HOPS[1]!)).toBe(SOL.edge1);
+    expect(encodeRouteReceipt(r)).toBe(SOL.receipt);
+    expect(decodeRouteReceipt(SOL.receipt)).toEqual(r);
+  });
+
+  it("omits zero bytes32 fields like the Solidity codec and round trips", () => {
+    const d = makeReceipt(UETR, { status: "DELIVERED", hop_index: 2, ledger_id: "eip155:1", route_edge: edgeDigest(HOPS[2]!), route_rest: b32(0) });
+    const back = decodeRouteReceipt(encodeRouteReceipt(d));
+    expect(back.route_rest).toBe("0x");
+    expect(back.route_edge).toBe(d.route_edge);
+    expect(back.route_prefix).toEqual([]);
+  });
+
+  it("the origin recomputes C_0 from the prefix, the reporter and the receipt", () => {
+    const reporter = { ledger_id: "hedera:mainnet", application: HOPS[1]!.router };
+    expect(receiptCommitment(r, reporter)).toBe(SOL.c0);
+    // a forged edge, rest, reporter or prefix no longer matches
+    expect(receiptCommitment({ ...r, route_edge: edgeDigest(HOPS[0]!) }, reporter)).not.toBe(SOL.c0);
+    expect(receiptCommitment({ ...r, route_rest: b32(1) }, reporter)).not.toBe(SOL.c0);
+    expect(receiptCommitment(r, { ...reporter, application: HOPS[0]!.router })).not.toBe(SOL.c0);
+    expect(receiptCommitment(r, reporter, [{ ...HOPS[0]!, fee: 6n }])).not.toBe(SOL.c0);
+    expect(() => receiptCommitment(r, reporter, [])).toThrow(/prefix hops/);
+    // the destination's DELIVERED receipt: zero rest
+    const d = makeReceipt(UETR, { status: "DELIVERED", hop_index: 2, route_edge: edgeDigest(HOPS[2]!), route_rest: "0x" });
+    expect(receiptCommitment(d, { ledger_id: "eip155:1", application: HOPS[2]!.router }, HOPS.slice(0, 2))).toBe(SOL.c0);
   });
 });
 
@@ -92,6 +139,15 @@ describe("receipts → pacs.002", () => {
     expect(p.tx.statusReasons?.[0]?.additionalInfo).toEqual([`CLPR/${reason}/HOP/1/hedera:mainnet`]);
     expect(fromXml(toXml(p))).toEqual(p);
     expect(pacs002Outcome(p)).toMatchObject({ status: "FAILED", reasonCode: REJECT_REASON_CODES[reason], hop: { hopIndex: 1 } });
+  });
+
+  it("ACCC only from the destination (zero route_rest)", () => {
+    expect(() => receiptToPacs002(makeReceipt(UETR, { status: "DELIVERED", route_rest: b32(9) }), ref, opts)).toThrow(/destination/);
+  });
+
+  it("TRUST_FLOOR → RJCT / AGNT", () => {
+    const p = receiptToPacs002(makeReceipt(UETR, { status: "FAILED", reason: "TRUST_FLOOR", hop_index: 0, ledger_id: "stellar:pubnet" }), ref, opts);
+    expect(p.tx.statusReasons?.[0]?.code).toBe("AGNT");
   });
 
   it("refuses a receipt for another route and UNSPECIFIED receipts", () => {

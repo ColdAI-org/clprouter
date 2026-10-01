@@ -4,6 +4,7 @@ import { keccak256, stringToBytes, toHex } from "viem";
 import { describe, expect, it } from "vitest";
 import type { BuildEnvelopeInput, ClprRouteEnvelope, PlanSuccess } from "../src/index.js";
 import {
+  DEFAULT_ONCHAIN_TRUST_FLOOR,
   ProtoWriter,
   advanceEnvelope,
   buildEnvelope,
@@ -74,7 +75,7 @@ describe("envelope builder", () => {
       deadline: NOW_S + 3600n,
       max_fee: 2_500_000n,
       remaining_fee_budget: 2_500_000n,
-      trust_floor: "light-client",
+      trust_floor: "attested", // default on-chain floor 0: no dependence on provider labels
       max_hops: 3,
       loose: false, // the route has hop fees: value routes are strict
       energy_cap: 0n,
@@ -179,6 +180,16 @@ describe("envelope builder", () => {
     expect(() => buildEnvelope(input(p, { maxFeeUsd: 0.5 }))).toThrow(/maxFeeUsd/);
     expect(() => buildEnvelope(input(p, { maxHops: 1 }))).toThrow(/maxHops/);
     expect(() => buildEnvelope(input(p, { trustFloor: "validity-proof" }))).toThrow(/below the floor/);
+  });
+
+  it("on-chain trust floor defaults to 0 and is opt-in", () => {
+    const p = planned({ mode: "reliable", constraints: { trustFloor: "light-client" } });
+    expect(p.route.effectiveTrustTier).toBe("light-client"); // the planner still ranks and filters by tier
+    expect(buildEnvelope(input(p)).constraints.trust_floor).toBe(DEFAULT_ONCHAIN_TRUST_FLOOR);
+    expect(DEFAULT_ONCHAIN_TRUST_FLOOR).toBe("attested");
+    const strict = buildEnvelope(input(p, { trustFloor: "light-client" }));
+    expect(strict.constraints.trust_floor).toBe("light-client");
+    expect(decodeEnvelope(encodeEnvelope(strict)).constraints.trust_floor).toBe("light-client");
   });
 
   it("can send on the fallback route", () => {

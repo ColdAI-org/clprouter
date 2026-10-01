@@ -47,14 +47,13 @@ export interface PlanSuccess {
   pareto: RouteQuote[];
   /** Most-reliable mode: a disjoint fallback route, if one exists. */
   fallback?: FallbackRoute;
-  /** Unix seconds the plan was made at (`req.now`). */
-  plannedAt: number;
   /**
-   * Registry version per active filter, pinned into the envelope. The registry is versioned by effective time, so
-   * the version is the planning time: every hop checks the next ledger's certification as it stood then.
+   * Unix seconds the plan was made at (`req.now`); certifications are judged valid as of this time. It is not a
+   * registry version: the envelope pins `ProviderRegistry.version()` (a decision counter read from the origin
+   * ledger), passed to `buildEnvelope` as `registryVersion`.
    */
-  filterRegistryVersions: Partial<Record<FilterLabel, number>>;
-  /** ENERGY filter cap the plan used, kgCO2e per transaction. */
+  plannedAt: number;
+  /** ENERGY filter cap the plan used, kgCO2e per transaction (the envelope carries it as µgCO2e, rounded up). */
   energyCapKgPerTx?: number;
   /** Number of constraint-satisfying candidate paths evaluated. */
   candidates: number;
@@ -298,8 +297,6 @@ export function plan(graphIn: RouteGraph | RouteGraphData, req: PlanRequest): Pl
   if (route.synthetic.length) warnings.push(`route uses ${route.synthetic.length} synthetic figure(s)`);
 
   const plannedAt = Math.floor((req.now ?? new Date()).getTime() / 1000);
-  const filterRegistryVersions: Partial<Record<FilterLabel, number>> = {};
-  for (const l of filters.labels) filterRegistryVersions[l] = plannedAt;
 
   const result: PlanSuccess = {
     ok: true,
@@ -308,7 +305,6 @@ export function plan(graphIn: RouteGraph | RouteGraphData, req: PlanRequest): Pl
     route,
     pareto,
     plannedAt,
-    filterRegistryVersions,
     energyCapKgPerTx: filters.energyCapKgPerTx,
     candidates: candidates.length,
     warnings,
