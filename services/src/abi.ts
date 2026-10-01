@@ -137,15 +137,15 @@ export const ROUTER_ABI = [
     "inputs": [
       {
         "name": "",
-        "type": "bytes16",
-        "internalType": "bytes16"
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [
       {
         "name": "",
         "type": "uint8",
-        "internalType": "enum ClprRouter.HopState"
+        "internalType": "enum IClprRouter.HopState"
       }
     ],
     "stateMutability": "view"
@@ -188,8 +188,8 @@ export const ROUTER_ABI = [
     "inputs": [
       {
         "name": "",
-        "type": "bytes16",
-        "internalType": "bytes16"
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [
@@ -225,7 +225,7 @@ export const ROUTER_ABI = [
       {
         "name": "status",
         "type": "uint8",
-        "internalType": "enum ClprRouter.RouteStatus"
+        "internalType": "enum IClprRouter.RouteStatus"
       },
       {
         "name": "strict",
@@ -233,9 +233,14 @@ export const ROUTER_ABI = [
         "internalType": "bool"
       },
       {
-        "name": "verifyPath",
-        "type": "bool",
-        "internalType": "bool"
+        "name": "edges",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "held",
+        "type": "uint8",
+        "internalType": "uint8"
       },
       {
         "name": "payee",
@@ -244,6 +249,16 @@ export const ROUTER_ABI = [
       },
       {
         "name": "feeBudget",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "late",
+        "type": "uint8",
+        "internalType": "enum IClprRouter.RouteStatus"
+      },
+      {
+        "name": "reclaimAt",
         "type": "uint64",
         "internalType": "uint64"
       },
@@ -259,6 +274,11 @@ export const ROUTER_ABI = [
       },
       {
         "name": "firstHop",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "pathHash",
         "type": "bytes32",
         "internalType": "bytes32"
       }
@@ -366,6 +386,37 @@ export const ROUTER_ABI = [
   },
   {
     "type": "event",
+    "name": "LateReceipt",
+    "inputs": [
+      {
+        "name": "routeId",
+        "type": "bytes16",
+        "indexed": true,
+        "internalType": "bytes16"
+      },
+      {
+        "name": "status",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum RouteTypes.ReceiptStatus"
+      },
+      {
+        "name": "hopIndex",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
+      },
+      {
+        "name": "responseHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "OutboxQueued",
     "inputs": [
       {
@@ -453,6 +504,25 @@ export const ROUTER_ABI = [
   },
   {
     "type": "event",
+    "name": "ReceiptRequeued",
+    "inputs": [
+      {
+        "name": "key",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "clprStatus",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "ReceiptSent",
     "inputs": [
       {
@@ -484,7 +554,7 @@ export const ROUTER_ABI = [
   },
   {
     "type": "event",
-    "name": "ReceiptUndeliverable",
+    "name": "ReclaimRequested",
     "inputs": [
       {
         "name": "routeId",
@@ -493,10 +563,10 @@ export const ROUTER_ABI = [
         "internalType": "bytes16"
       },
       {
-        "name": "reason",
-        "type": "uint8",
+        "name": "finalAt",
+        "type": "uint64",
         "indexed": false,
-        "internalType": "enum RouteTypes.Reason"
+        "internalType": "uint64"
       }
     ],
     "anonymous": false
@@ -555,13 +625,13 @@ export const ROUTER_ABI = [
         "internalType": "uint64"
       },
       {
-        "name": "envelopeHash",
+        "name": "key",
         "type": "bytes32",
         "indexed": false,
         "internalType": "bytes32"
       },
       {
-        "name": "envelope",
+        "name": "data",
         "type": "bytes",
         "indexed": false,
         "internalType": "bytes"
@@ -632,7 +702,7 @@ export const ROUTER_ABI = [
         "name": "status",
         "type": "uint8",
         "indexed": false,
-        "internalType": "enum ClprRouter.RouteStatus"
+        "internalType": "enum IClprRouter.RouteStatus"
       },
       {
         "name": "reason",
@@ -700,11 +770,6 @@ export const ROUTER_ABI = [
   },
   {
     "type": "error",
-    "name": "DuplicateRouteId",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "InsufficientGas",
     "inputs": []
   },
@@ -753,6 +818,17 @@ export const ROUTER_ABI = [
     "type": "error",
     "name": "NothingPending",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ReceiptHeld",
+    "inputs": [
+      {
+        "name": "reason",
+        "type": "uint8",
+        "internalType": "enum RouteTypes.Reason"
+      }
+    ]
   },
   {
     "type": "error",

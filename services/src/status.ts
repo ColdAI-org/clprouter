@@ -70,7 +70,7 @@ export interface RouteStatusView {
     reason: string;
     txHash: Hex;
     timestamp: number;
-    /** Where the receipt travelled (forwards, pending hops, undeliverable). */
+    /** Where the receipt travelled (forwards, held or queued hops, requeues). */
     path: EventRef[];
   }[];
   outcome: {
@@ -87,6 +87,10 @@ export interface RouteStatusView {
     at?: { ledger: string; hopIndex: number };
     deadlinePassed?: boolean;
   };
+  /** Set once someone requested a reclaim: the refund can be finalised from this time unless a receipt lands first. */
+  reclaimFinalAt?: number;
+  /** An authentic receipt that arrived after a reclaim had refunded the route (recorded on-chain, nothing moved). */
+  lateReceipt?: { status: string; hopIndex: number; responseHash: Hex; txHash: Hex };
   quarantine: { ledger: string; depositId: number; caseId: Hex; amount: string; txHash: Hex }[];
   notices: { ledger: string; recipient: string; caseId: Hex; contact: string; txHash: Hex; timestamp: number }[];
   /** Confirmed block per ledger the answer was built from. */
@@ -158,7 +162,8 @@ export function buildRouteStatus(
   // Planned route, if any envelope was seen.
   for (const e of evs) {
     if (e.name === "ForwardPending" || e.name === "ForwardRejected" || e.name === "RouteForwarded") {
-      view.plannedHops ??= tryPlannedHops(e.args.envelope);
+      // RouteForwarded carries the held envelope as `data` (empty for receipts); the others as `envelope`.
+      view.plannedHops ??= tryPlannedHops(e.args.envelope ?? e.args.data);
     }
   }
 
@@ -293,9 +298,17 @@ export function buildRouteStatus(
         };
         break;
       case "ReceiptIgnored":
-      case "ReceiptUndeliverable":
-        // On the route id: the receipt could not be sent or authenticated.
+        // On the route id: the receipt could not be authenticated (or the route was settled already).
         touch(hop(e.ledger), e);
+        break;
+      case "ReclaimRequested":
+        touch(hop(e.ledger, 0), e);
+        view.reclaimFinalAt = Number(a.finalAt);
+        break;
+      case "LateReceipt":
+        // An authentic receipt after a reclaim refunded the route: recorded on-chain, nothing moved.
+        touch(hop(e.ledger, 0), e);
+        view.lateReceipt = { status: String(a.statusName), hopIndex: Number(a.hopIndex), responseHash: a.responseHash as Hex, txHash: e.txHash };
         break;
       default:
         touch(hop(e.ledger), e);

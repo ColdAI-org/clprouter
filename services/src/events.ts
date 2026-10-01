@@ -19,7 +19,7 @@ export interface IndexedEvent {
   logIndex: number;
   /** Block timestamp, unix seconds. */
   timestamp: number;
-  /** Route (or receipt) id the event is about, if any. */
+  /** Route (or receipt) id the event is about, if any. Router-derived, unique per origin Router. */
   routeId?: Hex;
   caseId?: Hex;
   /** Blacklist account key (`keccak256("account" ‖ lower(caip10))`). */
@@ -146,8 +146,8 @@ export function decodeLog(
       args.statusName = enumName(RECEIPT_STATUS, raw.status);
       args.reasonName = enumName(REASON, raw.reason);
       break;
-    case "ReceiptUndeliverable":
-      args.reasonName = enumName(REASON, raw.reason);
+    case "LateReceipt":
+      args.statusName = enumName(RECEIPT_STATUS, raw.status);
       break;
     case "DecisionApplied":
       args.actionName = enumName(ACTION, raw.action);

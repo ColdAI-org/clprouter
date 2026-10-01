@@ -61,7 +61,7 @@ const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const REQUEST_ID = /^[A-Za-z0-9._-]{1,64}$/;
 const EVENT_NAME = /^[A-Za-z]{1,64}$/;
 
-/** Accepts a 16-byte hex route id or its UUID form (the UETR under the ISO 20022 filter). */
+/** Accepts a 16-byte hex route id or the same bytes in UUID form (route ids are Router-derived, not UETRs). */
 export function parseRouteId(s: string): Hex | undefined {
   if (ROUTE_ID.test(s)) return s.toLowerCase() as Hex;
   if (UUID.test(s)) return `0x${s.replace(/-/g, "").toLowerCase()}` as Hex;

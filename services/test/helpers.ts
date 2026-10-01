@@ -1,5 +1,6 @@
 import type { Abi, Address, Hex, Log } from "viem";
 import { encodeAbiParameters, encodeEventTopics, keccak256, toHex } from "viem";
+import { encodeEnvelope } from "@clprouter/sdk";
 import { REGISTRY_ABI, ROUTER_ABI, VAULT_ABI } from "../src/abi.js";
 import type { ContractKind, IndexedEvent } from "../src/events.js";
 import { decodeLog } from "../src/events.js";
@@ -14,6 +15,49 @@ const ABI: Record<ContractKind, Abi> = { router: ROUTER_ABI, registry: REGISTRY_
 export const ZERO32: Hex = `0x${"0".repeat(64)}`;
 export const h32 = (s: string): Hex => keccak256(toHex(s));
 export const rid = (n: number): Hex => `0x${n.toString(16).padStart(32, "0")}`;
+
+/** A real encoded A → B → C envelope with route id `rid(n)` at `hopIndex` (Routers key hop state by its hops[0]). */
+export function testEnvelope(n: number, hopIndex = 1): Hex {
+  const hop = (ledger_id: string, router: Hex, ch: Hex) => ({
+    ledger_id,
+    router,
+    channel_id: ch,
+    connector_id: ch === "0x" ? ("0x" as Hex) : h32("conn"),
+    fee: 0n,
+    fee_payee: "0x" as Hex,
+  });
+  return encodeEnvelope({
+    route_id: rid(n),
+    origin: { ledger_id: "eip155:31001", application: "0x00000000000000000000000000000000000000aa" },
+    destination: { ledger_id: "eip155:31003", application: "0x00000000000000000000000000000000000000cc" },
+    sender: "eip155:31001:0x00000000000000000000000000000000000000aa",
+    recipient: "eip155:31003:0x00000000000000000000000000000000000000cc",
+    hops: [
+      hop("eip155:31001", "0x00000000000000000000000000000000000000a1", h32("AB")),
+      hop("eip155:31002", "0x00000000000000000000000000000000000000b1", h32("BC")),
+      hop("eip155:31003", "0x00000000000000000000000000000000000000c1", "0x"),
+    ],
+    hop_index: hopIndex,
+    mode: "balanced",
+    constraints: {
+      filters: [],
+      deadline: 1_800_003_600n,
+      max_fee: 0n,
+      remaining_fee_budget: 0n,
+      trust_floor: "attested",
+      max_hops: 0,
+      loose: false,
+      energy_cap: 0n,
+    },
+    payload_type: "raw",
+    payload: "0x01",
+    receipt_path: [],
+    origin_signature: "0x",
+    filter_registry_versions: [],
+    router_version: 1,
+    iso_uetr: "0x",
+  });
+}
 
 export interface LogSpec {
   contract: ContractKind;
@@ -142,10 +186,16 @@ export const R = {
       messageId: o.messageId ?? 1n,
     },
   }),
-  forwarded: (routeId: Hex, hopIndex: number, channelId: Hex = h32("BC"), messageId = 7n, envelope: Hex = "0x"): LogSpec => ({
+  /** Routes: `key` = keccak256(envelope). Receipts: pass the outbox `key` with the receipt data. */
+  forwarded: (routeId: Hex, hopIndex: number, channelId: Hex = h32("BC"), messageId = 7n, envelope: Hex = "0x", key: Hex = keccak256(envelope)): LogSpec => ({
     contract: "router",
     event: "RouteForwarded",
-    args: { routeId, hopIndex, channelId, messageId, envelopeHash: keccak256(envelope), envelope },
+    args: { routeId, hopIndex, channelId, messageId, key, data: envelope },
+  }),
+  requeued: (key: Hex, clprStatus: number): LogSpec => ({
+    contract: "router",
+    event: "ReceiptRequeued",
+    args: { key, clprStatus },
   }),
   pending: (routeId: Hex, hopIndex: number, envelope: Hex): LogSpec => ({
     contract: "router",

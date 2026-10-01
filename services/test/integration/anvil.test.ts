@@ -29,7 +29,7 @@ const hasAnvil = (() => {
 })();
 /** ClprRouter MIN_SEND_GAS: gas a hop must keep for `sendMessage` (the Solidity fixtures use the same figure). */
 const MIN_SEND_GAS = 1_500_000n;
-const ARTEFACTS = ["ClprRouter", "MockRouteService", "ProviderRegistry", "QuarantineVault", "RouteApp"];
+const ARTEFACTS = ["ClprRouter", "ClprRouterDeployer", "MockRouteService", "ProviderRegistry", "QuarantineVault", "RouteApp"];
 const hasArtefacts = ARTEFACTS.every((n) => existsSync(`${OUT}${n}.sol/${n}.json`));
 
 type LinkRefs = Record<string, Record<string, { start: number; length: number }[]>>;
@@ -91,6 +91,7 @@ describe.skipIf(!hasAnvil || !hasArtefacts)("services against a local anvil", ()
   const B = () => L[1]!;
   const C = () => L[2]!;
   const router = artefact("ClprRouter");
+  const routerDeployer = artefact("ClprRouterDeployer");
   const mock = artefact("MockRouteService");
   const registry = artefact("ProviderRegistry");
   const vault = artefact("QuarantineVault");
@@ -187,7 +188,7 @@ describe.skipIf(!hasAnvil || !hasArtefacts)("services against a local anvil", ()
       payload: toHex("hello from A"),
       receiptPath: [],
       originSignature: "0x",
-      routeId: "0x00000000000000000000000000000000",
+      isoUetr: "0x00000000000000000000000000000000",
       escrow: 0n,
       payee: "0x0000000000000000000000000000000000000000",
     };
@@ -225,11 +226,24 @@ describe.skipIf(!hasAnvil || !hasArtefacts)("services against a local anvil", ()
     await waitFor("anvil", async () => (await pub.getBlockNumber().catch(() => undefined)) !== undefined ? true : undefined, 20_000);
     wallet = createWalletClient({ account: privateKeyToAccount(DEPLOYER), transport: http(rpc) });
 
+    // Routers live at their canonical CREATE2 addresses, deployed through one ClprRouterDeployer.
+    const routerCode = await link(router);
+    const deployer = await deploy(routerDeployer, [wallet.account!.address, keccak256(toHex("clprouter-anvil")), keccak256(routerCode)]);
     for (const id of IDS) {
       const service = await deploy(mock, [id]);
-      const reg = await deploy(registry, [COMMITTEE.map((m) => m.address), K, CONTACT, [3600n, 3600n, 3600n, 7n * 86400n, 30n * 86400n]]);
+      const reg = await deploy(registry, [
+        keccak256(toHex("clprouter-anvil-deployment")),
+        COMMITTEE.map((m) => m.address),
+        K,
+        CONTACT,
+        [86400n, 3600n, 86400n, 7n * 86400n, 30n * 86400n, 7n * 86400n],
+      ]);
       const v = await deploy(vault, [reg, 3n * 86400n, 7n * 86400n]);
-      const r = await deploy(router, [service, reg, v, id, 3600n, 300_000n, MIN_SEND_GAS]);
+      await write(deployer, routerDeployer.abi, "deploy", [
+        routerCode,
+        { service, registry: reg, vault: v, ledgerId: id, reclaimGrace: 3600n, appGas: 300_000n, minSendGas: MIN_SEND_GAS },
+      ]);
+      const r = await read<Address>(deployer, routerDeployer.abi, "routerAddress", [id]);
       const a = await deploy(app, []);
       await write(a, app.abi, "setRouter", [r]);
       await write(service, mock.abi, "setGuard", [true]); // reference ClprService behaviour: no send inside delivery
@@ -281,7 +295,7 @@ describe.skipIf(!hasAnvil || !hasArtefacts)("services against a local anvil", ()
     await waitFor("flush", async () => {
       await services.indexer.pollAll();
       await services.trigger.process();
-      return (await relay(C(), B(), CH_BC)) > 0 ? true : undefined; // receipt reaches B → ForwardPending → forward
+      return (await relay(C(), B(), CH_BC)) > 0 ? true : undefined; // receipt reaches B → OutboxQueued → flush
     });
     await waitFor("receipt forward", async () => {
       await services.indexer.pollAll();
@@ -297,16 +311,16 @@ describe.skipIf(!hasAnvil || !hasArtefacts)("services against a local anvil", ()
       [C().id, "delivered"],
     ]);
     expect(s.receipts[0]).toMatchObject({ fromLedger: C().id, status: "DELIVERED" });
-    expect(s.receipts[0].path.map((e: { ledger: string; name: string }) => `${e.name}@${e.ledger}`)).toEqual([
-      `ForwardPending@${B().id}`,
-      `RouteForwarded@${B().id}`,
-    ]);
+    // Receipts in transit wait in B's outbox (OutboxQueued is keyed by the outbox key) and leave with flush().
+    expect(s.receipts[0].path.map((e: { ledger: string; name: string }) => `${e.name}@${e.ledger}`).sort()).toEqual(
+      [`RouteForwarded@${C().id}`, `RouteForwarded@${B().id}`].sort(),
+    );
     // Every answer names the blocks it was built from.
     for (const id of IDS) expect(s.inputs[id].blockNumber).toBeGreaterThan(0);
 
     const jobs = services.store.jobs();
     expect(jobs.map((j) => `${j.kind}@${j.ledger}:${j.status}`).sort()).toEqual(
-      [`flush@${C().id}:done`, `forward@${B().id}:done`, `forward@${B().id}:done`].sort(),
+      [`flush@${C().id}:done`, `forward@${B().id}:done`, `flush@${B().id}:done`].sort(),
     );
   });
 
@@ -334,7 +348,7 @@ describe.skipIf(!hasAnvil || !hasArtefacts)("services against a local anvil", ()
     expect(Object.keys(a.quarantine.heldByCase)).toEqual([caseId]);
 
     // Delist so later routes are not caught.
-    await decide(A(), 6, encodeAbiParameters([{ type: "string" }, { type: "bytes32" }], [recipient, caseId]), K);
+    await decide(A(), 6, encodeAbiParameters([{ type: "string" }, { type: "bytes32" }], [recipient, caseId]), K + 1); // delist needs k+1
   });
 
   it("stops a route at a disabled edge and refunds through a FAILED receipt", async () => {

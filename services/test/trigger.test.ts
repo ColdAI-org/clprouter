@@ -5,8 +5,8 @@ import { ROUTER_ABI } from "../src/abi.js";
 import { isLocalRpc } from "../src/config.js";
 import { EventBus } from "../src/indexer.js";
 import { Store } from "../src/store.js";
-import { ForwardTrigger, type RouterChain } from "../src/trigger.js";
-import { ADDR, R, ev, h32, rid } from "./helpers.js";
+import { ForwardTrigger, type RouterChain, stateKey } from "../src/trigger.js";
+import { ADDR, R, ev, h32, rid, testEnvelope } from "./helpers.js";
 
 const B = "eip155:31002";
 
@@ -49,8 +49,8 @@ const settle = () => new Promise((r) => setTimeout(r, 20));
 describe("forward trigger", () => {
   it("completes a pending forward with Router.forward(envelope, [])", async () => {
     const chain = new MockRouter();
-    const envelope: Hex = "0xdeadbeef";
-    chain.state.set(rid(1), { hop: 2, hash: keccak256(envelope) });
+    const envelope: Hex = testEnvelope(1);
+    chain.state.set(stateKey(envelope), { hop: 2, hash: keccak256(envelope) });
     const { bus, store } = setup(chain);
     bus.emitEvent(ev(B, R.pending(rid(1), 1, envelope), { block: 5 }));
     await settle();
@@ -60,9 +60,9 @@ describe("forward trigger", () => {
 
   it("skips a hop someone else already completed", async () => {
     const chain = new MockRouter();
-    chain.state.set(rid(1), { hop: 3, hash: `0x${"0".repeat(64)}` }); // FORWARDED
+    chain.state.set(stateKey(testEnvelope(1)), { hop: 3, hash: `0x${"0".repeat(64)}` }); // FORWARDED
     const { bus, store } = setup(chain);
-    bus.emitEvent(ev(B, R.pending(rid(1), 1, "0x01"), { block: 5 }));
+    bus.emitEvent(ev(B, R.pending(rid(1), 1, testEnvelope(1)), { block: 5 }));
     await settle();
     expect(chain.calls).toEqual([]);
     expect(store.jobs()[0]).toMatchObject({ status: "skipped" });
@@ -84,8 +84,8 @@ describe("forward trigger", () => {
   it("records a failure and retries on the next pass, up to a limit", async () => {
     const chain = new MockRouter();
     chain.failNext = 1;
-    const envelope: Hex = "0xbeef";
-    chain.state.set(rid(2), { hop: 2, hash: keccak256(envelope) });
+    const envelope: Hex = testEnvelope(2);
+    chain.state.set(stateKey(envelope), { hop: 2, hash: keccak256(envelope) });
     const { bus, store, t } = setup(chain);
     bus.emitEvent(ev(B, R.pending(rid(2), 1, envelope), { block: 5 }));
     await settle();
@@ -107,8 +107,8 @@ describe("forward trigger", () => {
 
   it("completes rejected hops only when configured (local send failure: envelope in the event)", async () => {
     const chain = new MockRouter();
-    const envelope: Hex = "0x0102";
-    chain.state.set(rid(4), { hop: 4, hash: keccak256(envelope) }); // NACKED
+    const envelope: Hex = testEnvelope(4);
+    chain.state.set(stateKey(envelope), { hop: 4, hash: keccak256(envelope) }); // NACKED
     let s = setup(chain, false);
     s.bus.emitEvent(ev(B, R.rejected(rid(4), 0, envelope), { block: 5 }));
     await settle();
@@ -123,8 +123,8 @@ describe("forward trigger", () => {
 
   it("a NACK from a CLPR Response is completed with the envelope from the earlier RouteForwarded", async () => {
     const chain = new MockRouter();
-    const envelope: Hex = "0x0a0b0c";
-    chain.state.set(rid(5), { hop: 4, hash: keccak256(envelope) }); // NACKED
+    const envelope: Hex = testEnvelope(5);
+    chain.state.set(stateKey(envelope), { hop: 4, hash: keccak256(envelope) }); // NACKED
     const s = setup(chain, true);
     s.bus.emitEvent(ev(B, R.forwarded(rid(5), 1, h32("BC"), 9n, envelope), { block: 5 }));
     s.bus.emitEvent(ev(B, R.rejected(rid(5), 3, "0x", 1, keccak256(envelope)), { block: 6 }));
@@ -135,8 +135,8 @@ describe("forward trigger", () => {
 
   it("finds the RouteForwarded envelope in the store after a restart", async () => {
     const chain = new MockRouter();
-    const envelope: Hex = "0x0d0e";
-    chain.state.set(rid(6), { hop: 4, hash: keccak256(envelope) });
+    const envelope: Hex = testEnvelope(6);
+    chain.state.set(stateKey(envelope), { hop: 4, hash: keccak256(envelope) });
     const store = new Store();
     const fwd = ev(B, R.forwarded(rid(6), 1, h32("BC"), 9n, envelope), { block: 5 });
     const rej = ev(B, R.rejected(rid(6), 3, "0x", 1, keccak256(envelope)), { block: 6 });
@@ -146,6 +146,19 @@ describe("forward trigger", () => {
     await settle();
     await t.stop();
     expect(chain.calls).toEqual([`forward:${envelope}`]);
+  });
+
+  it("re-flushes a receipt that CLPR rejected, with the data of its earlier RouteForwarded", async () => {
+    const chain = new MockRouter();
+    const data = testEnvelope(8, 1);
+    const key = h32("outbox-8");
+    chain.outboxKeys.add(key);
+    const s = setup(chain);
+    s.bus.emitEvent(ev(B, R.forwarded(rid(8), 0, h32("AB"), 3n, data, key), { block: 5 }));
+    s.bus.emitEvent(ev(B, R.requeued(key, 1), { block: 6 }));
+    await settle();
+    expect(chain.calls).toEqual([`flush:${data}`]);
+    expect(s.store.jobs()).toEqual([expect.objectContaining({ kind: "flush", status: "done" })]);
   });
 
   it("leaves a NACK whose envelope was never indexed", async () => {

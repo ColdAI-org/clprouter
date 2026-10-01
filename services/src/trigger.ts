@@ -1,4 +1,5 @@
 import type { Address, Hex, PublicClient, WalletClient } from "viem";
+import { decodeEnvelope, inboundKey } from "@clprouter/sdk";
 import { encodeFunctionData, keccak256 } from "viem";
 import { ROUTER_ABI } from "./abi.js";
 import type { IndexedEvent } from "./events.js";
@@ -15,8 +16,9 @@ const GAS_CAP = 10_000_000n;
 
 /** What the trigger needs from one ledger's Router. Implemented over viem below; mocked in tests. */
 export interface RouterChain {
-  hopState(routeId: Hex): Promise<number>;
-  pendingHash(routeId: Hex): Promise<Hex>;
+  /** By hop-state key: `inboundKey(hops[0].ledger_id, hops[0].router, route_id)` of the envelope. */
+  hopState(key: Hex): Promise<number>;
+  pendingHash(key: Hex): Promise<Hex>;
   outbox(key: Hex): Promise<boolean>;
   /** Simulate, send and wait for {forward}(envelope, []). Returns the tx hash; throws if it reverted. */
   forward(envelope: Hex): Promise<Hex>;
@@ -47,6 +49,27 @@ export function viemRouterChain(pub: PublicClient, wallet: WalletClient, router:
     forward: (envelope) => write("forward", [envelope, []]),
     flush: (c, k, t, d) => write("flush", [c, k, t, d]),
   };
+}
+
+/** Router hop-state key of an envelope (its origin hops[0] and id), as `ClprRouter.hopState` is keyed. */
+export function stateKey(envelope: Hex): Hex {
+  const env = decodeEnvelope(envelope);
+  const h0 = env.hops[0];
+  if (!h0) throw new Error("envelope has no hops");
+  return inboundKey(h0.ledger_id, h0.router, env.route_id);
+}
+
+/** Flush arguments of a receipt message from its data (the encoded receipt envelope, already at its next hop). */
+function flushArgs(data: Hex): { channelId: Hex; connectorId: Hex; target: Hex; data: Hex } | undefined {
+  try {
+    const re = decodeEnvelope(data);
+    const from = re.hops[re.hop_index - 1];
+    const to = re.hops[re.hop_index];
+    if (!from || !to) return undefined;
+    return { channelId: from.channel_id, connectorId: from.connector_id, target: to.router, data };
+  } catch {
+    return undefined;
+  }
 }
 
 /** Calldata anyone can send to complete a job themselves (the trigger is public; the service is a convenience). */
@@ -98,8 +121,9 @@ export class ForwardTrigger {
     for (const j of this.o.store.jobs({ status: ["submitted"] })) {
       this.o.store.updateJob(j.ledger, j.kind, j.key, { status: "pending" });
     }
-    // Jobs from events indexed before a restart (RouteForwarded first: it holds envelopes rejections refer to).
-    for (const name of ["RouteForwarded", "ForwardPending", "OutboxQueued", "ForwardRejected"]) {
+    // Jobs from events indexed before a restart (RouteForwarded first: it holds envelopes rejections refer to, and
+    // receipt data a later ReceiptRequeued refers to).
+    for (const name of ["RouteForwarded", "ForwardPending", "OutboxQueued", "ForwardRejected", "ReceiptRequeued"]) {
       for (const e of this.o.store.eventsByName(name)) this.ingest(e);
     }
     void this.process();
@@ -114,6 +138,23 @@ export class ForwardTrigger {
 
   /** Envelopes seen in `RouteForwarded` / `ForwardPending`, by ledger and keccak256, for later rejections. */
   private readonly envelopes = new Map<string, Hex>();
+  /** Receipt messages seen in `OutboxQueued` / `RouteForwarded`, by ledger and outbox key, for later requeues. */
+  private readonly receipts = new Map<string, { channelId: Hex; connectorId: Hex; target: Hex; data: Hex }>();
+
+  private receiptFromStore(ledger: string, key: string): { channelId: Hex; connectorId: Hex; target: Hex; data: Hex } | undefined {
+    for (const name of ["OutboxQueued", "RouteForwarded"]) {
+      for (const x of this.o.store.eventsByName(name)) {
+        if (x.ledger !== ledger || String(x.args.key).toLowerCase() !== key) continue;
+        if (name === "OutboxQueued") {
+          const a = x.args;
+          return { channelId: a.channelId as Hex, connectorId: a.connectorId as Hex, target: a.target as Hex, data: a.data as Hex };
+        }
+        const f = typeof x.args.data === "string" && x.args.data.length > 2 ? flushArgs(x.args.data as Hex) : undefined;
+        if (f) return f;
+      }
+    }
+    return undefined;
+  }
 
   private remember(ledger: string, envelope: unknown): void {
     if (typeof envelope === "string" && envelope.length > 2) this.envelopes.set(`${ledger}:${keccak256(envelope as Hex).toLowerCase()}`, envelope as Hex);
@@ -135,7 +176,7 @@ export class ForwardTrigger {
     for (const x of this.o.store.eventsByRouteIds([e.routeId])) {
       if (x.ledger !== e.ledger || x.contract !== "router") continue;
       if (x.name !== "RouteForwarded" && x.name !== "ForwardPending") continue;
-      const env = x.args.envelope;
+      const env = x.name === "RouteForwarded" ? x.args.data : x.args.envelope;
       if (typeof env === "string" && env.length > 2 && keccak256(env as Hex).toLowerCase() === hash) return env as Hex;
     }
     return undefined;
@@ -146,8 +187,26 @@ export class ForwardTrigger {
     if (e.contract !== "router") return false;
     const a = e.args;
     if (e.name === "RouteForwarded") {
-      this.remember(e.ledger, a.envelope);
+      // Routes: `data` is the envelope as held (key = its hash). Receipts: `data` is the message (key = outbox key).
+      this.remember(e.ledger, a.data);
+      if (typeof a.data === "string" && a.data.length > 2) {
+        const f = flushArgs(a.data as Hex);
+        if (f) this.receipts.set(`${e.ledger}:${String(a.key).toLowerCase()}`, f);
+      }
       return false;
+    }
+    if (e.name === "ReceiptRequeued") {
+      // CLPR rejected a receipt message; it is back in the outbox under `key`. Its data is in the earlier
+      // OutboxQueued or RouteForwarded with that key.
+      const k = String(a.key).toLowerCase();
+      const f = this.receipts.get(`${e.ledger}:${k}`) ?? this.receiptFromStore(e.ledger, k);
+      if (!f) {
+        this.o.log?.(`trigger: ReceiptRequeued on ${e.ledger}: receipt ${k} not indexed`);
+        return false;
+      }
+      const added = this.o.store.addJob({ ledger: e.ledger, kind: "flush", key: String(a.key), blockNumber: e.blockNumber, payload: f });
+      if (!added) this.o.store.updateJob(e.ledger, "flush", String(a.key), { status: "pending" });
+      return true;
     }
     if (e.name === "ForwardPending") {
       const envelope = a.envelope as Hex;
@@ -162,6 +221,12 @@ export class ForwardTrigger {
       });
     }
     if (e.name === "OutboxQueued") {
+      this.receipts.set(`${e.ledger}:${String(a.key).toLowerCase()}`, {
+        channelId: a.channelId as Hex,
+        connectorId: a.connectorId as Hex,
+        target: a.target as Hex,
+        data: a.data as Hex,
+      });
       return this.o.store.addJob({
         ledger: e.ledger,
         kind: "flush",
@@ -231,8 +296,9 @@ export class ForwardTrigger {
           return;
         }
       } else {
-        const st = await chain.hopState(j.routeId!);
-        const ph = await chain.pendingHash(j.routeId!);
+        const sk = stateKey(p.envelope!);
+        const st = await chain.hopState(sk);
+        const ph = await chain.pendingHash(sk);
         const wanted = j.kind === "forward" ? FORWARD_PENDING : NACKED;
         if (st !== wanted || ph.toLowerCase() !== j.key.toLowerCase()) {
           this.o.store.updateJob(j.ledger, j.kind, j.key, { status: "skipped", error: "already completed" });

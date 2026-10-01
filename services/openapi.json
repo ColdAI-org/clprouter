@@ -117,7 +117,7 @@
               "type": "string",
               "pattern": "^(0x[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"
             },
-            "description": "16-byte hex route id or its UUID form (the UETR under the ISO 20022 filter)."
+            "description": "16-byte hex route id (derived by the origin Router) or the same 16 bytes in UUID form. The ISO 20022 UETR travels separately (envelope iso_uetr) and is not a route id."
           }
         ],
         "responses": {
