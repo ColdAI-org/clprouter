@@ -1,0 +1,241 @@
+# Contracts, SDK and services on every push and pull request.
+#
+# Every third-party action is pinned by full commit SHA; the tag is in the trailing comment.
+# Dependabot (.github/dependabot.yml) proposes SHA bumps.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  FOUNDRY_VERSION: v1.5.1
+  NODE_VERSION: "22.13"
+  PNPM_VERSION: "12.6.0"
+  # Tests whose assertions depend on exact gas (MIN_SEND_GAS, the 1/64 rule). They cannot pass under
+  # coverage instrumentation, which changes gas costs. Run in the `forge` job, excluded from `coverage`.
+  GAS_CALIBRATED_TESTS: "belowMinSendGas|outOfGasInsideSend|definiteServiceRevert"
+
+jobs:
+  forge:
+    name: forge fmt, build, sizes, test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - name: forge fmt --check
+        run: forge fmt --check
+      - name: forge build --sizes (EIP-170, 24,576 B)
+        # Fails if any deployable contract is over the EIP-170 limit. ClprRouter is close to it (24,477 B).
+        run: forge build --sizes --skip 'test/**' --skip 'script/**'
+      - name: forge test
+        run: forge test -vv
+      - name: Upload build artefacts
+        # Used by the services integration test (it deploys from ../out).
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: forge-out
+          path: out/
+          retention-days: 3
+          if-no-files-found: error
+
+  forge-fuzz:
+    name: forge ${{ matrix.profile }}
+    needs: forge
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Deep fuzzing: the whole suite with 10,000 runs per fuzz test (default profile: 256).
+          - profile: fuzz
+            detect: "function test"
+            match: ""
+            env_runs: FOUNDRY_FUZZ_RUNS=10000
+          # Stateful invariant tests (functions named invariant_*).
+          - profile: invariant
+            detect: "function invariant"
+            match: "^invariant"
+            env_runs: FOUNDRY_INVARIANT_RUNS=512 FOUNDRY_INVARIANT_DEPTH=64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - name: forge test (${{ matrix.profile }})
+        env:
+          PROFILE: ${{ matrix.profile }}
+          DETECT: ${{ matrix.detect }}
+          MATCH: ${{ matrix.match }}
+          ENV_RUNS: ${{ matrix.env_runs }}
+        run: |
+          # The profile is applied through FOUNDRY_* environment overrides, so foundry.toml stays the single
+          # source of the default settings. The seed is the run number, so a failure can be replayed locally
+          # with FOUNDRY_FUZZ_SEED=<seed> and the same overrides.
+          if ! grep -rqE "$DETECT" test; then
+            echo "::notice::no ${PROFILE} tests in test/ yet; skipping"
+            exit 0
+          fi
+          FOUNDRY_FUZZ_SEED="$(printf '0x%x' "${GITHUB_RUN_NUMBER}")"
+          export FOUNDRY_FUZZ_SEED
+          echo "profile ${PROFILE}: ${ENV_RUNS}, seed ${FOUNDRY_FUZZ_SEED}"
+          args=()
+          if [ -n "$MATCH" ]; then args+=(--match-test "$MATCH"); fi
+          # shellcheck disable=SC2086
+          env $ENV_RUNS forge test "${args[@]}" -vv
+
+  coverage:
+    name: forge coverage
+    needs: forge
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - name: forge coverage
+        run: |
+          # Coverage cannot map source for a file built under a compilation restriction, so ClprRouter.sol
+          # would be missing from the report. Drop the size restriction in this throw-away checkout only.
+          sed -i -e '/^additional_compiler_profiles/d' -e '/^compilation_restrictions/d' foundry.toml
+          forge coverage --ir-minimum --no-match-test "$GAS_CALIBRATED_TESTS" \
+            --no-match-coverage '^(test|script|lib)/' \
+            --report summary --report lcov | tee coverage.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: |
+            coverage.txt
+            lcov.info
+          retention-days: 14
+
+  slither:
+    name: slither (non-blocking)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Findings are reported to code scanning; they never fail the build. Triage them in the audit pack.
+    continue-on-error: true
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: slither
+        id: slither
+        uses: crytic/slither-action@b52cc1cbfee9ca3e8722dd5224299d16c9a6b80f # v0.4.2
+        with:
+          target: .
+          slither-config: .github/slither.config.json
+          sarif: results.sarif
+          fail-on: none
+      - name: Upload SARIF
+        if: always() && steps.slither.outputs.sarif != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: ${{ steps.slither.outputs.sarif }}
+          category: slither
+
+  typescript:
+    name: ${{ matrix.package }} typecheck, lint, test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [sdk, services]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: |
+            sdk/pnpm-lock.yaml
+            services/pnpm-lock.yaml
+      - name: Install (sdk)
+        # The services compile the SDK from source (tsconfig paths), so they need its dependencies too.
+        working-directory: sdk
+        run: pnpm install --frozen-lockfile
+      - name: Install (services)
+        if: matrix.package == 'services'
+        working-directory: services
+        run: pnpm install --frozen-lockfile
+      - name: typecheck
+        working-directory: ${{ matrix.package }}
+        run: pnpm run typecheck
+      - name: lint
+        working-directory: ${{ matrix.package }}
+        run: pnpm run --if-present lint
+      - name: test
+        working-directory: ${{ matrix.package }}
+        run: |
+          if [ "${{ matrix.package }}" = services ]; then pnpm run test:unit; else pnpm test; fi
+      - name: build
+        if: matrix.package == 'sdk'
+        working-directory: sdk
+        run: pnpm run build
+
+  services-integration:
+    name: services integration (anvil)
+    needs: forge
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: forge-out
+          path: out
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: |
+            sdk/pnpm-lock.yaml
+            services/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: sdk
+      - run: pnpm install --frozen-lockfile
+        working-directory: services
+      - name: integration test (one anvil, three Router stacks)
+        working-directory: services
+        run: pnpm run test:integration

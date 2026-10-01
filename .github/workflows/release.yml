@@ -1,0 +1,291 @@
+# Release: builds the contract artefacts, the SDK package and the services Docker image for a version tag,
+# attaches SBOMs and SLSA build-provenance attestations, and opens a DRAFT GitHub release.
+#
+# Trigger: push a signed tag vX.Y.Z whose version matches sdk/package.json and CHANGELOG.md.
+# Nothing is deployed on-chain here: contracts are immutable, and deployment is a separate, reviewed
+# step (docs/deployment.md). A maintainer publishes the draft release after checking it.
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+-*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build, e.g. v0.1.0"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FOUNDRY_VERSION: v1.5.1
+  NODE_VERSION: "22.13"
+  PNPM_VERSION: "12.6.0"
+  IMAGE: ghcr.io/${{ github.repository_owner }}/clprouter-services
+  TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  check:
+    name: version checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - id: v
+        name: Tag matches package versions and the changelog
+        run: |
+          version="${TAG#v}"
+          sdk=$(jq -r .version sdk/package.json)
+          svc=$(jq -r .version services/package.json)
+          [ "$sdk" = "$version" ] || { echo "::error::sdk/package.json is $sdk, tag is $version"; exit 1; }
+          [ "$svc" = "$version" ] || { echo "::error::services/package.json is $svc, tag is $version"; exit 1; }
+          grep -q "^## \[$version\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no [$version] entry"; exit 1; }
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+
+  contracts:
+    name: contract artefacts
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - name: forge test
+        run: forge test
+      - name: Build release artefacts
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          set -euo pipefail
+          forge build --sizes --skip 'test/**' --skip 'script/**' --out release-out --build-info | tee sizes.txt
+          dist="clprouter-contracts-${VERSION}"
+          mkdir -p "$dist/abi" "$dist/artifacts" "$dist/build-info"
+          # contract:source file
+          for cs in ClprRouter:ClprRouter ProviderRegistry:ProviderRegistry QuarantineVault:QuarantineVault \
+                    RouteCodec:RouteCodec RouteLogic:RouteLogic IClprRouteApplication:IClprRouteApplication \
+                    IClprRouteSender:IClprRouteApplication IProviderRegistry:IProviderRegistry \
+                    IQuarantineVault:IQuarantineVault; do
+            c="${cs%%:*}"; src="${cs#*:}"
+            f="release-out/${src}.sol/${c}.json"
+            [ -f "$f" ] || { echo "::error::no artefact for $c ($f)"; exit 1; }
+            # Keep every compiler-profile variant (ClprRouter is built with optimizer_runs = 200; libraries it
+            # links also have a `.small` variant).
+            mkdir -p "$dist/artifacts/${src}.sol"
+            cp release-out/"${src}.sol"/*.json "$dist/artifacts/${src}.sol/"
+            jq .abi "$f" >"$dist/abi/${c}.json"
+          done
+          cp release-out/build-info/*.json "$dist/build-info/"
+          cp sizes.txt foundry.toml remappings.txt LICENSE "$dist/"
+          cp -r proto "$dist/proto"
+          git -C lib/clpr-smart-contracts rev-parse HEAD >"$dist/clpr-smart-contracts.commit"
+          git rev-parse HEAD >"$dist/source.commit"
+          tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$(git log -1 --format=%ct)" \
+            -czf "${dist}.tar.gz" "$dist"
+          sha256sum "${dist}.tar.gz" >"${dist}.tar.gz.sha256"
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: clprouter-contracts-*.tar.gz
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-contracts
+          path: |
+            clprouter-contracts-*.tar.gz
+            clprouter-contracts-*.tar.gz.sha256
+          if-no-files-found: error
+
+  sdk:
+    name: SDK package
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Build, test and pack
+        working-directory: sdk
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run typecheck
+          pnpm test
+          pnpm run build
+          pnpm pack --pack-destination ..
+      - name: SBOM (SPDX) for the SDK
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          path: sdk
+          format: spdx-json
+          output-file: clprouter-sdk.spdx.json
+          upload-artifact: false
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: clprouter-sdk-*.tgz
+      - name: Attest SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: clprouter-sdk-*.tgz
+          sbom-path: clprouter-sdk.spdx.json
+      - run: sha256sum clprouter-sdk-*.tgz >clprouter-sdk.tgz.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-sdk
+          path: |
+            clprouter-sdk-*.tgz
+            clprouter-sdk.tgz.sha256
+            clprouter-sdk.spdx.json
+          if-no-files-found: error
+
+  image:
+    name: services image
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - id: dockerfile
+        name: Pick the Dockerfile
+        # services/Dockerfile (owned by the services) wins; .github/docker/services.Dockerfile is the fallback.
+        run: |
+          if [ -f services/Dockerfile ]; then f=services/Dockerfile; else f=.github/docker/services.Dockerfile; fi
+          echo "file=$f" >>"$GITHUB_OUTPUT"
+          echo "Dockerfile: $f"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ env.TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }}
+            type=sha,format=long
+      - id: build
+        name: Build and push (BuildKit SBOM and max provenance attached to the image)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ steps.dockerfile.outputs.file }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          sbom: true
+          provenance: mode=max
+      - name: SBOM (SPDX) for the image
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: clprouter-services-image.spdx.json
+          upload-artifact: false
+      - name: Attest build provenance (GitHub attestation, pushed to the registry)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - name: Attest SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          sbom-path: clprouter-services-image.spdx.json
+          push-to-registry: true
+      - name: Record the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: echo "${IMAGE}@${DIGEST}" >clprouter-services-image.digest
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-image
+          path: |
+            clprouter-services-image.spdx.json
+            clprouter-services-image.digest
+          if-no-files-found: error
+
+  release:
+    name: draft GitHub release
+    needs: [check, contracts, sdk, image]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Release notes from CHANGELOG.md
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" {on=1; next}
+            on && /^## \[/ {exit}
+            on {print}
+          ' CHANGELOG.md >notes.md
+          {
+            echo
+            echo "### Verify"
+            echo
+            echo '```sh'
+            echo "gh attestation verify dist/clprouter-contracts-${VERSION}.tar.gz --repo ${GITHUB_REPOSITORY}"
+            echo "gh attestation verify oci://$(cat dist/clprouter-services-image.digest) --repo ${GITHUB_REPOSITORY}"
+            echo '```'
+          } >>notes.md
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$TAG" --draft --verify-tag --title "CLPRouter $TAG" --notes-file notes.md dist/*

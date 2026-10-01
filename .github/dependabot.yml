@@ -1,0 +1,30 @@
+# Keeps the SHA-pinned actions and the npm lockfiles current. Each update is a reviewed PR.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
+  - package-ecosystem: npm
+    directory: /sdk
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build(sdk)"
+  - package-ecosystem: npm
+    directory: /services
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build(services)"
+  - package-ecosystem: docker
+    directory: /.github/docker
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build(docker)"

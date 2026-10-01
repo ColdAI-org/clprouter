@@ -1,0 +1,66 @@
+# End-to-end run across three anvil chains (A -> B -> C and back), nightly and on demand.
+#
+# script/e2e/run.sh deploys the unchanged reference ClprService, the CLPR repo's E2EVerifier and a full
+# CLPRouter stack on each chain, then sends five routes (delivered, application revert, edge disabled
+# mid-route, recipient blacklisted on B, deadline passed). It takes about 9 minutes.
+#
+# The Hiero leg (script/e2e-hiero/run.sh) needs a Solo network and is not run in CI.
+name: Nightly e2e
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-e2e
+  cancel-in-progress: false
+
+env:
+  FOUNDRY_VERSION: v1.5.1
+
+jobs:
+  three-anvil:
+    name: three-anvil e2e
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - name: Check jq
+        run: jq --version
+      - name: forge build
+        run: forge build
+      - name: script/e2e/run.sh
+        # Uses anvil's well-known development key only; nothing here touches a public network.
+        run: script/e2e/run.sh
+      - name: Gas per transaction
+        if: always()
+        run: |
+          if [ -f e2e-out/gas.tsv ]; then
+            {
+              echo '### Gas per transaction (anvil)'
+              echo
+              echo '| scenario | step | chain | gasUsed |'
+              echo '| --- | --- | --- | --- |'
+              tail -n +2 e2e-out/gas.tsv | awk -F'\t' '{printf "| %s | %s | %s | %s |\n", $1, $2, $3, $5}'
+            } >>"$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload e2e output
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-out-${{ github.run_number }}
+          path: |
+            e2e-out/
+            .anvil/*.log
+          include-hidden-files: true
+          retention-days: 30
