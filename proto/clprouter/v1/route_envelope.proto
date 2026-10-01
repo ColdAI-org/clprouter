@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 //
 // CLPRouter route envelope, version 1.
 //
@@ -7,11 +7,16 @@
 // The CLPR protocol itself is unchanged: CLPRouter is an application that sends
 // and receives envelopes through `sendMessage` and application delivery.
 //
-// Wire rules (enforced by the Solidity codec in src/libraries/RouteCodec.sol):
-//   * proto3 encoding; fields equal to their default value are omitted;
-//   * unknown fields are skipped on decode (forward compatible);
-//   * `bytes` fields that carry ids have fixed lengths: route_id 16 bytes,
-//     channel_id / connector_id / case_id / response_hash 32 bytes.
+// Wire rules (enforced by the Solidity codec in src/libraries/RouteCodec.sol and the SDK):
+//   * canonical proto3 encoding only: fields in ascending field-number order, repeated
+//     elements contiguous, fields equal to their default value omitted (an all-zero id is a
+//     default), minimal varints, bool = 1; an element of a repeated field is always emitted;
+//   * decoders REJECT anything else: a singular field present twice (protobuf would merge
+//     or override), unknown field numbers, known fields with another wire type, explicit
+//     defaults, over-long varints. Every hop runs the same router_version, so unknown fields
+//     buy no forward compatibility; rejecting them makes encode(decode(b)) == b;
+//   * `bytes` fields that carry ids have fixed lengths: route_id / iso_uetr 16 bytes,
+//     channel_id / connector_id / case_id / response_hash / route_edge / route_rest 32 bytes.
 syntax = "proto3";
 
 package clprouter.v1;
@@ -37,7 +42,7 @@ enum RouteFilter {
 
 enum PayloadType {
   PAYLOAD_TYPE_RAW = 0;          // opaque application bytes
-  PAYLOAD_TYPE_ISO20022 = 1;     // hash or ciphertext of an ISO 20022 message (UETR = route_id)
+  PAYLOAD_TYPE_ISO20022 = 1;     // hash or ciphertext of an ISO 20022 message (UETR in iso_uetr)
   PAYLOAD_TYPE_ASSET = 2;        // asset transfer instruction (per-hop escrow is phase 4)
   PAYLOAD_TYPE_RECEIPT = 3;      // payload is a ClprRouteReceipt travelling back to the origin
 }
@@ -52,7 +57,8 @@ message ClprRouteEndpoint {
 // hops[0] is the origin, hops[last] the destination (channel/connector empty there).
 message ClprRouteHop {
   string ledger_id = 1;          // CAIP-2 id of this ledger
-  bytes router = 2;              // CLPRouter deployment on this ledger
+  bytes router = 2;              // CLPRouter deployment on this ledger: on EVM ledgers the canonical CREATE2
+                                 // address of the deployment (see ClprRouterDeployer); anything else is refused
   bytes channel_id = 3;          // 32 bytes: CLPR Channel to hops[i+1]
   bytes connector_id = 4;        // 32 bytes: CLPR Connector authorising that send
   uint64 fee = 5;                // fee (origin native units) this hop takes for the next hop
@@ -88,7 +94,14 @@ message ClprFilterRegistryVersion {
 }
 
 message ClprRouteEnvelope {
-  bytes route_id = 1;                          // 16 bytes; the UETR under the ISO 20022 filter
+  // 16 bytes, always derived by the origin Router, never chosen by the sender:
+  //   bytes16(keccak256(abi.encode(keccak256("clprouter.v1.route"), keccak256(origin ledger_id),
+  //                                origin Router address, sender address, per-sender nonce)))
+  // for routes, and for receipts (payload_type RECEIPT; the reporting Router is hops[0]):
+  //   bytes16(keccak256(abi.encode(keccak256("clprouter.v1.receipt"), keccak256(route origin ledger_id),
+  //                                keccak256(route origin router), route_id, reporter hop_index)))
+  // Routers key replay protection by (hops[0].ledger_id, hops[0].router, route_id).
+  bytes route_id = 1;
   ClprRouteEndpoint origin = 2;
   ClprRouteEndpoint destination = 3;
   string sender = 4;                           // CAIP-10 of the paying sender (stamped by the origin Router)
@@ -103,6 +116,8 @@ message ClprRouteEnvelope {
   bytes origin_signature = 13;                 // optional end-to-end signature by the origin application
   repeated ClprFilterRegistryVersion filter_registry_versions = 14;
   uint32 router_version = 15;                  // CLPRouter version every hop must run
+  bytes iso_uetr = 16;                         // 16 bytes: UETR (UUIDv4) of the ISO 20022 message; required
+                                               // under the ISO 20022 filter, informational (never a key)
 }
 
 enum ReceiptStatus {

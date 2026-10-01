@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
@@ -57,14 +57,24 @@ contract RouteCodecTest is Test {
         assertEq(RouteCodec.encodeEnvelope(e), hex"0a100102030405060708090a0b0c0d0e0f10380278" hex"01");
     }
 
-    function test_decode_skipsUnknownFields() public pure {
+    /// @dev Unknown fields are rejected (every hop runs the same router_version; L-02 canonical decoding).
+    function test_decode_rejectsUnknownFields() public {
         bytes memory enc = RouteCodec.encodeEnvelope(_sample());
-        // field 99 varint (key 0x98 0x06), field 100 length-delimited, field 101 fixed64, field 102 fixed32
-        bytes memory extra =
-            bytes.concat(hex"980601", hex"a20602abcd", hex"a9060102030405060708", hex"b50601020304", enc);
-        RouteTypes.Envelope memory d = RouteCodec.decodeEnvelope(extra);
-        assertEq(d.routeId, _sample().routeId);
-        assertEq(d.hops.length, 2);
+        vm.expectRevert(RouteCodec.MalformedProtobuf.selector);
+        RouteCodec.decodeEnvelope(bytes.concat(enc, hex"980601")); // field 99 varint
+        vm.expectRevert(RouteCodec.MalformedProtobuf.selector);
+        RouteCodec.decodeEnvelope(bytes.concat(enc, hex"a9060102030405060708")); // field 101 fixed64
+    }
+
+    function test_envelope_isoUetr_roundTrip() public pure {
+        RouteTypes.Envelope memory e = _sample();
+        e.isoUetr = bytes16(0x8a1b2c3d4e5f40718293a4b5c6d7e8f9);
+        bytes memory enc = RouteCodec.encodeEnvelope(e);
+        assertEq(RouteCodec.decodeEnvelope(enc).isoUetr, e.isoUetr);
+        // field 16, wire type 2: key 0x82 0x01, length 0x10, then 16 bytes, at the very end
+        assertEq(enc[enc.length - 19], bytes1(0x82));
+        assertEq(enc[enc.length - 18], bytes1(0x01));
+        assertEq(enc[enc.length - 17], bytes1(0x10));
     }
 
     function test_decode_rejectsTruncated() public {

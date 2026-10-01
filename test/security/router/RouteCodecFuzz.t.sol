@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
@@ -19,7 +19,7 @@ contract CodecHarness {
 /// @notice Codec fuzzing for the router security suite (docs/audit/router-findings.md):
 ///         decode(encode(x)) == x, encode(decode(·)) is a fixpoint (one canonical form), and arbitrary or
 ///         mutated input either decodes or reverts with MalformedProtobuf (never a panic or another error).
-///         The non-canonical inputs the decoder accepts are finding L-02 (RouterFindingsUnit.t.sol).
+///         The decoder accepts only canonical encodings (L-02): every accepted input re-encodes to itself.
 contract RouteCodecFuzzTest is Test {
     CodecHarness internal h;
 
@@ -99,6 +99,7 @@ contract RouteCodecFuzzTest is Test {
             e.filterRegistryVersions[j] = RouteTypes.RegistryVersion(_u32(s, 25 + j), _u64(s, 30 + j));
         }
         e.routerVersion = _u32(s, 35);
+        e.isoUetr = _r(s, 36) % 3 == 0 ? bytes16(0) : bytes16(bytes32(_r(s, 37)));
     }
 
     function _receipt(bytes32 s) internal pure returns (RouteTypes.Receipt memory r) {
@@ -137,8 +138,9 @@ contract RouteCodecFuzzTest is Test {
 
     function _checkEnvelopeInput(bytes memory b) internal view {
         try h.decodeEnvelope(b) returns (RouteTypes.Envelope memory e) {
-            // Whatever is accepted has exactly one canonical form, and that form decodes to the same value.
+            // Whatever is accepted is the canonical form itself (L-02), and decodes back to the same value.
             bytes memory c = RouteCodec.encodeEnvelope(e);
+            assertEq(c, b, "accepted a non-canonical encoding");
             RouteTypes.Envelope memory e2 = h.decodeEnvelope(c);
             assertEq(keccak256(abi.encode(e2)), keccak256(abi.encode(e)), "canonical form decodes differently");
             assertEq(RouteCodec.encodeEnvelope(e2), c, "canonical form not a fixpoint");
@@ -173,6 +175,7 @@ contract RouteCodecFuzzTest is Test {
         b[pos % b.length] = bytes1(val);
         try h.decodeReceipt(b) returns (RouteTypes.Receipt memory r) {
             bytes memory c = RouteCodec.encodeReceipt(r);
+            assertEq(c, b, "accepted a non-canonical encoding");
             assertEq(keccak256(abi.encode(h.decodeReceipt(c))), keccak256(abi.encode(r)));
         } catch (bytes memory err) {
             assertEq(err.length, 4);
@@ -206,5 +209,32 @@ contract RouteCodecFuzzTest is Test {
         h.decodeEnvelope(hex"0b"); // wire type 3 (group)
         vm.expectRevert(RouteCodec.MalformedProtobuf.selector);
         h.decodeEnvelope(hex"00"); // field number 0
+    }
+
+    /// @dev L-02: non-canonical but protobuf-valid inputs are all rejected.
+    function test_nonCanonical_rejected() public {
+        bytes[10] memory bad = [
+            bytes(hex"388100"), // over-long varint (hop_index = 1 in two bytes)
+            hex"3800", // explicit default (hop_index = 0)
+            hex"38013802", // singular field twice
+            hex"7801" // fields out of order (router_version before hop_index)
+            hex"3801",
+            hex"4a023801" // embedded singular message twice
+            hex"4a023801",
+            hex"4a023802", // bool loose = 2
+            hex"4a00", // empty singular message
+            hex"8a0100", // unknown field 17
+            hex"3a0101", // hop_index (varint field) as LEN
+            hex"0a1000000000000000000000000000000000" // all-zero route_id
+        ];
+        for (uint256 i = 0; i < bad.length; i++) {
+            vm.expectRevert(RouteCodec.MalformedProtobuf.selector);
+            h.decodeEnvelope(bad[i]);
+        }
+        vm.expectRevert(RouteCodec.MalformedProtobuf.selector);
+        h.decodeEnvelope(
+            hex"8201" // all-zero iso_uetr (field 16)
+            hex"10" hex"00000000000000000000000000000000"
+        );
     }
 }

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {RouteTypes} from "./RouteTypes.sol";
@@ -9,15 +9,23 @@ import {RouteTypes} from "./RouteTypes.sol";
 /// @dev Deployed as an external library (public functions) so its bytecode does not count
 ///      against the Router's EIP-170 limit. Encoding omits default-valued scalar fields and
 ///      always emits repeated elements (even if empty) so element counts survive a round trip.
-///      Decoding skips unknown fields and rejects malformed input with {MalformedProtobuf}.
+///
+///      Decoding accepts only the canonical encoding, i.e. exactly the bytes {encodeEnvelope} /
+///      {encodeReceipt} produce, so `encode(decode(b)) == b` for every accepted `b` and
+///      `decode(encode(x)) == x` for every `x`. Rejected with {MalformedProtobuf}:
+///        * fields out of ascending field-number order, a singular field present twice (protobuf would
+///          merge or override; we reject instead), or a repeated field split by other fields;
+///        * unknown field numbers and known fields with another wire type (every hop runs the same
+///          `router_version`, so there is nothing to stay forward compatible with);
+///        * explicitly encoded defaults (zero varints, empty strings / bytes / singular messages, all-zero
+///          fixed-length ids), `bool` values other than 1, and over-long (non-minimal) varints;
+///        * truncated input, fixed-length ids of the wrong size, out-of-range enums and integers.
 library RouteCodec {
-    /// @notice Input is not valid protobuf for the expected message, or a fixed-length field has the wrong size.
+    /// @notice Input is not the canonical protobuf encoding of the expected message.
     error MalformedProtobuf();
 
     uint256 private constant WT_VARINT = 0;
-    uint256 private constant WT_I64 = 1;
     uint256 private constant WT_LEN = 2;
-    uint256 private constant WT_I32 = 5;
 
     // ═════════════════════════════════════════════════════════════════════
     // Public API
@@ -27,8 +35,8 @@ library RouteCodec {
     function encodeEnvelope(RouteTypes.Envelope memory e) public pure returns (bytes memory out) {
         out = bytes.concat(
             _bytesField(1, e.routeId == bytes16(0) ? bytes("") : abi.encodePacked(e.routeId)),
-            _msgField(2, _encodeEndpoint(e.origin)),
-            _msgField(3, _encodeEndpoint(e.destination)),
+            _bytesField(2, _encodeEndpoint(e.origin)),
+            _bytesField(3, _encodeEndpoint(e.destination)),
             _bytesField(4, bytes(e.sender)),
             _bytesField(5, bytes(e.recipient)),
             _encodeHops(6, e.hops),
@@ -37,34 +45,23 @@ library RouteCodec {
         );
         out = bytes.concat(
             out,
-            _msgField(9, _encodeConstraints(e.constraints)),
+            _bytesField(9, _encodeConstraints(e.constraints)),
             _uintField(10, uint256(e.payloadType)),
             _bytesField(11, e.payload),
             _encodeHops(12, e.receiptPath),
             _bytesField(13, e.originSignature),
             _encodeVersions(e.filterRegistryVersions),
-            _uintField(15, e.routerVersion)
+            _uintField(15, e.routerVersion),
+            _bytesField(16, e.isoUetr == bytes16(0) ? bytes("") : abi.encodePacked(e.isoUetr))
         );
     }
 
-    /// @notice Decode protobuf bytes into an envelope.
+    /// @notice Decode the canonical protobuf encoding of an envelope.
     function decodeEnvelope(bytes memory b) public pure returns (RouteTypes.Envelope memory e) {
-        uint256 nHops;
-        uint256 nReceipt;
-        uint256 nVersions;
         // Pass 1: count repeated fields so arrays can be allocated exactly.
-        {
-            uint256 p = 0;
-            while (p < b.length) {
-                uint256 field;
-                uint256 wt;
-                (field, wt, p) = _readKey(b, p, b.length);
-                if (wt == WT_LEN && field == 6) nHops++;
-                else if (wt == WT_LEN && field == 12) nReceipt++;
-                else if (wt == WT_LEN && field == 14) nVersions++;
-                p = _skip(b, p, b.length, wt);
-            }
-        }
+        uint256 nHops = _count(b, 6);
+        uint256 nReceipt = _count(b, 12);
+        uint256 nVersions = _count(b, 14);
         e.hops = new RouteTypes.Hop[](nHops);
         e.receiptPath = new RouteTypes.Hop[](nReceipt);
         e.filterRegistryVersions = new RouteTypes.RegistryVersion[](nVersions);
@@ -73,21 +70,30 @@ library RouteCodec {
         nVersions = 0;
 
         uint256 q = 0;
+        uint256 last = 0;
         while (q < b.length) {
             uint256 field;
             uint256 wt;
             (field, wt, q) = _readKey(b, q, b.length);
-            if (wt == WT_VARINT) {
+            last = _order(last, field, field == 6 || field == 12 || field == 14);
+            if (field == 7 || field == 8 || field == 10 || field == 15) {
                 uint256 v;
-                (v, q) = _readVarint(b, q, b.length);
-                if (field == 7) e.hopIndex = _u32(v);
-                else if (field == 8) e.mode = _mode(v);
-                else if (field == 10) e.payloadType = _payloadType(v);
-                else if (field == 15) e.routerVersion = _u32(v);
-            } else if (wt == WT_LEN) {
+                (v, q) = _readValue(b, q, b.length, wt);
+                if (field == 7) {
+                    e.hopIndex = _u32(v);
+                } else if (field == 8) {
+                    e.mode = RouteTypes.Mode(_enum(v, uint256(type(RouteTypes.Mode).max)));
+                } else if (field == 10) {
+                    e.payloadType = RouteTypes.PayloadType(_enum(v, uint256(type(RouteTypes.PayloadType).max)));
+                } else {
+                    e.routerVersion = _u32(v);
+                }
+            } else {
                 uint256 s;
                 uint256 end;
-                (s, end, q) = _readLen(b, q, b.length);
+                (s, end, q) = _readLen(b, q, b.length, wt);
+                bool repeated = field == 6 || field == 12 || field == 14;
+                if (!repeated && end == s) revert MalformedProtobuf(); // explicit default
                 if (field == 1) e.routeId = _bytes16(b, s, end);
                 else if (field == 2) e.origin = _decodeEndpoint(b, s, end);
                 else if (field == 3) e.destination = _decodeEndpoint(b, s, end);
@@ -99,8 +105,8 @@ library RouteCodec {
                 else if (field == 12) e.receiptPath[nReceipt++] = _decodeHop(b, s, end);
                 else if (field == 13) e.originSignature = _copy(b, s, end);
                 else if (field == 14) e.filterRegistryVersions[nVersions++] = _decodeVersion(b, s, end);
-            } else {
-                q = _skip(b, q, b.length, wt);
+                else if (field == 16) e.isoUetr = _bytes16(b, s, end);
+                else revert MalformedProtobuf(); // unknown field
             }
         }
     }
@@ -122,36 +128,32 @@ library RouteCodec {
         );
     }
 
-    /// @notice Decode protobuf bytes into a receipt.
+    /// @notice Decode the canonical protobuf encoding of a receipt.
     function decodeReceipt(bytes memory b) public pure returns (RouteTypes.Receipt memory r) {
-        uint256 n;
-        {
-            uint256 p = 0;
-            while (p < b.length) {
-                uint256 field;
-                uint256 wt;
-                (field, wt, p) = _readKey(b, p, b.length);
-                if (wt == WT_LEN && field == 9) n++;
-                p = _skip(b, p, b.length, wt);
-            }
-        }
-        r.routePrefix = new RouteTypes.Hop[](n);
-        n = 0;
+        r.routePrefix = new RouteTypes.Hop[](_count(b, 9));
+        uint256 n = 0;
         uint256 q = 0;
+        uint256 last = 0;
         while (q < b.length) {
             uint256 field;
             uint256 wt;
             (field, wt, q) = _readKey(b, q, b.length);
-            if (wt == WT_VARINT) {
+            last = _order(last, field, field == 9);
+            if (field == 2 || field == 3 || field == 5) {
                 uint256 v;
-                (v, q) = _readVarint(b, q, b.length);
-                if (field == 2) r.status = _status(v);
-                else if (field == 3) r.hopIndex = _u32(v);
-                else if (field == 5) r.reason = _reason(v);
-            } else if (wt == WT_LEN) {
+                (v, q) = _readValue(b, q, b.length, wt);
+                if (field == 2) {
+                    r.status = RouteTypes.ReceiptStatus(_enum(v, uint256(type(RouteTypes.ReceiptStatus).max)));
+                } else if (field == 3) {
+                    r.hopIndex = _u32(v);
+                } else {
+                    r.reason = RouteTypes.Reason(_enum(v, uint256(type(RouteTypes.Reason).max)));
+                }
+            } else {
                 uint256 s;
                 uint256 end;
-                (s, end, q) = _readLen(b, q, b.length);
+                (s, end, q) = _readLen(b, q, b.length, wt);
+                if (field != 9 && end == s) revert MalformedProtobuf();
                 if (field == 1) r.routeId = _bytes16(b, s, end);
                 else if (field == 4) r.ledgerId = string(_copy(b, s, end));
                 else if (field == 6) r.caseId = _bytes32(b, s, end);
@@ -160,8 +162,7 @@ library RouteCodec {
                 else if (field == 9) r.routePrefix[n++] = _decodeHop(b, s, end);
                 else if (field == 10) r.routeEdge = _bytes32(b, s, end);
                 else if (field == 11) r.routeRest = _bytes32(b, s, end);
-            } else {
-                q = _skip(b, q, b.length, wt);
+                else revert MalformedProtobuf();
             }
         }
     }
@@ -226,11 +227,6 @@ library RouteCodec {
         return bytes.concat(_key(field, WT_LEN), _varint(v.length), v);
     }
 
-    function _msgField(uint256 field, bytes memory v) private pure returns (bytes memory) {
-        if (v.length == 0) return "";
-        return bytes.concat(_key(field, WT_LEN), _varint(v.length), v);
-    }
-
     function _key(uint256 field, uint256 wt) private pure returns (bytes memory) {
         return _varint((field << 3) | wt);
     }
@@ -252,47 +248,71 @@ library RouteCodec {
     // Decoding helpers
     // ═════════════════════════════════════════════════════════════════════
 
+    /// @dev Field order rule: strictly ascending field numbers, except that a repeated field may continue.
+    function _order(uint256 last, uint256 field, bool repeated) private pure returns (uint256) {
+        if (field < last || (field == last && !repeated)) revert MalformedProtobuf();
+        return field;
+    }
+
+    /// @dev Number of elements of repeated field `field` at the top level of `b` (structure only).
+    function _count(bytes memory b, uint256 field) private pure returns (uint256 n) {
+        uint256 p = 0;
+        while (p < b.length) {
+            uint256 f;
+            uint256 wt;
+            (f, wt, p) = _readKey(b, p, b.length);
+            if (wt == WT_VARINT) {
+                (, p) = _readVarint(b, p, b.length);
+            } else {
+                (,, p) = _readLen(b, p, b.length, wt);
+                if (f == field) n++;
+            }
+        }
+    }
+
     function _decodeEndpoint(bytes memory b, uint256 p, uint256 end)
         private
         pure
         returns (RouteTypes.Endpoint memory ep)
     {
+        uint256 last = 0;
         while (p < end) {
             uint256 field;
             uint256 wt;
             (field, wt, p) = _readKey(b, p, end);
-            if (wt == WT_LEN && (field == 1 || field == 2)) {
-                uint256 s;
-                uint256 e;
-                (s, e, p) = _readLen(b, p, end);
-                if (field == 1) ep.ledgerId = string(_copy(b, s, e));
-                else ep.application = _copy(b, s, e);
-            } else {
-                p = _skip(b, p, end, wt);
-            }
+            last = _order(last, field, false);
+            uint256 s;
+            uint256 e;
+            (s, e, p) = _readLen(b, p, end, wt);
+            if (e == s) revert MalformedProtobuf();
+            if (field == 1) ep.ledgerId = string(_copy(b, s, e));
+            else if (field == 2) ep.application = _copy(b, s, e);
+            else revert MalformedProtobuf();
         }
     }
 
     function _decodeHop(bytes memory b, uint256 p, uint256 end) private pure returns (RouteTypes.Hop memory h) {
+        uint256 last = 0;
         while (p < end) {
             uint256 field;
             uint256 wt;
             (field, wt, p) = _readKey(b, p, end);
-            if (wt == WT_VARINT && field == 5) {
+            last = _order(last, field, false);
+            if (field == 5) {
                 uint256 v;
-                (v, p) = _readVarint(b, p, end);
-                h.fee = _u64(v);
-            } else if (wt == WT_LEN && field >= 1 && field <= 6 && field != 5) {
+                (v, p) = _readValue(b, p, end, wt);
+                h.fee = uint64(v); // _readVarint bounds v to uint64
+            } else {
                 uint256 s;
                 uint256 e;
-                (s, e, p) = _readLen(b, p, end);
+                (s, e, p) = _readLen(b, p, end, wt);
+                if (e == s) revert MalformedProtobuf();
                 if (field == 1) h.ledgerId = string(_copy(b, s, e));
                 else if (field == 2) h.router = _copy(b, s, e);
                 else if (field == 3) h.channelId = _bytes32(b, s, e);
                 else if (field == 4) h.connectorId = _bytes32(b, s, e);
-                else h.feePayee = _copy(b, s, e);
-            } else {
-                p = _skip(b, p, end, wt);
+                else if (field == 6) h.feePayee = _copy(b, s, e);
+                else revert MalformedProtobuf();
             }
         }
     }
@@ -302,24 +322,23 @@ library RouteCodec {
         pure
         returns (RouteTypes.Constraints memory c)
     {
+        uint256 last = 0;
         while (p < end) {
             uint256 field;
             uint256 wt;
             (field, wt, p) = _readKey(b, p, end);
-            if (wt != WT_VARINT) {
-                p = _skip(b, p, end, wt);
-                continue;
-            }
+            last = _order(last, field, false);
             uint256 v;
-            (v, p) = _readVarint(b, p, end);
+            (v, p) = _readValue(b, p, end, wt);
             if (field == 1) c.filters = _u32(v);
-            else if (field == 2) c.deadline = _u64(v);
-            else if (field == 3) c.maxFee = _u64(v);
-            else if (field == 4) c.remainingFeeBudget = _u64(v);
+            else if (field == 2) c.deadline = uint64(v);
+            else if (field == 3) c.maxFee = uint64(v);
+            else if (field == 4) c.remainingFeeBudget = uint64(v);
             else if (field == 5) c.trustFloor = _u32(v);
             else if (field == 6) c.maxHops = _u32(v);
-            else if (field == 7) c.loose = v != 0;
-            else if (field == 8) c.energyCap = _u64(v);
+            else if (field == 7 && v == 1) c.loose = true;
+            else if (field == 8) c.energyCap = uint64(v);
+            else revert MalformedProtobuf(); // unknown field, or a bool other than 1
         }
     }
 
@@ -328,18 +347,17 @@ library RouteCodec {
         pure
         returns (RouteTypes.RegistryVersion memory v)
     {
+        uint256 last = 0;
         while (p < end) {
             uint256 field;
             uint256 wt;
             (field, wt, p) = _readKey(b, p, end);
-            if (wt != WT_VARINT) {
-                p = _skip(b, p, end, wt);
-                continue;
-            }
+            last = _order(last, field, false);
             uint256 x;
-            (x, p) = _readVarint(b, p, end);
+            (x, p) = _readValue(b, p, end, wt);
             if (field == 1) v.filter = _u32(x);
-            else if (field == 2) v.version = _u64(x);
+            else if (field == 2) v.version = uint64(x);
+            else revert MalformedProtobuf();
         }
     }
 
@@ -352,48 +370,47 @@ library RouteCodec {
         (k, np) = _readVarint(b, p, end);
         field = k >> 3;
         wt = k & 7;
-        if (field == 0) revert MalformedProtobuf();
+        // Only VARINT and LEN are used by the schema; field numbers are at most 16.
+        if (field == 0 || field > 16 || (wt != WT_VARINT && wt != WT_LEN)) revert MalformedProtobuf();
     }
 
+    /// @dev A minimal varint of at most 64 bits.
     function _readVarint(bytes memory b, uint256 p, uint256 end) private pure returns (uint256 v, uint256 np) {
         for (uint256 shift = 0; shift < 70; shift += 7) {
             if (p >= end) revert MalformedProtobuf();
             uint256 c = uint8(b[p++]);
             v |= (c & 0x7f) << shift;
             if (c & 0x80 == 0) {
-                if (v > type(uint64).max) revert MalformedProtobuf();
+                // A trailing zero group is an over-long encoding of a shorter varint.
+                if ((c == 0 && shift != 0) || v > type(uint64).max) revert MalformedProtobuf();
                 return (v, p);
             }
         }
         revert MalformedProtobuf();
     }
 
-    function _readLen(bytes memory b, uint256 p, uint256 end)
+    /// @dev A non-default scalar of a VARINT field (proto3 omits zero).
+    function _readValue(bytes memory b, uint256 p, uint256 end, uint256 wt)
+        private
+        pure
+        returns (uint256 v, uint256 np)
+    {
+        if (wt != WT_VARINT) revert MalformedProtobuf();
+        (v, np) = _readVarint(b, p, end);
+        if (v == 0) revert MalformedProtobuf();
+    }
+
+    function _readLen(bytes memory b, uint256 p, uint256 end, uint256 wt)
         private
         pure
         returns (uint256 start, uint256 stop, uint256 np)
     {
+        if (wt != WT_LEN) revert MalformedProtobuf();
         uint256 len;
         (len, start) = _readVarint(b, p, end);
         stop = start + len;
         if (stop > end) revert MalformedProtobuf();
         np = stop;
-    }
-
-    function _skip(bytes memory b, uint256 p, uint256 end, uint256 wt) private pure returns (uint256) {
-        if (wt == WT_VARINT) {
-            (, p) = _readVarint(b, p, end);
-        } else if (wt == WT_LEN) {
-            (,, p) = _readLen(b, p, end);
-        } else if (wt == WT_I64) {
-            p += 8;
-        } else if (wt == WT_I32) {
-            p += 4;
-        } else {
-            revert MalformedProtobuf();
-        }
-        if (p > end) revert MalformedProtobuf();
-        return p;
     }
 
     function _copy(bytes memory b, uint256 s, uint256 e) private pure returns (bytes memory out) {
@@ -404,22 +421,24 @@ library RouteCodec {
         }
     }
 
+    /// @dev Exactly 32 bytes, not all zero (an all-zero id is the default and must be omitted).
     function _bytes32(bytes memory b, uint256 s, uint256 e) private pure returns (bytes32 v) {
-        if (e == s) return bytes32(0);
         if (e - s != 32) revert MalformedProtobuf();
         assembly ("memory-safe") {
             v := mload(add(add(b, 0x20), s))
         }
+        if (v == bytes32(0)) revert MalformedProtobuf();
     }
 
+    /// @dev Exactly 16 bytes, not all zero.
     function _bytes16(bytes memory b, uint256 s, uint256 e) private pure returns (bytes16 v) {
-        if (e == s) return bytes16(0);
         if (e - s != 16) revert MalformedProtobuf();
         bytes32 w;
         assembly ("memory-safe") {
             w := mload(add(add(b, 0x20), s))
         }
         v = bytes16(w);
+        if (v == bytes16(0)) revert MalformedProtobuf();
     }
 
     function _u32(uint256 v) private pure returns (uint32) {
@@ -427,27 +446,8 @@ library RouteCodec {
         return uint32(v);
     }
 
-    function _u64(uint256 v) private pure returns (uint64) {
-        return uint64(v); // _readVarint already bounds v to uint64
-    }
-
-    function _mode(uint256 v) private pure returns (RouteTypes.Mode) {
-        if (v > uint256(type(RouteTypes.Mode).max)) revert MalformedProtobuf();
-        return RouteTypes.Mode(v);
-    }
-
-    function _payloadType(uint256 v) private pure returns (RouteTypes.PayloadType) {
-        if (v > uint256(type(RouteTypes.PayloadType).max)) revert MalformedProtobuf();
-        return RouteTypes.PayloadType(v);
-    }
-
-    function _status(uint256 v) private pure returns (RouteTypes.ReceiptStatus) {
-        if (v > uint256(type(RouteTypes.ReceiptStatus).max)) revert MalformedProtobuf();
-        return RouteTypes.ReceiptStatus(v);
-    }
-
-    function _reason(uint256 v) private pure returns (RouteTypes.Reason) {
-        if (v > uint256(type(RouteTypes.Reason).max)) revert MalformedProtobuf();
-        return RouteTypes.Reason(v);
+    function _enum(uint256 v, uint256 max) private pure returns (uint256) {
+        if (v > max) revert MalformedProtobuf();
+        return v;
     }
 }

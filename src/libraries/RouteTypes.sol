@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 /// @title RouteTypes
@@ -111,6 +111,8 @@ library RouteTypes {
         bytes originSignature;
         RegistryVersion[] filterRegistryVersions;
         uint32 routerVersion;
+        /// @dev ISO 20022 UETR (UUIDv4 bytes) chosen by the origin application; never used as a key.
+        bytes16 isoUetr;
     }
 
     struct Receipt {
