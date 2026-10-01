@@ -1,0 +1,34 @@
+{
+  "status": "DRAFT - unsigned; for provider-committee review",
+  "network": "stellar",
+  "name": "Stellar",
+  "label": "ENERGY",
+  "decision": {
+    "action": 1,
+    "payload": "0x00000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000006c9ed6000000000000000000000000000000000000000000000000000000000000004e2000000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000000e7374656c6c61723a7075626e657400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000674d69434120575020532e313420302e3030303032206b67434f32652f74783b2043727970746f205269736b204d65747269637320476d62483b20706572696f6420746f20323032362d30312d31343b207368613235363a3435373266623834393435366533303600000000000000000000000000000000000000000000000000",
+    "evidenceHash": "0xfddb79be84fa67dd0af29d9a8c872d8b6b9242163509ea6fb4219b8f2b34d069",
+    "nonce": 5,
+    "effectiveAt": 0,
+    "validUntil": 1798675200,
+    "epoch": 0
+  },
+  "payload_decoded": {
+    "ledgerId": "stellar:pubnet",
+    "label": 3,
+    "expiry": 1822348800,
+    "emissionsUg": 20000,
+    "emissionsSource": "MiCA WP S.14 0.00002 kgCO2e/tx; Crypto Risk Metrics GmbH; period to 2026-01-14; sha256:4572fb849456e306"
+  },
+  "payload_abi": "(string ledgerId, uint8 label, uint64 expiry, uint64 emissionsUg, string emissionsSource)",
+  "evidence_record": "evidence/stellar.energy.json",
+  "evidence_hash_rule": "sha256 over the exact bytes of the evidence file minus its trailing newline (canonical JSON: sorted keys, no spaces, UTF-8)",
+  "digest": "0xe17ca8e66781574340d7c15fe41ae8c3ee082db8f3ae9114340a8faf3a2e3d44",
+  "eip191_hash_to_sign": "0x546f3421012cf72ec31c3bcf65ea889bfabc7af390dd9bd6c04ec6568b376cb5",
+  "signatures": [],
+  "notes": [
+    "Provisional. The registry only accepts nonce == version + 1, so nonces must be renumbered against the live registry version at signing time; renumbering changes the digest.",
+    "Must satisfy effectiveFrom < expiry <= effectiveFrom + 366 days. Relaying before 2026-12-31 with a 7-day notice keeps this valid.",
+    "0 = as soon as the registry's CERT_NOTICE has passed after relay (effectiveFrom = max(effectiveAt, block.timestamp + CERT_NOTICE)).",
+    "Intensity basis - marginal: S.16 says the intensity is the marginal emission of one additional transaction; the spec's Greenest mode assumes an allocation (total / transactions)"
+  ]
+}

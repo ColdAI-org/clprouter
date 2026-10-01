@@ -1,0 +1,40 @@
+{
+  "source": "ESMA interim MiCA register",
+  "files": {
+    "OTHER": {
+      "description": "White papers for crypto-assets other than ARTs and EMTs",
+      "url": "https://www.esma.europa.eu/sites/default/files/2024-12/OTHER.csv",
+      "sha256": "556db62050a19f3d4fc6a139e97eb4b309ff9fd1fdd92c06fd6b34775cb3c990",
+      "bytes": 236166,
+      "retrieved": "2026-10-01T08:56:23Z"
+    },
+    "CASPS": {
+      "description": "Authorised crypto-asset service providers",
+      "url": "https://www.esma.europa.eu/sites/default/files/2024-12/CASPS.csv",
+      "sha256": "73d0dd02ff9e0181e51e528ab4a19b7aae8a2c207345b3bc264274103f0bd164",
+      "bytes": 174895,
+      "retrieved": "2026-10-01T08:56:23Z"
+    },
+    "EMTWP": {
+      "description": "E-money token white papers (issuers of EMTs)",
+      "url": "https://www.esma.europa.eu/sites/default/files/2024-12/EMTWP.csv",
+      "sha256": "5d63159cf4a5f11ffff065d0a48cc84384c7e7bd4a5c4d1e4896ddf3f2c198c3",
+      "bytes": 17957,
+      "retrieved": "2026-10-01T08:56:23Z"
+    },
+    "ARTZZ": {
+      "description": "Issuers of asset-referenced tokens",
+      "url": "https://www.esma.europa.eu/sites/default/files/2024-12/ARTZZ.csv",
+      "sha256": "fa1ef4da123e3d49642c69f90a81a88f6c2cc2a0b9471b2108e4dfc635ca7c67",
+      "bytes": 276,
+      "retrieved": "2026-10-01T08:56:23Z"
+    },
+    "NCASP": {
+      "description": "Non-compliant entities providing crypto-asset services",
+      "url": "https://www.esma.europa.eu/sites/default/files/2024-12/NCASP.csv",
+      "sha256": "ce2399201eb4e180901782734237971cb9239e55aa857a2c1aafab88e7ee9a21",
+      "bytes": 27052,
+      "retrieved": "2026-10-01T08:56:23Z"
+    }
+  }
+}

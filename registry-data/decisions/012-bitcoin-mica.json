@@ -1,0 +1,33 @@
+{
+  "status": "DRAFT - unsigned; for provider-committee review",
+  "network": "bitcoin",
+  "name": "Bitcoin",
+  "label": "MICA",
+  "decision": {
+    "action": 1,
+    "payload": "0x00000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000006c9ed6000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000276269703132323a3030303030303030303031396436363839633038356165313635383331653933000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "evidenceHash": "0x42f7ddd524ff7527232dd7a5552c04b74076bdfad76beb2bccc6d0634daef35a",
+    "nonce": 12,
+    "effectiveAt": 0,
+    "validUntil": 1798675200,
+    "epoch": 0
+  },
+  "payload_decoded": {
+    "ledgerId": "bip122:000000000019d6689c085ae165831e93",
+    "label": 2,
+    "expiry": 1822348800,
+    "emissionsUg": 0,
+    "emissionsSource": ""
+  },
+  "payload_abi": "(string ledgerId, uint8 label, uint64 expiry, uint64 emissionsUg, string emissionsSource)",
+  "evidence_record": "evidence/bitcoin.mica.json",
+  "evidence_hash_rule": "sha256 over the exact bytes of the evidence file minus its trailing newline (canonical JSON: sorted keys, no spaces, UTF-8)",
+  "digest": "0x49c8a3b798170db9cfd934c1ae80616ea6b78ff4e39cfdace06d4c0d45f88038",
+  "eip191_hash_to_sign": "0x99ce1f3fa5865d74b9af2ed34aad745a1be7417552203ac7525228d9b7df0a5e",
+  "signatures": [],
+  "notes": [
+    "Provisional. The registry only accepts nonce == version + 1, so nonces must be renumbered against the live registry version at signing time; renumbering changes the digest.",
+    "Must satisfy effectiveFrom < expiry <= effectiveFrom + 366 days. Relaying before 2026-12-31 with a 7-day notice keeps this valid.",
+    "0 = as soon as the registry's CERT_NOTICE has passed after relay (effectiveFrom = max(effectiveAt, block.timestamp + CERT_NOTICE))."
+  ]
+}

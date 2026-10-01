@@ -1,0 +1,33 @@
+{
+  "status": "DRAFT - unsigned; for provider-committee review",
+  "network": "cronos",
+  "name": "Cronos",
+  "label": "MICA",
+  "decision": {
+    "action": 1,
+    "payload": "0x00000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000006c9ed600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000019636f736d6f733a63726f6e6f736d61696e6e65745f32352d31000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "evidenceHash": "0xe264c697a60fc3ce4676678e0b9ad4ed6c9a4b5bfb46f9a302e2d4bd78cc0371",
+    "nonce": 32,
+    "effectiveAt": 0,
+    "validUntil": 1798675200,
+    "epoch": 0
+  },
+  "payload_decoded": {
+    "ledgerId": "cosmos:cronosmainnet_25-1",
+    "label": 2,
+    "expiry": 1822348800,
+    "emissionsUg": 0,
+    "emissionsSource": ""
+  },
+  "payload_abi": "(string ledgerId, uint8 label, uint64 expiry, uint64 emissionsUg, string emissionsSource)",
+  "evidence_record": "evidence/cronos.mica.json",
+  "evidence_hash_rule": "sha256 over the exact bytes of the evidence file minus its trailing newline (canonical JSON: sorted keys, no spaces, UTF-8)",
+  "digest": "0x4595c528f4875d02751b75c3efa86c353004a993e76dc85fcb15e8e742ba4f4b",
+  "eip191_hash_to_sign": "0x54b55d7cc0f5fc461c27aa43d599a03851863ede3f4696608d0a9770dd4e2d41",
+  "signatures": [],
+  "notes": [
+    "Provisional. The registry only accepts nonce == version + 1, so nonces must be renumbered against the live registry version at signing time; renumbering changes the digest.",
+    "Must satisfy effectiveFrom < expiry <= effectiveFrom + 366 days. Relaying before 2026-12-31 with a 7-day notice keeps this valid.",
+    "0 = as soon as the registry's CERT_NOTICE has passed after relay (effectiveFrom = max(effectiveAt, block.timestamp + CERT_NOTICE))."
+  ]
+}

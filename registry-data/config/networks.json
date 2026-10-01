@@ -1,0 +1,754 @@
+{
+  "_comment": "Networks reviewed for the MiCA / Energy / ISO 20022 filters. Order = Hedera first, then the order of the spec's 'Network compliance status' table. 'search' is a case-insensitive regex run over wp_url + wp_comments + filer names of ESMA's OTHER register; every hit must be classified by an 'accept' or 'reject' rule, otherwise build.py fails with 'unreviewed candidate'. Rules match on a lower-case substring of wp_url ('url') and/or the exact filer name ('filer'). 'ffg_dti' is the Functionally Fungible Group DTI asserted by the register row(s) we accept; build.py checks it against each row and against the DTI fields printed in the white paper itself. 'keywords' are the words a paper's S.9 network list must contain (template-error check).",
+  "networks": [
+    {
+      "id": "hedera",
+      "name": "Hedera (Hiero)",
+      "token": "HBAR",
+      "caip2": "hedera:mainnet",
+      "caip2_source": "clprouter (src, sdk, test)",
+      "search": "hbar|hedera|hashgraph",
+      "keywords": [
+        "hedera",
+        "hbar"
+      ],
+      "ffg_dti": null,
+      "accept": [
+        {
+          "filer": "Hedera Hashgraph, LLC",
+          "note": "Filed by the issuer, admitted to trading via Kraken (Payward Global Solutions LTD)"
+        },
+        {
+          "url": "lcx.com/hbar-mica-white-paper",
+          "note": "Filed by LCX AG as person seeking admission to trading"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "xrpl",
+      "name": "XRP Ledger",
+      "token": "XRP",
+      "caip2": "xrpl:0",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "xrp|ripple",
+      "keywords": [
+        "xrp",
+        "ripple"
+      ],
+      "ffg_dti": "42PHJB2BS",
+      "accept": [
+        {
+          "url": "ripple-xrp-ffg-42phjb2bs"
+        },
+        {
+          "url": "lcx.com/xrp-mica-white-paper"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "stellar",
+      "name": "Stellar",
+      "token": "XLM",
+      "caip2": "stellar:pubnet",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "stellar|xlm|lumen",
+      "keywords": [
+        "stellar",
+        "xlm"
+      ],
+      "ffg_dti": "ZCN8SR2H7",
+      "accept": [
+        {
+          "url": "stellar-lumen-ffg-zcn8sr2h7"
+        }
+      ],
+      "reject": [
+        {
+          "filer": "Lumen ServiceCo (BVI) Ltd.",
+          "reason": "Perle token (perle.micarwhitepapers.eu, FFG HMV8HH1KW); matched only on the word 'lumen' in the filer name"
+        }
+      ]
+    },
+    {
+      "id": "algorand",
+      "name": "Algorand",
+      "token": "ALGO",
+      "caip2": "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73k",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "algorand|[-/]algo[-/]",
+      "keywords": [
+        "algorand"
+      ],
+      "ffg_dti": "K8S6W74KS",
+      "accept": [
+        {
+          "url": "algorand-ffg-k8s6w74ks"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "cardano",
+      "name": "Cardano",
+      "token": "ADA",
+      "caip2": "cip34:1-764824073",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "cardano|[-/]ada[-/]",
+      "keywords": [
+        "cardano"
+      ],
+      "ffg_dti": "76QS7QCXB",
+      "accept": [
+        {
+          "url": "cardano-ada-ffg-76qs7qcxb"
+        },
+        {
+          "url": "lcx.com/ada-mica-white-paper"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "ethereum",
+      "name": "Ethereum",
+      "token": "ETH",
+      "caip2": "eip155:1",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "ethereum|[-/]eth[-/.]",
+      "keywords": [
+        "ethereum"
+      ],
+      "ffg_dti": "D5RG2FHH0",
+      "accept": [
+        {
+          "url": "ethereum-ffg-d5rg2fhh0"
+        },
+        {
+          "url": "ethereum-eth-ffg-d5rg2fhh0"
+        },
+        {
+          "url": "lcx.com/eth-mica-white-paper"
+        }
+      ],
+      "reject": [
+        {
+          "url": "ethereum-classic",
+          "reason": "Ethereum Classic (ETC), FFG DTI DGMQMFZD4 - a different network"
+        },
+        {
+          "url": "ethereum-name-service",
+          "reason": "ENS token issued on Ethereum, not the native asset"
+        }
+      ],
+      "dti_collision_reject": [
+        {
+          "filer": "OneFootball Capital GmbH",
+          "reason": "OneFootball token. Its register row carries DTI X9J9K872S, which is the DTI of ETH on Ethereum (as printed in Crypto Risk Metrics' ETH rows) - a DTI collision, not an ETH white paper"
+        }
+      ]
+    },
+    {
+      "id": "bitcoin",
+      "name": "Bitcoin",
+      "token": "BTC",
+      "caip2": "bip122:000000000019d6689c085ae165831e93",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "bitcoin|[-/]btc[-/]",
+      "keywords": [
+        "bitcoin"
+      ],
+      "ffg_dti": "V15WLZJMF",
+      "accept": [
+        {
+          "url": "bitcoin-ffg-v15wlzjmf"
+        },
+        {
+          "url": "lcx.com/btc-mica-white-paper"
+        }
+      ],
+      "reject": [
+        {
+          "url": "bitcoin-cash",
+          "reason": "Bitcoin Cash (BCH), FFG DTI 919BF3W7L - a different network"
+        },
+        {
+          "filer": "CheerBitcoin SASU",
+          "reason": "CheerBitcoin's own token, not BTC"
+        },
+        {
+          "filer": "Liquid Bitcoin Foundation ",
+          "reason": "Lombard LBTC (wrapped BTC token), not native BTC"
+        },
+        {
+          "filer": "Chain Cross LTD",
+          "reason": "Portal to Bitcoin (PTB) token"
+        },
+        {
+          "filer": "Parallel Execution Foundation",
+          "reason": "Fractal Bitcoin (FB), a separate network"
+        },
+        {
+          "filer": "Bitcoin HT, LLC",
+          "reason": "Paper calls its asset 'Bitcoin'/'BTC' but the register row carries DTI QJJ02KRR0 / FFG G623SB2VS, which do not match BTC (FFG V15WLZJMF); rejected on the DTI check"
+        }
+      ]
+    },
+    {
+      "id": "solana",
+      "name": "Solana",
+      "token": "SOL",
+      "caip2": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "solana|[-/]sol[-/]",
+      "keywords": [
+        "solana"
+      ],
+      "ffg_dti": "6QZ1LNC12",
+      "accept": [
+        {
+          "url": "solana-sol-ffg-6qz1lnc12"
+        },
+        {
+          "url": "lcx.com/sol-mica-white-paper"
+        }
+      ],
+      "reject": [
+        {
+          "url": "jito-staked-sol",
+          "reason": "JitoSOL liquid-staking token, FFG QF1G0XXMM"
+        },
+        {
+          "filer": "Solana Mobile, Inc.",
+          "reason": "Solana Mobile token (DTI 3B29MH8TM in later row), not SOL"
+        },
+        {
+          "filer": "Solana Mobile Inc.",
+          "reason": "Solana Mobile token, DTI 3B29MH8TM, not SOL"
+        }
+      ]
+    },
+    {
+      "id": "bnb",
+      "name": "BNB Chain",
+      "token": "BNB",
+      "caip2": "eip155:56",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "bnb|binance",
+      "keywords": [
+        "binance",
+        "bnb",
+        "bsc"
+      ],
+      "ffg_dti": "8N2VXJKB1",
+      "accept": [
+        {
+          "url": "binance-coin-ffg-8n2vxjkb1"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "tron",
+      "name": "TRON",
+      "token": "TRX",
+      "caip2": "tron:0x2b6653dc",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "\\btron\\b|tron-|trx",
+      "keywords": [
+        "tron"
+      ],
+      "ffg_dti": "HZ9HHNPLG",
+      "accept": [
+        {
+          "url": "lcx.com/tron-mica-white-paper"
+        },
+        {
+          "url": "white-paper-tron-trx-ffg-hz9hhnplg"
+        },
+        {
+          "filer": "Tron Tech Limited"
+        }
+      ],
+      "reject": [
+        {
+          "filer": "CheerBitcoin SASU",
+          "reason": "CheerBitcoin token; matched only on the word 'tron' in the comments"
+        },
+        {
+          "filer": "Stronghold Anchor Limited",
+          "reason": "Stronghold SHX token; matched on 'trx' inside its DTI list"
+        }
+      ]
+    },
+    {
+      "id": "avalanche",
+      "name": "Avalanche C-Chain",
+      "token": "AVAX",
+      "caip2": "eip155:43114",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "avax|avalanche",
+      "keywords": [
+        "avalanche",
+        "avax"
+      ],
+      "ffg_dti": "S6JCBF70N",
+      "accept": [
+        {
+          "url": "avalanche-ffg-s6jcbf70n"
+        },
+        {
+          "url": "lcx.com/avax-mica-white-paper"
+        }
+      ],
+      "reject": [
+        {
+          "filer": "Aivalanche LLC",
+          "reason": "AVAXAI token, not AVAX"
+        }
+      ]
+    },
+    {
+      "id": "polygon",
+      "name": "Polygon PoS",
+      "token": "POL",
+      "caip2": "eip155:137",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "polygon|matic|[-/]pol[-/]",
+      "keywords": [
+        "polygon"
+      ],
+      "ffg_dti": "GB8DQ8DWN",
+      "accept": [
+        {
+          "url": "polygon-pol-ffg-gb8dq8dwn"
+        },
+        {
+          "url": "pol-micar-whitepaper"
+        },
+        {
+          "url": "lcx.com/pol-mica-white-paper"
+        },
+        {
+          "url": "white-paper-polygon-pol-ffg-gb8dq8dwn"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "arbitrum",
+      "name": "Arbitrum One",
+      "token": "ARB",
+      "caip2": "eip155:42161",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "arbitrum|[-/]arb[-/]",
+      "keywords": [
+        "arbitrum"
+      ],
+      "ffg_dti": "44TP35HF9",
+      "accept": [
+        {
+          "url": "arbitrum-ffg-44tp35hf9"
+        },
+        {
+          "url": "lcx.com/arb-mica-white-paper"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "op",
+      "name": "OP Mainnet",
+      "token": "OP",
+      "caip2": "eip155:10",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "optimism|[-/]op[-/]",
+      "keywords": [
+        "optimism"
+      ],
+      "ffg_dti": null,
+      "accept": [
+        {
+          "url": "lcx.com/op-mica-white-paper"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "mantle",
+      "name": "Mantle",
+      "token": "MNT",
+      "caip2": "eip155:5000",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "mantle|[-/]mnt[-/_]",
+      "keywords": [
+        "mantle"
+      ],
+      "ffg_dti": "QH1GF1J5H",
+      "accept": [
+        {
+          "url": "mantle-ffg-qh1gf1j5h"
+        },
+        {
+          "url": "lcx.com/mnt-mica-white-paper"
+        },
+        {
+          "url": "whitepaper/mnt_"
+        }
+      ],
+      "reject": [
+        {
+          "filer": "MantleLSP Limited",
+          "reason": "mETH / cmETH liquid-staking tokens (FFG VSK737T5N), not MNT"
+        }
+      ]
+    },
+    {
+      "id": "zksync",
+      "name": "ZKsync Era",
+      "token": "ZK",
+      "caip2": "eip155:324",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "zksync|zknation|[-/]zk[-/_]",
+      "keywords": [
+        "zksync"
+      ],
+      "ffg_dti": "BCBLPFRBX",
+      "accept": [
+        {
+          "url": "zknation.io",
+          "note": "Register URL is the project home page, not the paper"
+        },
+        {
+          "url": "whitepaper/zk_",
+          "note": "Bitstamp filing; FFG DTI BCBLPFRBX matches the ZKsync Association row"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "polkadot",
+      "name": "Polkadot",
+      "token": "DOT",
+      "caip2": "polkadot:91b171bb158e2d3848fa23a9f1c25182",
+      "caip2_source": "CAIP-2 polkadot namespace (genesis hash prefix); not in sdk/data/chains.json - confirm before signing",
+      "search": "polkadot|[-/]dot[-/]",
+      "keywords": [
+        "polkadot"
+      ],
+      "ffg_dti": "SGD9NLTRG",
+      "accept": [
+        {
+          "url": "polkadot-dot-ffg-sgd9nltrg"
+        },
+        {
+          "url": "lcx.com/dot-mica-white-paper"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "cosmoshub",
+      "name": "Cosmos Hub",
+      "token": "ATOM",
+      "caip2": "cosmos:cosmoshub-4",
+      "caip2_source": "CAIP-2 cosmos namespace; not in sdk/data/chains.json - confirm before signing",
+      "search": "cosmos|[-/]atom[-/]",
+      "keywords": [
+        "cosmos"
+      ],
+      "ffg_dti": "6C7F2WVZH",
+      "accept": [
+        {
+          "url": "cosmos-atom-ffg-6c7f2wvzh"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "injective",
+      "name": "Injective",
+      "token": "INJ",
+      "caip2": "cosmos:injective-1",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "injective|[-/]inj[-/]",
+      "keywords": [
+        "injective"
+      ],
+      "ffg_dti": "92M9B0DZ7",
+      "accept": [
+        {
+          "url": "injective-token-ffg-92m9b0dz7"
+        },
+        {
+          "filer": "Injective Foundation",
+          "note": "Register URL is a research page, not the paper"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "dydx",
+      "name": "dYdX",
+      "token": "DYDX",
+      "caip2": "cosmos:dydx-mainnet-1",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "dydx",
+      "keywords": [
+        "dydx"
+      ],
+      "ffg_dti": "1HZHK551M",
+      "accept": [
+        {
+          "url": "dydx-ffg-1hzhk551m"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "cronos",
+      "name": "Cronos",
+      "token": "CRO",
+      "caip2": "cosmos:cronosmainnet_25-1",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "cronos|[-/]cro[-/]",
+      "keywords": [
+        "cronos"
+      ],
+      "ffg_dti": "GWM30MLW3",
+      "accept": [
+        {
+          "url": "cronos-ffg-gwm30mlw3"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "flare",
+      "name": "Flare",
+      "token": "FLR",
+      "caip2": "eip155:14",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "flare|[-/_]flr[-/_]",
+      "keywords": [
+        "flare"
+      ],
+      "ffg_dti": "DVRV6HSK5",
+      "accept": [
+        {
+          "url": "whitepaper/flr_"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "canton",
+      "name": "Canton",
+      "token": "CC",
+      "caip2": "canton:global",
+      "caip2_source": "provisional (no CAIP-2 namespace yet; sdk/data/chains.json pins canton:sandbox for e2e) - confirm before signing",
+      "search": "canton",
+      "keywords": [
+        "canton"
+      ],
+      "ffg_dti": null,
+      "accept": [
+        {
+          "filer": "Canton Foundation"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "sui",
+      "name": "Sui",
+      "token": "SUI",
+      "caip2": "sui:mainnet",
+      "caip2_source": "CAIP-2 sui namespace; not in sdk/data/chains.json - confirm before signing",
+      "search": "\\bsui\\b|[-/]sui[-/]",
+      "keywords": [
+        "sui"
+      ],
+      "ffg_dti": "64RFW3D8P",
+      "accept": [
+        {
+          "url": "sui-ffg-64rfw3d8p"
+        },
+        {
+          "url": "lcx.com/sui-mica-white-paper"
+        },
+        {
+          "filer": "Sui Foundation ",
+          "note": "Register URL is a trading-platform policy page; token identity rests on the filer name only (no DTI in the row)"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "aptos",
+      "name": "Aptos",
+      "token": "APT",
+      "caip2": "aptos:1",
+      "caip2_source": "CAIP-2 aptos namespace; not in sdk/data/chains.json - confirm before signing",
+      "search": "aptos|[-/]apt[-/]",
+      "keywords": [
+        "aptos"
+      ],
+      "ffg_dti": "C4CQCGLH2",
+      "accept": [
+        {
+          "url": "aptos-coin-ffg-c4cqcglh2"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "near",
+      "name": "NEAR",
+      "token": "NEAR",
+      "caip2": "near:mainnet",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "\\bnear\\b|[-/]near[-/]",
+      "keywords": [
+        "near"
+      ],
+      "ffg_dti": null,
+      "accept": [
+        {
+          "url": "lcx.com/near-mica-white-paper"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "ton",
+      "name": "TON",
+      "token": "TON",
+      "caip2": "ton:mainnet",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "toncoin|[-/]ton[-/]|\\bton\\b|gram-ffg",
+      "keywords": [
+        "ton"
+      ],
+      "ffg_dti": "KK12JMBTX",
+      "accept": [
+        {
+          "url": "toncoin-ffg-kk12jmbtx"
+        },
+        {
+          "url": "lcx.com/ton-mica-white-paper"
+        },
+        {
+          "url": "gram-ffg-kk12jmbtx",
+          "note": "Crypto Risk Metrics re-filed the Toncoin paper under the name 'Gram' (TON's original name); same FFG DTI KK12JMBTX and DTI QBZLT5MT1 as its Toncoin row"
+        }
+      ],
+      "reject": [],
+      "dti_collision_reject": [
+        {
+          "filer": "DuckChain Foundation",
+          "reason": "DuckChain token (DUCK). Its register row carries DTI QBZLT5MT1, the same DTI as Crypto Risk Metrics' Toncoin row - a DTI collision, most likely the DTI of the TON-network implementation listed by mistake. Not a TON white paper."
+        }
+      ]
+    },
+    {
+      "id": "bittensor",
+      "name": "Bittensor",
+      "token": "TAO",
+      "caip2": "eip155:964",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "bittensor|opentensor|[-/]tao[-/]",
+      "keywords": [
+        "bittensor"
+      ],
+      "ffg_dti": "6N7FD6DBX",
+      "accept": [
+        {
+          "filer": "Opentensor Foundation"
+        }
+      ],
+      "reject": []
+    },
+    {
+      "id": "xdc",
+      "name": "XDC Network",
+      "token": "XDC",
+      "caip2": "eip155:50",
+      "caip2_source": "EVM chain id 50; not in sdk/data/chains.json - confirm before signing",
+      "search": "xdc|xinfin",
+      "keywords": [
+        "xdc"
+      ],
+      "ffg_dti": null,
+      "accept": [],
+      "reject": []
+    },
+    {
+      "id": "iota",
+      "name": "IOTA",
+      "token": "IOTA",
+      "caip2": "iota:mainnet",
+      "caip2_source": "assumed; no CAIP-2 namespace confirmed - confirm before signing",
+      "search": "\\biota\\b|[-/]iota[-/]",
+      "keywords": [
+        "iota"
+      ],
+      "ffg_dti": null,
+      "accept": [],
+      "reject": []
+    },
+    {
+      "id": "thorchain",
+      "name": "THORChain",
+      "token": "RUNE",
+      "caip2": "cosmos:thorchain-1",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "thorchain|\\brune\\b",
+      "keywords": [
+        "thorchain"
+      ],
+      "ffg_dti": null,
+      "accept": [],
+      "reject": []
+    },
+    {
+      "id": "starknet",
+      "name": "Starknet",
+      "token": "STRK",
+      "caip2": "starknet:SN_MAIN",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "starknet|strk",
+      "keywords": [
+        "starknet"
+      ],
+      "ffg_dti": null,
+      "accept": [],
+      "reject": [
+        {
+          "filer": "Ekubo, Inc.",
+          "reason": "EKUBO, a token issued on Starknet, not STRK"
+        }
+      ]
+    },
+    {
+      "id": "gnosis",
+      "name": "Gnosis Chain",
+      "token": "GNO",
+      "caip2": "eip155:100",
+      "caip2_source": "sdk/data/chains.json",
+      "search": "gnosis|\\bgno\\b|gno\\.|gnolang",
+      "keywords": [
+        "gnosis"
+      ],
+      "ffg_dti": null,
+      "accept": [],
+      "reject": [
+        {
+          "filer": "NewTendermint, LLC",
+          "reason": "gno.land (GNOT, gnolang) - a different project from Gnosis (GNO)"
+        }
+      ]
+    }
+  ]
+}

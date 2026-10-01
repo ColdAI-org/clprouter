@@ -1,0 +1,192 @@
+{
+  "checked": "2026-10-01",
+  "rmg_source": {
+    "url": "https://www.iso20022.org/registration-management-group-member-list",
+    "direct_fetch": "HTTP 403 on 2026-10-01 (blocked for non-browser clients)",
+    "used_instead": "https://web.archive.org/web/20260316023419id_/https://www.iso20022.org/registration-management-group-member-list",
+    "snapshot_date": "2026-03-16"
+  },
+  "rmg_blockchain_finding": "Of the launch-list networks, only Ripple (member entity 'RippleNet') appears on the RMG list.",
+  "launch_list": [
+    {
+      "network": "hedera",
+      "name": "Hedera (Hiero)",
+      "caip2": "hedera:mainnet",
+      "status": "provisional",
+      "evidence_level": "market-cited",
+      "rmg_matches": [],
+      "evidence": [
+        {
+          "kind": "rmg",
+          "finding": "Neither Hedera Hashgraph LLC, the Hedera Council nor any council member appears on the RMG list as a blockchain-network delegate."
+        },
+        {
+          "kind": "market",
+          "finding": "Appears on third-party 'ISO 20022 coin' lists, which the spec treats as marketing, not certification.",
+          "source": "https://coincodex.com/article/27964/iso-20022-crypto/"
+        }
+      ],
+      "route_to_full": "Criterion 1 (technical): our own ISO 20022 Router on Hedera passing the conformance suite.",
+      "criteria": {
+        "1_technical": "NOT MET - no CLPR Router with ISO 20022 payload handling deployed on this network; conformance suite not yet run",
+        "2_standards": "PROVISIONAL only (market-cited): no TC 68 participation, RA-registered message definitions or ISO/IEC 27001 evidence recorded",
+        "3_data_handling": "NOT YET DEMONSTRATED - enforced by the Router, which is not deployed",
+        "4_identified_operator": "NOT MET - no Router operator chosen"
+      },
+      "mica_white_paper": true,
+      "certification_ready": false
+    },
+    {
+      "network": "xrpl",
+      "name": "XRP Ledger",
+      "caip2": "xrpl:0",
+      "status": "provisional",
+      "evidence_level": "standards-body",
+      "rmg_matches": [
+        "RippleNet | Ripple"
+      ],
+      "evidence": [
+        {
+          "kind": "rmg",
+          "finding": "RippleNet is a member entity of the ISO 20022 Registration Management Group, delegate company 'Ripple'."
+        }
+      ],
+      "caveat": "The RMG seat belongs to Ripple (the company / RippleNet product), not to the XRP Ledger or the XRPL Foundation; the spec accepts it as the operator-side standards evidence.",
+      "criteria": {
+        "1_technical": "NOT MET - no CLPR Router with ISO 20022 payload handling deployed on this network; conformance suite not yet run",
+        "2_standards": "MET (standards body)",
+        "3_data_handling": "NOT YET DEMONSTRATED - enforced by the Router, which is not deployed",
+        "4_identified_operator": "NOT MET - no Router operator chosen"
+      },
+      "mica_white_paper": true,
+      "certification_ready": false
+    },
+    {
+      "network": "stellar",
+      "name": "Stellar",
+      "caip2": "stellar:pubnet",
+      "status": "provisional",
+      "evidence_level": "tooling",
+      "rmg_matches": [],
+      "evidence": [
+        {
+          "kind": "tooling",
+          "finding": "BP Ventures announced ISO 20022 message support for the Stellar network and Circle USDC (2023).",
+          "source": "https://www.bpventures.us/blog/bpv-announces-iso-20022-support-for-the-stellar-blockchain-and-circle-usdc"
+        },
+        {
+          "kind": "tooling",
+          "finding": "BP Ventures technical write-up of the ISO 20022 mapping on Stellar.",
+          "source": "https://www.bpventures.us/blog/iso-20022-with-stellar"
+        }
+      ],
+      "criteria": {
+        "1_technical": "NOT MET - no CLPR Router with ISO 20022 payload handling deployed on this network; conformance suite not yet run",
+        "2_standards": "PROVISIONAL only (tooling): no TC 68 participation, RA-registered message definitions or ISO/IEC 27001 evidence recorded",
+        "3_data_handling": "NOT YET DEMONSTRATED - enforced by the Router, which is not deployed",
+        "4_identified_operator": "NOT MET - no Router operator chosen"
+      },
+      "mica_white_paper": true,
+      "certification_ready": false
+    },
+    {
+      "network": "algorand",
+      "name": "Algorand",
+      "caip2": "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73k",
+      "status": "provisional",
+      "evidence_level": "market-cited",
+      "rmg_matches": [],
+      "evidence": [
+        {
+          "kind": "market",
+          "finding": "Appears on third-party 'ISO 20022 coin' lists only.",
+          "source": "https://coincodex.com/article/27964/iso-20022-crypto/"
+        }
+      ],
+      "criteria": {
+        "1_technical": "NOT MET - no CLPR Router with ISO 20022 payload handling deployed on this network; conformance suite not yet run",
+        "2_standards": "PROVISIONAL only (market-cited): no TC 68 participation, RA-registered message definitions or ISO/IEC 27001 evidence recorded",
+        "3_data_handling": "NOT YET DEMONSTRATED - enforced by the Router, which is not deployed",
+        "4_identified_operator": "NOT MET - no Router operator chosen"
+      },
+      "mica_white_paper": true,
+      "certification_ready": false
+    },
+    {
+      "network": "xdc",
+      "name": "XDC Network",
+      "caip2": "eip155:50",
+      "status": "provisional",
+      "evidence_level": "tooling",
+      "rmg_matches": [],
+      "evidence": [
+        {
+          "kind": "tooling",
+          "finding": "Impel, from XDC's founding company XinFin, offers an ISO 20022 financial-messaging API on the XDC Network.",
+          "source": "https://impel.xinfin.network/iso-20022.html"
+        }
+      ],
+      "criteria": {
+        "1_technical": "NOT MET - no CLPR Router with ISO 20022 payload handling deployed on this network; conformance suite not yet run",
+        "2_standards": "PROVISIONAL only (tooling): no TC 68 participation, RA-registered message definitions or ISO/IEC 27001 evidence recorded",
+        "3_data_handling": "NOT YET DEMONSTRATED - enforced by the Router, which is not deployed",
+        "4_identified_operator": "NOT MET - no Router operator chosen"
+      },
+      "mica_white_paper": false,
+      "certification_ready": false
+    },
+    {
+      "network": "iota",
+      "name": "IOTA",
+      "caip2": "iota:mainnet",
+      "status": "provisional",
+      "evidence_level": "market-cited",
+      "rmg_matches": [],
+      "evidence": [
+        {
+          "kind": "market",
+          "finding": "Appears on third-party 'ISO 20022 coin' lists only.",
+          "source": "https://coincodex.com/article/27964/iso-20022-crypto/"
+        }
+      ],
+      "criteria": {
+        "1_technical": "NOT MET - no CLPR Router with ISO 20022 payload handling deployed on this network; conformance suite not yet run",
+        "2_standards": "PROVISIONAL only (market-cited): no TC 68 participation, RA-registered message definitions or ISO/IEC 27001 evidence recorded",
+        "3_data_handling": "NOT YET DEMONSTRATED - enforced by the Router, which is not deployed",
+        "4_identified_operator": "NOT MET - no Router operator chosen"
+      },
+      "mica_white_paper": false,
+      "certification_ready": false
+    },
+    {
+      "network": "cardano",
+      "name": "Cardano",
+      "caip2": "cip34:1-764824073",
+      "status": "provisional",
+      "evidence_level": "market-cited",
+      "rmg_matches": [],
+      "evidence": [
+        {
+          "kind": "market",
+          "finding": "Appears on third-party 'ISO 20022 coin' lists only.",
+          "source": "https://coincodex.com/article/27964/iso-20022-crypto/"
+        }
+      ],
+      "criteria": {
+        "1_technical": "NOT MET - no CLPR Router with ISO 20022 payload handling deployed on this network; conformance suite not yet run",
+        "2_standards": "PROVISIONAL only (market-cited): no TC 68 participation, RA-registered message definitions or ISO/IEC 27001 evidence recorded",
+        "3_data_handling": "NOT YET DEMONSTRATED - enforced by the Router, which is not deployed",
+        "4_identified_operator": "NOT MET - no Router operator chosen"
+      },
+      "mica_white_paper": true,
+      "certification_ready": false
+    }
+  ],
+  "not_listed": [
+    {
+      "name": "Quant (QNT)",
+      "reason": "A token on other networks, not a network a route can pass through (spec)."
+    }
+  ],
+  "summary": "No launch-list network meets all four registry criteria today, so no ISO 20022 certification decision is drafted."
+}

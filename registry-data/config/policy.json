@@ -1,0 +1,20 @@
+{
+  "_comment": "Parameters for the draft committee decisions. Every value here is a proposal for the committee; nothing is signed. Times are unix seconds (UTC).",
+  "registry_domain": "CLPRouter.ProviderRegistry.v1",
+  "action_certify": 1,
+  "labels": {"ISO20022": 1, "MICA": 2, "ENERGY": 3},
+  "epoch": 0,
+  "first_nonce": 1,
+  "nonce_note": "Provisional. The registry only accepts nonce == version + 1, so nonces must be renumbered against the live registry version at signing time; renumbering changes the digest.",
+  "effective_at": 0,
+  "effective_at_note": "0 = as soon as the registry's CERT_NOTICE has passed after relay (effectiveFrom = max(effectiveAt, block.timestamp + CERT_NOTICE)).",
+  "valid_until": 1798675200,
+  "valid_until_iso": "2026-12-31T00:00:00Z",
+  "expiry": 1822348800,
+  "expiry_iso": "2027-10-01T00:00:00Z",
+  "expiry_note": "Must satisfy effectiveFrom < expiry <= effectiveFrom + 366 days. Relaying before 2026-12-31 with a 7-day notice keeps this valid.",
+  "energy": {
+    "max_low_precision_relative_half_interval": 0.5,
+    "implausible_grid_intensity_kg_per_kwh": 1.0
+  }
+}

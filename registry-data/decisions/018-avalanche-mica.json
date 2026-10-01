@@ -1,0 +1,33 @@
+{
+  "status": "DRAFT - unsigned; for provider-committee review",
+  "network": "avalanche",
+  "name": "Avalanche C-Chain",
+  "label": "MICA",
+  "decision": {
+    "action": 1,
+    "payload": "0x00000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000006c9ed600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000000c6569703135353a343331313400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "evidenceHash": "0xa67b43d3b20bec19b8053a6c8ff9dcb6296d5a28eb1623d0f4ca85403398400d",
+    "nonce": 18,
+    "effectiveAt": 0,
+    "validUntil": 1798675200,
+    "epoch": 0
+  },
+  "payload_decoded": {
+    "ledgerId": "eip155:43114",
+    "label": 2,
+    "expiry": 1822348800,
+    "emissionsUg": 0,
+    "emissionsSource": ""
+  },
+  "payload_abi": "(string ledgerId, uint8 label, uint64 expiry, uint64 emissionsUg, string emissionsSource)",
+  "evidence_record": "evidence/avalanche.mica.json",
+  "evidence_hash_rule": "sha256 over the exact bytes of the evidence file minus its trailing newline (canonical JSON: sorted keys, no spaces, UTF-8)",
+  "digest": "0x9db203c73d371bc13d067ca1cfcdded046eb67d704b8836a21ac62916e662326",
+  "eip191_hash_to_sign": "0x98e6d68966a8e3e12d7b162d1042793c3f7af52962a4a497c3b206e939bc638d",
+  "signatures": [],
+  "notes": [
+    "Provisional. The registry only accepts nonce == version + 1, so nonces must be renumbered against the live registry version at signing time; renumbering changes the digest.",
+    "Must satisfy effectiveFrom < expiry <= effectiveFrom + 366 days. Relaying before 2026-12-31 with a 7-day notice keeps this valid.",
+    "0 = as soon as the registry's CERT_NOTICE has passed after relay (effectiveFrom = max(effectiveAt, block.timestamp + CERT_NOTICE))."
+  ]
+}

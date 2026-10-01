@@ -1,0 +1,33 @@
+{
+  "status": "DRAFT - unsigned; for provider-committee review",
+  "network": "solana",
+  "name": "Solana",
+  "label": "MICA",
+  "decision": {
+    "action": 1,
+    "payload": "0x00000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000006c9ed600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000027736f6c616e613a3565796b7434557346763850384e4a64545245705931767a714b715a4b766470000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "evidenceHash": "0x1bef30b7956450e65ee924a15dc975221992987c4e7a98e08499d07ca69eb454",
+    "nonce": 14,
+    "effectiveAt": 0,
+    "validUntil": 1798675200,
+    "epoch": 0
+  },
+  "payload_decoded": {
+    "ledgerId": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+    "label": 2,
+    "expiry": 1822348800,
+    "emissionsUg": 0,
+    "emissionsSource": ""
+  },
+  "payload_abi": "(string ledgerId, uint8 label, uint64 expiry, uint64 emissionsUg, string emissionsSource)",
+  "evidence_record": "evidence/solana.mica.json",
+  "evidence_hash_rule": "sha256 over the exact bytes of the evidence file minus its trailing newline (canonical JSON: sorted keys, no spaces, UTF-8)",
+  "digest": "0xf32c82c13b612b1adb28e281cf1daed10ab47be611391b44482679bab4f79f74",
+  "eip191_hash_to_sign": "0x7c65a50cd806f3392e0360d3a33a6353c3e443576c4e88a58d22b8ff28a326b3",
+  "signatures": [],
+  "notes": [
+    "Provisional. The registry only accepts nonce == version + 1, so nonces must be renumbered against the live registry version at signing time; renumbering changes the digest.",
+    "Must satisfy effectiveFrom < expiry <= effectiveFrom + 366 days. Relaying before 2026-12-31 with a 7-day notice keeps this valid.",
+    "0 = as soon as the registry's CERT_NOTICE has passed after relay (effectiveFrom = max(effectiveAt, block.timestamp + CERT_NOTICE))."
+  ]
+}

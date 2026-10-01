@@ -1,0 +1,33 @@
+{
+  "status": "DRAFT - unsigned; for provider-committee review",
+  "network": "flare",
+  "name": "Flare",
+  "label": "MICA",
+  "decision": {
+    "action": 1,
+    "payload": "0x00000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000006c9ed600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000000096569703135353a313400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "evidenceHash": "0x3b61edc955cae1e215ccc3fd82bbc17d6154cb0f61d426ad81896762d2b27694",
+    "nonce": 34,
+    "effectiveAt": 0,
+    "validUntil": 1798675200,
+    "epoch": 0
+  },
+  "payload_decoded": {
+    "ledgerId": "eip155:14",
+    "label": 2,
+    "expiry": 1822348800,
+    "emissionsUg": 0,
+    "emissionsSource": ""
+  },
+  "payload_abi": "(string ledgerId, uint8 label, uint64 expiry, uint64 emissionsUg, string emissionsSource)",
+  "evidence_record": "evidence/flare.mica.json",
+  "evidence_hash_rule": "sha256 over the exact bytes of the evidence file minus its trailing newline (canonical JSON: sorted keys, no spaces, UTF-8)",
+  "digest": "0x246af0751cc1516296351ce74c511d9ceb98ad1bca7155711d4b093b3fde302a",
+  "eip191_hash_to_sign": "0x703acecf86ad5b9d853828464fa0342707ecc3d87df7a5e410abe1d8f8584759",
+  "signatures": [],
+  "notes": [
+    "Provisional. The registry only accepts nonce == version + 1, so nonces must be renumbered against the live registry version at signing time; renumbering changes the digest.",
+    "Must satisfy effectiveFrom < expiry <= effectiveFrom + 366 days. Relaying before 2026-12-31 with a 7-day notice keeps this valid.",
+    "0 = as soon as the registry's CERT_NOTICE has passed after relay (effectiveFrom = max(effectiveAt, block.timestamp + CERT_NOTICE))."
+  ]
+}

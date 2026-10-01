@@ -1,0 +1,35 @@
+{
+  "status": "DRAFT - unsigned; for provider-committee review",
+  "network": "tron",
+  "name": "TRON",
+  "label": "ENERGY",
+  "decision": {
+    "action": 1,
+    "payload": "0x00000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000006c9ed600000000000000000000000000000000000000000000000000000000000000271000000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000000f74726f6e3a30783262363635336463000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000554d69434120575020532e313420302e3030303031206b67434f32652f74783b204c43582041473b20706572696f6420746f20323032342d30352d31383b207368613235363a353837346331356266653637313538660000000000000000000000",
+    "evidenceHash": "0x86edeebeff9de86f6ee00158babbfba368dbae672dd98edbf0e7a145816d825d",
+    "nonce": 17,
+    "effectiveAt": 0,
+    "validUntil": 1798675200,
+    "epoch": 0
+  },
+  "payload_decoded": {
+    "ledgerId": "tron:0x2b6653dc",
+    "label": 3,
+    "expiry": 1822348800,
+    "emissionsUg": 10000,
+    "emissionsSource": "MiCA WP S.14 0.00001 kgCO2e/tx; LCX AG; period to 2024-05-18; sha256:5874c15bfe67158f"
+  },
+  "payload_abi": "(string ledgerId, uint8 label, uint64 expiry, uint64 emissionsUg, string emissionsSource)",
+  "evidence_record": "evidence/tron.energy.json",
+  "evidence_hash_rule": "sha256 over the exact bytes of the evidence file minus its trailing newline (canonical JSON: sorted keys, no spaces, UTF-8)",
+  "digest": "0x6cb59a2be8661ea09a6bdf4d81e263c70b35497c84c93cad2925544adf9bc885",
+  "eip191_hash_to_sign": "0xa87948b9af09424aff6aa4821bdc3f0a405e9c6f8cd2f8227943594bf015a615",
+  "signatures": [],
+  "notes": [
+    "Provisional. The registry only accepts nonce == version + 1, so nonces must be renumbered against the live registry version at signing time; renumbering changes the digest.",
+    "Must satisfy effectiveFrom < expiry <= effectiveFrom + 366 days. Relaying before 2026-12-31 with a 7-day notice keeps this valid.",
+    "0 = as soon as the registry's CERT_NOTICE has passed after relay (effectiveFrom = max(effectiveAt, block.timestamp + CERT_NOTICE)).",
+    "printed to 5 decimals: the true value lies anywhere in [5000, 15000] ugCO2e",
+    "DISCLOSURE_PERIOD_NOT_ONE_YEAR: S.6 2024-05-18 to S.7 2024-05-18 is 0 days; MiCA asks for a 12-month period (warning only)"
+  ]
+}

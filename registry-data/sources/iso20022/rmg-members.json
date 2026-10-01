@@ -1,0 +1,245 @@
+{
+  "source": "https://web.archive.org/web/20260316023419id_/https://www.iso20022.org/registration-management-group-member-list",
+  "snapshot": "2026-03-16",
+  "html_sha256": "fc4d2405ddae4b72e48c3425b7f6ba5ecaab9f0a54606f07e6f17230474de31e",
+  "header": "The RMG has 43 delegations from the following Member Entities:",
+  "member_company_pairs": [
+    {
+      "member_entity": "ABNT",
+      "company": "IPMF Global"
+    },
+    {
+      "member_entity": "ABNT",
+      "company": "BVMF"
+    },
+    {
+      "member_entity": "ACTUS",
+      "company": "ACTUS Financial Research Foundation"
+    },
+    {
+      "member_entity": "ACTUS",
+      "company": "Tahoe Blue Ltd"
+    },
+    {
+      "member_entity": "ACTUS",
+      "company": "Ariadne"
+    },
+    {
+      "member_entity": "ASI",
+      "company": "UniCredit Group"
+    },
+    {
+      "member_entity": "ASI",
+      "company": "PSA"
+    },
+    {
+      "member_entity": "Bank of England",
+      "company": "BIS"
+    },
+    {
+      "member_entity": "Royal Bank of India",
+      "company": "BOK"
+    },
+    {
+      "member_entity": "Bank of Korea",
+      "company": "SFONB"
+    },
+    {
+      "member_entity": "Comité Français d'Organisation et de Normalisation Bancaires",
+      "company": "CFONB"
+    },
+    {
+      "member_entity": "Societe Generale",
+      "company": "CFONB"
+    },
+    {
+      "member_entity": "BNP Paribas",
+      "company": "CFTC"
+    },
+    {
+      "member_entity": "Commodity Futures Trading Commission",
+      "company": "Clearstream"
+    },
+    {
+      "member_entity": "Clearstream",
+      "company": "DBA"
+    },
+    {
+      "member_entity": "FIDA",
+      "company": "DBA"
+    },
+    {
+      "member_entity": "Mastercard",
+      "company": "DIN"
+    },
+    {
+      "member_entity": "BaFin",
+      "company": "DIN"
+    },
+    {
+      "member_entity": "EURO Kartensysteme",
+      "company": "DTCC"
+    },
+    {
+      "member_entity": "DTCC",
+      "company": "ECB"
+    },
+    {
+      "member_entity": "ECB",
+      "company": "EPC"
+    },
+    {
+      "member_entity": "EPC",
+      "company": "Euroclear"
+    },
+    {
+      "member_entity": "Euroclear",
+      "company": "FIX Protocol Ltd"
+    },
+    {
+      "member_entity": "Brook Path Partners",
+      "company": "GPCS"
+    },
+    {
+      "member_entity": "Global Payments Consulting Services",
+      "company": "Enterprise Singapore"
+    },
+    {
+      "member_entity": "TechCreate",
+      "company": "ISDA/FpML"
+    },
+    {
+      "member_entity": "TradeHeader",
+      "company": "ISITC"
+    },
+    {
+      "member_entity": "State Street",
+      "company": "ISITC"
+    },
+    {
+      "member_entity": "Wisdomtree",
+      "company": "ISO 20022 RA"
+    },
+    {
+      "member_entity": "SWIFT",
+      "company": "JISC"
+    },
+    {
+      "member_entity": "Bank of Japan",
+      "company": "Japan"
+    },
+    {
+      "member_entity": "JP Morgan Chase",
+      "company": "Korea"
+    },
+    {
+      "member_entity": "KATS",
+      "company": "Korea"
+    },
+    {
+      "member_entity": "KFTC",
+      "company": "Mastercard"
+    },
+    {
+      "member_entity": "Mojaloop Foundation",
+      "company": "NACHA, IFX Forum"
+    },
+    {
+      "member_entity": "Afinis",
+      "company": "NEN"
+    },
+    {
+      "member_entity": "Betaalvereniging",
+      "company": "NEN"
+    },
+    {
+      "member_entity": "PKN",
+      "company": "Nexo standards"
+    },
+    {
+      "member_entity": "Nexo Standards",
+      "company": "OMG"
+    },
+    {
+      "member_entity": "Pay UK",
+      "company": "Pay UK & Bloomberg"
+    },
+    {
+      "member_entity": "RippleNet",
+      "company": "Ripple"
+    },
+    {
+      "member_entity": "SA",
+      "company": "NPPA"
+    },
+    {
+      "member_entity": "SAC",
+      "company": "CFIT"
+    },
+    {
+      "member_entity": "SAC",
+      "company": "CIPS"
+    },
+    {
+      "member_entity": "SASFS",
+      "company": "SIX Group"
+    },
+    {
+      "member_entity": "SCC",
+      "company": "Payments Canada"
+    },
+    {
+      "member_entity": "SFS",
+      "company": "OP Finland"
+    },
+    {
+      "member_entity": "SIS",
+      "company": "SEB"
+    },
+    {
+      "member_entity": "SIS",
+      "company": "Swedish Standards Institute (SIS)"
+    },
+    {
+      "member_entity": "SN",
+      "company": "DnB NOR Bank"
+    },
+    {
+      "member_entity": "SN",
+      "company": "Bits AS"
+    },
+    {
+      "member_entity": "South Africa",
+      "company": "ABSA Bank"
+    },
+    {
+      "member_entity": "Enterprise Singapore",
+      "company": "Zensung PTE Ltd"
+    },
+    {
+      "member_entity": "SWIFT",
+      "company": "UNI"
+    },
+    {
+      "member_entity": "Kworks, CBI",
+      "company": "UNI"
+    },
+    {
+      "member_entity": "CBI Consortium",
+      "company": "UNI"
+    },
+    {
+      "member_entity": "UNI",
+      "company": "X9"
+    },
+    {
+      "member_entity": "Bloomberg",
+      "company": "X9"
+    },
+    {
+      "member_entity": "JP Morgan Chase",
+      "company": "VISA International"
+    }
+  ],
+  "parse_note": "Pairs read in page order from the 'RMG member list' table (Member entity, Company)."
+}

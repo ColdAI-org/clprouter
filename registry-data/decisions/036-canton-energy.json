@@ -1,0 +1,35 @@
+{
+  "status": "DRAFT - unsigned; for provider-committee review",
+  "network": "canton",
+  "name": "Canton",
+  "label": "ENERGY",
+  "decision": {
+    "action": 1,
+    "payload": "0x00000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000006c9ed600000000000000000000000000000000000000000000000000000000000006b6c000000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000000d63616e746f6e3a676c6f62616c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000604d69434120575020532e313420302e3030303434206b67434f32652f74783b2043616e746f6e20466f756e646174696f6e3b20706572696f6420746f20323032352d30382d32383b207368613235363a30376631306363636636326438353538",
+    "evidenceHash": "0x4e8d75c909ee996c91d20950feca6a1a284cee21c46968c40f1bff57c6f0ac1c",
+    "nonce": 36,
+    "effectiveAt": 0,
+    "validUntil": 1798675200,
+    "epoch": 0
+  },
+  "payload_decoded": {
+    "ledgerId": "canton:global",
+    "label": 3,
+    "expiry": 1822348800,
+    "emissionsUg": 440000,
+    "emissionsSource": "MiCA WP S.14 0.00044 kgCO2e/tx; Canton Foundation; period to 2025-08-28; sha256:07f10cccf62d8558"
+  },
+  "payload_abi": "(string ledgerId, uint8 label, uint64 expiry, uint64 emissionsUg, string emissionsSource)",
+  "evidence_record": "evidence/canton.energy.json",
+  "evidence_hash_rule": "sha256 over the exact bytes of the evidence file minus its trailing newline (canonical JSON: sorted keys, no spaces, UTF-8)",
+  "digest": "0x55127f5a843980e6dec1ce6938fd06b0a0231e4741b620ea4a21076782d21348",
+  "eip191_hash_to_sign": "0xab34c360ffc93f1884740733ecdf96cc7445e864a6ad65d32a591088b73e15a0",
+  "signatures": [],
+  "notes": [
+    "Provisional. The registry only accepts nonce == version + 1, so nonces must be renumbered against the live registry version at signing time; renumbering changes the digest.",
+    "Must satisfy effectiveFrom < expiry <= effectiveFrom + 366 days. Relaying before 2026-12-31 with a 7-day notice keeps this valid.",
+    "0 = as soon as the registry's CERT_NOTICE has passed after relay (effectiveFrom = max(effectiveAt, block.timestamp + CERT_NOTICE)).",
+    "caip2: provisional (no CAIP-2 namespace yet; sdk/data/chains.json pins canton:sandbox for e2e) - confirm before signing",
+    "DISCLOSURE_PERIOD_NOT_ONE_YEAR: S.6 2025-08-28 to S.7 2025-08-28 is 0 days; MiCA asks for a 12-month period (warning only)"
+  ]
+}

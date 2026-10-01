@@ -1,0 +1,75 @@
+{
+  "_comment": "Curated ISO 20022 evidence for the provisional launch list (spec: 'ISO 20022 filter' > 'Launch list (provisional)'). Evidence levels follow the spec: 'standards-body' (organisation sits on an ISO 20022 / TC 68 body), 'tooling' (ISO 20022 tooling exists for the network), 'market-cited' (only third-party lists say so). build.py adds the RMG membership check from sources/iso20022/rmg-members.json.",
+  "checked": "2026-10-01",
+  "rmg_source": {
+    "url": "https://www.iso20022.org/registration-management-group-member-list",
+    "direct_fetch": "HTTP 403 on 2026-10-01 (blocked for non-browser clients)",
+    "used_instead": "https://web.archive.org/web/20260316023419id_/https://www.iso20022.org/registration-management-group-member-list",
+    "snapshot_date": "2026-03-16"
+  },
+  "launch_list": [
+    {
+      "network": "hedera",
+      "rmg_names": ["hedera", "hashgraph", "swirlds"],
+      "level": "market-cited",
+      "evidence": [
+        {"kind": "rmg", "finding": "Neither Hedera Hashgraph LLC, the Hedera Council nor any council member appears on the RMG list as a blockchain-network delegate."},
+        {"kind": "market", "finding": "Appears on third-party 'ISO 20022 coin' lists, which the spec treats as marketing, not certification.", "source": "https://coincodex.com/article/27964/iso-20022-crypto/"}
+      ],
+      "route_to_full": "Criterion 1 (technical): our own ISO 20022 Router on Hedera passing the conformance suite."
+    },
+    {
+      "network": "xrpl",
+      "rmg_names": ["ripple", "ripplenet"],
+      "level": "standards-body",
+      "evidence": [
+        {"kind": "rmg", "finding": "RippleNet is a member entity of the ISO 20022 Registration Management Group, delegate company 'Ripple'."}
+      ],
+      "caveat": "The RMG seat belongs to Ripple (the company / RippleNet product), not to the XRP Ledger or the XRPL Foundation; the spec accepts it as the operator-side standards evidence."
+    },
+    {
+      "network": "stellar",
+      "rmg_names": ["stellar"],
+      "level": "tooling",
+      "evidence": [
+        {"kind": "tooling", "finding": "BP Ventures announced ISO 20022 message support for the Stellar network and Circle USDC (2023).", "source": "https://www.bpventures.us/blog/bpv-announces-iso-20022-support-for-the-stellar-blockchain-and-circle-usdc"},
+        {"kind": "tooling", "finding": "BP Ventures technical write-up of the ISO 20022 mapping on Stellar.", "source": "https://www.bpventures.us/blog/iso-20022-with-stellar"}
+      ]
+    },
+    {
+      "network": "algorand",
+      "rmg_names": ["algorand"],
+      "level": "market-cited",
+      "evidence": [
+        {"kind": "market", "finding": "Appears on third-party 'ISO 20022 coin' lists only.", "source": "https://coincodex.com/article/27964/iso-20022-crypto/"}
+      ]
+    },
+    {
+      "network": "xdc",
+      "rmg_names": ["xdc", "xinfin", "impel"],
+      "level": "tooling",
+      "evidence": [
+        {"kind": "tooling", "finding": "Impel, from XDC's founding company XinFin, offers an ISO 20022 financial-messaging API on the XDC Network.", "source": "https://impel.xinfin.network/iso-20022.html"}
+      ]
+    },
+    {
+      "network": "iota",
+      "rmg_names": ["iota"],
+      "level": "market-cited",
+      "evidence": [
+        {"kind": "market", "finding": "Appears on third-party 'ISO 20022 coin' lists only.", "source": "https://coincodex.com/article/27964/iso-20022-crypto/"}
+      ]
+    },
+    {
+      "network": "cardano",
+      "rmg_names": ["cardano", "iohk", "input output", "emurgo"],
+      "level": "market-cited",
+      "evidence": [
+        {"kind": "market", "finding": "Appears on third-party 'ISO 20022 coin' lists only.", "source": "https://coincodex.com/article/27964/iso-20022-crypto/"}
+      ]
+    }
+  ],
+  "not_listed": [
+    {"name": "Quant (QNT)", "reason": "A token on other networks, not a network a route can pass through (spec)."}
+  ]
+}

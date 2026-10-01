@@ -1,0 +1,34 @@
+{
+  "status": "DRAFT - unsigned; for provider-committee review",
+  "network": "bitcoin",
+  "name": "Bitcoin",
+  "label": "ENERGY",
+  "decision": {
+    "action": 1,
+    "payload": "0x00000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000006c9ed600000000000000000000000000000000000000000000000000000000017c11ab20000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000276269703132323a30303030303030303030313964363638396330383561653136353833316539330000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000674d69434120575020532e313420362e3337363530206b67434f32652f74783b2043727970746f205269736b204d65747269637320476d62483b20706572696f6420746f20323032352d30332d32323b207368613235363a3735363330626533353265616165646600000000000000000000000000000000000000000000000000",
+    "evidenceHash": "0xae12983696a79d46e3034e40155d26bb6d04501f4bfc9ee00c74b425fee08e29",
+    "nonce": 13,
+    "effectiveAt": 0,
+    "validUntil": 1798675200,
+    "epoch": 0
+  },
+  "payload_decoded": {
+    "ledgerId": "bip122:000000000019d6689c085ae165831e93",
+    "label": 3,
+    "expiry": 1822348800,
+    "emissionsUg": 6376500000,
+    "emissionsSource": "MiCA WP S.14 6.37650 kgCO2e/tx; Crypto Risk Metrics GmbH; period to 2025-03-22; sha256:75630be352eaaedf"
+  },
+  "payload_abi": "(string ledgerId, uint8 label, uint64 expiry, uint64 emissionsUg, string emissionsSource)",
+  "evidence_record": "evidence/bitcoin.energy.json",
+  "evidence_hash_rule": "sha256 over the exact bytes of the evidence file minus its trailing newline (canonical JSON: sorted keys, no spaces, UTF-8)",
+  "digest": "0x8fa0f88fd568f82581d73dcd06826339c91a88b1531e704d90ba6ecfeb35fa07",
+  "eip191_hash_to_sign": "0xb3a1fd36cc17e066fc1c7ee9586ca7b7c5f0b29712db4327c1b28131fc634ea2",
+  "signatures": [],
+  "notes": [
+    "Provisional. The registry only accepts nonce == version + 1, so nonces must be renumbered against the live registry version at signing time; renumbering changes the digest.",
+    "Must satisfy effectiveFrom < expiry <= effectiveFrom + 366 days. Relaying before 2026-12-31 with a 7-day notice keeps this valid.",
+    "0 = as soon as the registry's CERT_NOTICE has passed after relay (effectiveFrom = max(effectiveAt, block.timestamp + CERT_NOTICE)).",
+    "Intensity basis - marginal: S.16 says the intensity is the marginal emission of one additional transaction; the spec's Greenest mode assumes an allocation (total / transactions)"
+  ]
+}

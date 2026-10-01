@@ -1,0 +1,5054 @@
+{
+  "schema": "clprouter.mica.v1",
+  "register": {
+    "name": "ESMA interim MiCA register",
+    "files": {
+      "OTHER": {
+        "description": "White papers for crypto-assets other than ARTs and EMTs",
+        "url": "https://www.esma.europa.eu/sites/default/files/2024-12/OTHER.csv",
+        "sha256": "556db62050a19f3d4fc6a139e97eb4b309ff9fd1fdd92c06fd6b34775cb3c990",
+        "bytes": 236166,
+        "retrieved": "2026-10-01T08:56:23Z"
+      },
+      "CASPS": {
+        "description": "Authorised crypto-asset service providers",
+        "url": "https://www.esma.europa.eu/sites/default/files/2024-12/CASPS.csv",
+        "sha256": "73d0dd02ff9e0181e51e528ab4a19b7aae8a2c207345b3bc264274103f0bd164",
+        "bytes": 174895,
+        "retrieved": "2026-10-01T08:56:23Z"
+      },
+      "EMTWP": {
+        "description": "E-money token white papers (issuers of EMTs)",
+        "url": "https://www.esma.europa.eu/sites/default/files/2024-12/EMTWP.csv",
+        "sha256": "5d63159cf4a5f11ffff065d0a48cc84384c7e7bd4a5c4d1e4896ddf3f2c198c3",
+        "bytes": 17957,
+        "retrieved": "2026-10-01T08:56:23Z"
+      },
+      "ARTZZ": {
+        "description": "Issuers of asset-referenced tokens",
+        "url": "https://www.esma.europa.eu/sites/default/files/2024-12/ARTZZ.csv",
+        "sha256": "fa1ef4da123e3d49642c69f90a81a88f6c2cc2a0b9471b2108e4dfc635ca7c67",
+        "bytes": 276,
+        "retrieved": "2026-10-01T08:56:23Z"
+      },
+      "NCASP": {
+        "description": "Non-compliant entities providing crypto-asset services",
+        "url": "https://www.esma.europa.eu/sites/default/files/2024-12/NCASP.csv",
+        "sha256": "ce2399201eb4e180901782734237971cb9239e55aa857a2c1aafab88e7ee9a21",
+        "bytes": 27052,
+        "retrieved": "2026-10-01T08:56:23Z"
+      }
+    }
+  },
+  "method": "Candidates = rows of OTHER.csv whose URL, comments or filer names match the network's search regex (config/networks.json). Each candidate is accepted or rejected by an explicit rule; rows sharing a DTI with an accepted row are listed too. Accepted rows are checked against the token's FFG DTI, and the DTI printed in the white paper itself where the paper could be retrieved.",
+  "networks": [
+    {
+      "network": "hedera",
+      "name": "Hedera (Hiero)",
+      "token": "HBAR",
+      "caip2": "hedera:mainnet",
+      "caip2_source": "clprouter (src, sdk, test)",
+      "ffg_dti": null,
+      "dti_summary": {
+        "register_dtis": [],
+        "dtis_printed_in_papers": [
+          "2WWB8QS47",
+          "DHQPD433B"
+        ],
+        "conflict": "papers print different DTIs and the register carries none, so which is the native token's DTI cannot be settled without the DTI Foundation registry: e64f2abd83a21784546b11e4c6aa842a664666c1.pdf: 2WWB8QS47; HBAR-MiCA-Whitepaper-v-1.1-.docx.pdf: DHQPD433B"
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Hedera Hashgraph, LLC",
+        "LCX AG"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 341,
+          "filer": "Hedera Hashgraph, LLC",
+          "filer_lei": null,
+          "person_seeking_admission": "Payward Global Solutions LTD",
+          "person_seeking_admission_lei": "9845003D98SCC2851458",
+          "competent_authority": "Central Bank of Ireland (CBI)",
+          "home_member_state": "IE",
+          "register_last_update": "2025-07-14",
+          "url": "https://assets-cms.kraken.com/files/51n36hrp/facade/e64f2abd83a21784546b11e4c6aa842a664666c1.pdf",
+          "comments": null,
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "filer": "Hedera Hashgraph, LLC"
+          },
+          "note": "Filed by the issuer, admitted to trading via Kraken (Payward Global Solutions LTD)",
+          "dti_check": {
+            "result": "not-checked",
+            "why": "no FFG DTI known for this token in the register"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://assets-cms.kraken.com/files/51n36hrp/facade/e64f2abd83a21784546b11e4c6aa842a664666c1.pdf",
+              "sha256": "c67f189cfd49a8f0725309404365fbde90e63e68e7ccc1efe6befe04a3d8a758",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "2WWB8QS47"
+                ],
+                "ffg": []
+              },
+              "paper_dti_check": "unverified: no DTI for this token in the register to compare with"
+            }
+          ]
+        },
+        {
+          "esma_row": 634,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-03-18",
+          "url": "https://www.lcx.com/hbar-mica-white-paper/",
+          "comments": "Admission to trading of Hedera (HBAR)",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/hbar-mica-white-paper"
+          },
+          "note": "Filed by LCX AG as person seeking admission to trading",
+          "dti_check": {
+            "result": "not-checked",
+            "why": "no FFG DTI known for this token in the register"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://wp.lcx.com/wp-content/uploads/HBAR-MiCA-Whitepaper-v-1.1-.docx.pdf",
+              "sha256": "93111557fa6e0a9bf8f22ee4cec9acf6f23631dd8db8a4f91c07d3bd8519c8fa",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "DHQPD433B"
+                ],
+                "ffg": []
+              },
+              "paper_dti_check": "unverified: no DTI for this token in the register to compare with"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "xrpl",
+      "name": "XRP Ledger",
+      "token": "XRP",
+      "caip2": "xrpl:0",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "42PHJB2BS",
+      "dti_summary": {
+        "register_dtis": [
+          "42PHJB2BS",
+          "F2FP5N8RD",
+          "J815X0DG2",
+          "L6GTZC9G4"
+        ],
+        "dtis_printed_in_papers": [
+          "42PHJB2BS",
+          "F2FP5N8RD",
+          "J815X0DG2",
+          "L6GTZC9G4"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH",
+        "LCX AG"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 85,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-01-06",
+          "url": "https://www.crypto-risk-metrics.com/en/white-paper-ripple-xrp-ffg-42phjb2bs/",
+          "comments": "note that the publication date for the white paper is 04.02.2026 at which point this record will be updated with the link",
+          "dti": [
+            "F2FP5N8RD",
+            "J815X0DG2",
+            "L6GTZC9G4"
+          ],
+          "ffg_dti": [
+            "42PHJB2BS"
+          ],
+          "matched_by": {
+            "url": "ripple-xrp-ffg-42phjb2bs"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "42PHJB2BS"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-01-06-White-paper-Ripple-XRP-FFG-42PHJB2BS.pdf",
+              "sha256": "919ae56d374d255741028477eea291dc5af7d5ed75f4b0af93f563bfc986d57a",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "F2FP5N8RD",
+                  "J815X0DG2",
+                  "L6GTZC9G4"
+                ],
+                "ffg": [
+                  "42PHJB2BS"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-01-06-White-paper-Ripple-XRP-FFG-42PHJB2BS.xhtml",
+              "sha256": "70fabf2f30ad5ef86fc6d14e030d44683917c29b6b0d013425354255d3dfd2c9",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "F2FP5N8RD",
+                  "J815X0DG2",
+                  "L6GTZC9G4"
+                ],
+                "ffg": [
+                  "42PHJB2BS"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 633,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-03-18",
+          "url": "https://www.lcx.com/xrp-mica-white-paper/",
+          "comments": "Admission to trading of Ripple (XRP)",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/xrp-mica-white-paper"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "42PHJB2BS"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://wp.lcx.com/wp-content/uploads/XRP-MiCA-Whitepaper-v-1.1-05_06_2025-1.pdf",
+              "sha256": "abb28c8f9baaf3958df0e1559fd58a3ef03244661c07a11340a8b949f5a48152",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "L6GTZC9G4"
+                ],
+                "ffg": []
+              },
+              "paper_dti_check": "match: paper DTI is one of the token's register DTIs"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "stellar",
+      "name": "Stellar",
+      "token": "XLM",
+      "caip2": "stellar:pubnet",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "ZCN8SR2H7",
+      "dti_summary": {
+        "register_dtis": [
+          "C4SRNZD8K",
+          "ZCN8SR2H7"
+        ],
+        "dtis_printed_in_papers": [
+          "C4SRNZD8K",
+          "ZCN8SR2H7"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 94,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-01-15",
+          "url": "https://www.crypto-risk-metrics.com/en/white-paper-stellar-lumen-ffg-zcn8sr2h7/",
+          "comments": "note that the publication date for the white paper is 13.02.2026 at which point this record will be updated with the link",
+          "dti": [
+            "C4SRNZD8K"
+          ],
+          "ffg_dti": [
+            "ZCN8SR2H7"
+          ],
+          "matched_by": {
+            "url": "stellar-lumen-ffg-zcn8sr2h7"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "ZCN8SR2H7"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-01-15-White-paper-Stellar-Lumen-FFG-ZCN8SR2H7.pdf",
+              "sha256": "4572fb849456e306c683c63dcbca3231113be982cb0965bcfa5d21805416fac4",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "C4SRNZD8K"
+                ],
+                "ffg": [
+                  "ZCN8SR2H7"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-01-15-White-paper-Stellar-Lumen-FFG-ZCN8SR2H7.xhtml",
+              "sha256": "80eedaf39990727de99b5d6eb34eb502d341c9de2bcdaf3ddefecec51b0240eb",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "C4SRNZD8K"
+                ],
+                "ffg": [
+                  "ZCN8SR2H7"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": [
+        {
+          "esma_row": 991,
+          "filer": "Lumen ServiceCo (BVI) Ltd.",
+          "filer_lei": "98450005EAE0D3CD6481",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Netherlands Authority for the Financial Markets (AFM)",
+          "home_member_state": "NL",
+          "register_last_update": "2026-04-02",
+          "url": "https://perle.micarwhitepapers.eu",
+          "comments": "wp update",
+          "dti": [
+            "4LSRL5KT5"
+          ],
+          "ffg_dti": [
+            "HMV8HH1KW"
+          ],
+          "reason": "Perle token (perle.micarwhitepapers.eu, FFG HMV8HH1KW); matched only on the word 'lumen' in the filer name"
+        }
+      ]
+    },
+    {
+      "network": "algorand",
+      "name": "Algorand",
+      "token": "ALGO",
+      "caip2": "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73k",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "K8S6W74KS",
+      "dti_summary": {
+        "register_dtis": [
+          "K8S6W74KS",
+          "M8Z9JSG9Q"
+        ],
+        "dtis_printed_in_papers": [
+          "K8S6W74KS",
+          "M8Z9JSG9Q"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 128,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-04-07",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/algorand-ffg-k8s6w74ks/index.html",
+          "comments": null,
+          "dti": [
+            "M8Z9JSG9Q"
+          ],
+          "ffg_dti": [
+            "K8S6W74KS"
+          ],
+          "matched_by": {
+            "url": "algorand-ffg-k8s6w74ks"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "K8S6W74KS"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-04-07-White-paper-Algorand-FFG-K8S6W74KS.pdf",
+              "sha256": "1bfd92e2b4f222fac9e1234a13b43c5babd7d49f73c0d59369cf98410b0b4667",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "M8Z9JSG9Q"
+                ],
+                "ffg": [
+                  "K8S6W74KS"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-04-07-White-paper-Algorand-FFG-K8S6W74KS.xhtml",
+              "sha256": "49fbfa4c8d1d5e247c339d6a07c02c1c98609ae4fd285edaf6aaadacc40144b5",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "M8Z9JSG9Q"
+                ],
+                "ffg": [
+                  "K8S6W74KS"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "cardano",
+      "name": "Cardano",
+      "token": "ADA",
+      "caip2": "cip34:1-764824073",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "76QS7QCXB",
+      "dti_summary": {
+        "register_dtis": [
+          "76QS7QCXB",
+          "HWGL1C2CK"
+        ],
+        "dtis_printed_in_papers": [
+          "76QS7QCXB",
+          "HWGL1C2CK"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH",
+        "LCX AG"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 132,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-04-27",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/cardano-ada-ffg-76qs7qcxb/index.html",
+          "comments": null,
+          "dti": [
+            "HWGL1C2CK"
+          ],
+          "ffg_dti": [
+            "76QS7QCXB"
+          ],
+          "matched_by": {
+            "url": "cardano-ada-ffg-76qs7qcxb"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "76QS7QCXB"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-04-27-White-paper-Cardano-ADA-FFG-76QS7QCXB.pdf",
+              "sha256": "0120c9c5408f8a9dcae18f228a8d21a9d4c3ab8a2581e7f1a0d1e40250cf4c39",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "HWGL1C2CK"
+                ],
+                "ffg": [
+                  "76QS7QCXB"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-04-27-White-paper-Cardano-ADA-FFG-76QS7QCXB.xhtml",
+              "sha256": "cc2a238e898731788e61e08b76411206cdd1cfdf1ec6194421da866597482b9f",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "HWGL1C2CK"
+                ],
+                "ffg": [
+                  "76QS7QCXB"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 631,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-03-18",
+          "url": "https://www.lcx.com/ada-mica-white-paper/",
+          "comments": "Admission to trading of Cardano (ADA)",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/ada-mica-white-paper"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "76QS7QCXB"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://wp.lcx.com/wp-content/uploads/Cardano-ADA-MiCA-Whitepaper-v1.1-.pdf",
+              "sha256": "5cc0e46d0d600f76c81120a559003487585ce9fc3ac7a8c7f1b8bd57d603a630",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "HWGL1C2CK"
+                ],
+                "ffg": []
+              },
+              "paper_dti_check": "match: paper DTI is one of the token's register DTIs"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "ethereum",
+      "name": "Ethereum",
+      "token": "ETH",
+      "caip2": "eip155:1",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "D5RG2FHH0",
+      "dti_summary": {
+        "register_dtis": [
+          "D5RG2FHH0",
+          "X9J9K872S"
+        ],
+        "dtis_printed_in_papers": [
+          "D5RG2FHH0",
+          "X9J9K872S"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH",
+        "LCX AG"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 28,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2025-05-05",
+          "url": "https://crypto-risk-metrics.com/en/white-paper-ethereum-ffg-d5rg2fhh0/",
+          "comments": null,
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "ethereum-ffg-d5rg2fhh0"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "D5RG2FHH0"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2025-03-31-White-paper-Ethereum-Eth-FFG-D5RG2FHH0.pdf",
+              "sha256": "bc68970a970fa73b4ba40a9d90996dcfef0abc0604a826791dbdca3fb0ba63ae",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "X9J9K872S"
+                ],
+                "ffg": [
+                  "D5RG2FHH0"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2025-05-05-White-paper-Ethereum-Eth-FFG-D5RG2FHH0.pdf",
+              "sha256": "eb8a2b3bce222a40b7065d628130039878c37d5d2d939191e4029a43c22a89e7",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "X9J9K872S"
+                ],
+                "ffg": [
+                  "D5RG2FHH0"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-05-29-White-paper-Ethereum-Eth-FFG-D5RG2FHH0.pdf",
+              "sha256": "c316bb1cad63fc19cb4a4364719071aa0a26a89a1569d252849cdadaf70e7d36",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "X9J9K872S"
+                ],
+                "ffg": [
+                  "D5RG2FHH0"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-05-29-White-paper-Ethereum-Eth-FFG-D5RG2FHH0.xhtml",
+              "sha256": "80eab5f4d73e285d53fca49b074e2aba926ab80f1928d678c4edeb9891fafb6e",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "X9J9K872S"
+                ],
+                "ffg": [
+                  "D5RG2FHH0"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 141,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-06-30",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/ethereum-eth-ffg-d5rg2fhh0/index.html",
+          "comments": "Modification",
+          "dti": [
+            "X9J9K872S"
+          ],
+          "ffg_dti": [
+            "D5RG2FHH0"
+          ],
+          "matched_by": {
+            "url": "ethereum-eth-ffg-d5rg2fhh0"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "D5RG2FHH0"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2025-03-31-White-paper-Ethereum-Eth-FFG-D5RG2FHH0.pdf",
+              "sha256": "bc68970a970fa73b4ba40a9d90996dcfef0abc0604a826791dbdca3fb0ba63ae",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "X9J9K872S"
+                ],
+                "ffg": [
+                  "D5RG2FHH0"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2025-05-05-White-paper-Ethereum-Eth-FFG-D5RG2FHH0.pdf",
+              "sha256": "eb8a2b3bce222a40b7065d628130039878c37d5d2d939191e4029a43c22a89e7",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "X9J9K872S"
+                ],
+                "ffg": [
+                  "D5RG2FHH0"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-05-29-White-paper-Ethereum-Eth-FFG-D5RG2FHH0.pdf",
+              "sha256": "c316bb1cad63fc19cb4a4364719071aa0a26a89a1569d252849cdadaf70e7d36",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "X9J9K872S"
+                ],
+                "ffg": [
+                  "D5RG2FHH0"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-05-29-White-paper-Ethereum-Eth-FFG-D5RG2FHH0.xhtml",
+              "sha256": "80eab5f4d73e285d53fca49b074e2aba926ab80f1928d678c4edeb9891fafb6e",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "X9J9K872S"
+                ],
+                "ffg": [
+                  "D5RG2FHH0"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 632,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-03-18",
+          "url": "https://www.lcx.com/eth-mica-white-paper/",
+          "comments": "Admission to trading of Ethereum (ETH)",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/eth-mica-white-paper"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "D5RG2FHH0"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://wp.lcx.com/wp-content/uploads/Ethereum-ETH-MiCA-Whitepaper-v-1.1-05_06_2025.docx-1.pdf",
+              "sha256": "8389452ec4824b605cb7a8dfff53cfdf66f4783d749d63f89d158eed51eaee72",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "X9J9K872S"
+                ],
+                "ffg": []
+              },
+              "paper_dti_check": "match: paper DTI is one of the token's register DTIs"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": [
+        {
+          "esma_row": 33,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2025-06-16",
+          "url": "https://crypto-risk-metrics.com/en/white-paper-ethereum-classic-ether-ffg-dgmqmfzd4/",
+          "comments": null,
+          "dti": [],
+          "ffg_dti": [],
+          "reason": "Ethereum Classic (ETC), FFG DTI DGMQMFZD4 - a different network"
+        },
+        {
+          "esma_row": 106,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-02-11",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/ethereum-name-service-ffg-b70smj5dq/index.html",
+          "comments": "note that the publication date for the white paper is 13.03.2026 at which point this record will be updated with the link",
+          "dti": [
+            "7GTNZH1VL",
+            "9WKT78ZW7"
+          ],
+          "ffg_dti": [
+            "B70SMJ5DQ"
+          ],
+          "reason": "ENS token issued on Ethereum, not the native asset"
+        },
+        {
+          "esma_row": 142,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-06-01",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/ethereum-classic-ether-ffg-dgmqmfzd4/index.html",
+          "comments": "Modification",
+          "dti": [
+            "GWQWXVV7J"
+          ],
+          "ffg_dti": [
+            "DGMQMFZD4"
+          ],
+          "reason": "Ethereum Classic (ETC), FFG DTI DGMQMFZD4 - a different network"
+        },
+        {
+          "esma_row": 125,
+          "filer": "OneFootball Capital GmbH",
+          "filer_lei": "5299004LKSX92NLD9F50",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-04-07",
+          "url": "https://promo.onefootball.com/legal/whitepaper",
+          "comments": "Modification",
+          "dti": [
+            "X9J9K872S"
+          ],
+          "ffg_dti": [],
+          "shared_dti": [
+            "X9J9K872S"
+          ],
+          "reason": "OneFootball token. Its register row carries DTI X9J9K872S, which is the DTI of ETH on Ethereum (as printed in Crypto Risk Metrics' ETH rows) - a DTI collision, not an ETH white paper"
+        }
+      ]
+    },
+    {
+      "network": "bitcoin",
+      "name": "Bitcoin",
+      "token": "BTC",
+      "caip2": "bip122:000000000019d6689c085ae165831e93",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "V15WLZJMF",
+      "dti_summary": {
+        "register_dtis": [
+          "4H95J0R2X",
+          "K1NS41N51",
+          "V15WLZJMF"
+        ],
+        "dtis_printed_in_papers": [
+          "4H95J0R2X",
+          "K1NS41N51",
+          "V15WLZJMF"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH",
+        "LCX AG"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 20,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2025-03-31",
+          "url": "https://crypto-risk-metrics.com/en/white-paper-bitcoin-ffg-v15wlzjmf/",
+          "comments": null,
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "bitcoin-ffg-v15wlzjmf"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "V15WLZJMF"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2025-03-31-White-paper-Bitcoin-FFG-V15WLZJMF.pdf",
+              "sha256": "0462d82f7c1a1f1161b34134e8ae344c6e113102b89789004f2a5d575072d479",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "4H95J0R2X",
+                  "K1NS41N51"
+                ],
+                "ffg": [
+                  "V15WLZJMF"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-05-26-White-paper-Bitcoin-FFG-V15WLZJMF.pdf",
+              "sha256": "75630be352eaaedf89973058fbcd0873e0ce24123225f4a5f40e40729bd68126",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "4H95J0R2X",
+                  "K1NS41N51"
+                ],
+                "ffg": [
+                  "V15WLZJMF"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-05-26-White-paper-Bitcoin-FFG-V15WLZJMF.xhtml",
+              "sha256": "a00da212a11b39930b96bd06488baa4c9411213b3597119bc0b44d38ea207420",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "4H95J0R2X",
+                  "K1NS41N51"
+                ],
+                "ffg": [
+                  "V15WLZJMF"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 139,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-05-26",
+          "url": "https://white-paper.crypto-risk-metrics.com/de/bitcoin-ffg-v15wlzjmf/index.html.",
+          "comments": "Modification",
+          "dti": [
+            "4H95J0R2X",
+            "K1NS41N51"
+          ],
+          "ffg_dti": [
+            "V15WLZJMF"
+          ],
+          "matched_by": {
+            "url": "bitcoin-ffg-v15wlzjmf"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "V15WLZJMF"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2025-03-31-White-paper-Bitcoin-FFG-V15WLZJMF.pdf",
+              "sha256": "0462d82f7c1a1f1161b34134e8ae344c6e113102b89789004f2a5d575072d479",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "4H95J0R2X",
+                  "K1NS41N51"
+                ],
+                "ffg": [
+                  "V15WLZJMF"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-05-26-White-paper-Bitcoin-FFG-V15WLZJMF.pdf",
+              "sha256": "75630be352eaaedf89973058fbcd0873e0ce24123225f4a5f40e40729bd68126",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "4H95J0R2X",
+                  "K1NS41N51"
+                ],
+                "ffg": [
+                  "V15WLZJMF"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-05-26-White-paper-Bitcoin-FFG-V15WLZJMF.xhtml",
+              "sha256": "a00da212a11b39930b96bd06488baa4c9411213b3597119bc0b44d38ea207420",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "4H95J0R2X",
+                  "K1NS41N51"
+                ],
+                "ffg": [
+                  "V15WLZJMF"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 630,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-03-18",
+          "url": "https://www.lcx.com/btc-mica-white-paper/",
+          "comments": "Admission to trading of Bitcoin (BTC)",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/btc-mica-white-paper"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "V15WLZJMF"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://wp.lcx.com/wp-content/uploads/Bitcoin-BTC-MiCA-Whitepaper-v1.1-05_06_2025-1.pdf",
+              "sha256": "42604b87782c1cbcc8dca0d753bf2999675c4e3eb86f7f53440269be875e59a3",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "4H95J0R2X"
+                ],
+                "ffg": []
+              },
+              "paper_dti_check": "match: paper DTI is one of the token's register DTIs"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": [
+        {
+          "esma_row": 93,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-01-14",
+          "url": "https://www.crypto-risk-metrics.com/en/white-paper-bitcoin-cash-ffg-919bf3w7l/",
+          "comments": "note that the publication date for the white paper is 12.02.2026 at which point this record will be updated with the link",
+          "dti": [
+            "J9K583ZGG",
+            "LXMPJ21BK"
+          ],
+          "ffg_dti": [
+            "919BF3W7L"
+          ],
+          "reason": "Bitcoin Cash (BCH), FFG DTI 919BF3W7L - a different network"
+        },
+        {
+          "esma_row": 208,
+          "filer": "CheerBitcoin SASU",
+          "filer_lei": "9695002O8ZCCK9IHQ969",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Autorité des Marchés Financiers (AMF)",
+          "home_member_state": "FR",
+          "register_last_update": "2025-06-19",
+          "url": "https://drive.google.com/file/d/1IrTRXdr4w8HKdfKBxHZHMJDhBTDyFysM/view?usp=sharing\n\nhttps://drive.google.com/file/d/11oWkYWhXIZTSVMDCVV2pC3wDeFTJz3QZ/view?usp=sharing",
+          "comments": "First submitted by email in february 2024 – update (MiCA) 2025",
+          "dti": [],
+          "ffg_dti": [],
+          "reason": "CheerBitcoin's own token, not BTC"
+        },
+        {
+          "esma_row": 211,
+          "filer": "CheerBitcoin SASU",
+          "filer_lei": "9695002O8ZCCK9IHQ969",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Autorité des Marchés Financiers (AMF)",
+          "home_member_state": "FR",
+          "register_last_update": "2025-10-08",
+          "url": "https://drive.google.com/file/d/1DUmluyeGiuYCtPGvwXs_5Gkdd_NrTAFj/view?usp=drive_link\n\nhttps://drive.google.com/file/d/1jyCln0cYYT47PdF6oufM_PlMfdRHaHWF/view?usp=drive_link",
+          "comments": "Notification by mail the 18th of June 2025.\n\nTHIS IS A MODIFICATION",
+          "dti": [],
+          "ffg_dti": [],
+          "reason": "CheerBitcoin's own token, not BTC"
+        },
+        {
+          "esma_row": 375,
+          "filer": "Liquid Bitcoin Foundation",
+          "filer_lei": null,
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Central Bank of Ireland (CBI)",
+          "home_member_state": "IE",
+          "register_last_update": "2025-08-15",
+          "url": "https://www.lombard.finance/mica",
+          "comments": null,
+          "dti": [],
+          "ffg_dti": [],
+          "reason": "Lombard LBTC (wrapped BTC token), not native BTC"
+        },
+        {
+          "esma_row": 423,
+          "filer": "Chain Cross LTD",
+          "filer_lei": null,
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Central Bank of Ireland (CBI)",
+          "home_member_state": "IE",
+          "register_last_update": "2025-07-11",
+          "url": "https://portaltobitcoin.com/ptb-mica-whitepaper",
+          "comments": null,
+          "dti": [],
+          "ffg_dti": [],
+          "reason": "Portal to Bitcoin (PTB) token"
+        },
+        {
+          "esma_row": 433,
+          "filer": "Parallel Execution Foundation",
+          "filer_lei": null,
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Central Bank of Ireland (CBI)",
+          "home_member_state": "IE",
+          "register_last_update": "2025-11-06",
+          "url": "https://fractalbitcoin.io/s/Fractal_Bitcoin_MiCAR_WP_Final.pdf",
+          "comments": null,
+          "dti": [],
+          "ffg_dti": [],
+          "reason": "Fractal Bitcoin (FB), a separate network"
+        },
+        {
+          "esma_row": 578,
+          "filer": "Bitcoin HT, LLC",
+          "filer_lei": null,
+          "person_seeking_admission": "Payward Global Solutions Limited (Kraken)",
+          "person_seeking_admission_lei": "9845003D98SCC2851458",
+          "competent_authority": "Central Bank of Ireland (CBI)",
+          "home_member_state": "IE",
+          "register_last_update": "2026-07-24",
+          "url": "https://bitcoin.org.ht/mica-white-paper/",
+          "comments": null,
+          "dti": [
+            "QJJ02KRR0"
+          ],
+          "ffg_dti": [
+            "G623SB2VS"
+          ],
+          "reason": "Paper calls its asset 'Bitcoin'/'BTC' but the register row carries DTI QJJ02KRR0 / FFG G623SB2VS, which do not match BTC (FFG V15WLZJMF); rejected on the DTI check"
+        }
+      ]
+    },
+    {
+      "network": "solana",
+      "name": "Solana",
+      "token": "SOL",
+      "caip2": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "6QZ1LNC12",
+      "dti_summary": {
+        "register_dtis": [
+          "20J63Z4N3",
+          "6QZ1LNC12"
+        ],
+        "dtis_printed_in_papers": [
+          "20J63Z4N3",
+          "6QZ1LNC12"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH",
+        "LCX AG"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 126,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-04-13",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/solana-sol-ffg-6qz1lnc12/index.html",
+          "comments": null,
+          "dti": [
+            "20J63Z4N3"
+          ],
+          "ffg_dti": [
+            "6QZ1LNC12"
+          ],
+          "matched_by": {
+            "url": "solana-sol-ffg-6qz1lnc12"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "6QZ1LNC12"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-04-13-White-paper-Solana-SOL-FFG-6QZ1LNC12.pdf",
+              "sha256": "c617b1173ca2f448b14c9e0abeafb1f749af39a625cfd6465b5163cec24261a7",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "20J63Z4N3"
+                ],
+                "ffg": [
+                  "6QZ1LNC12"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-04-13-White-paper-Solana-SOL-FFG-6QZ1LNC12.xhtml",
+              "sha256": "13e56849eb11816500b24b339ab975a5d66ee4d6658abcdb539420c81b245ff1",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "20J63Z4N3"
+                ],
+                "ffg": [
+                  "6QZ1LNC12"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 635,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-03-18",
+          "url": "https://www.lcx.com/sol-mica-white-paper/",
+          "comments": "Admission to trading of Solana (SOL)",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/sol-mica-white-paper"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "6QZ1LNC12"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://wp.lcx.com/wp-content/uploads/Solana-SOL-MiCA-Whitepaper-v-1.1-05_06_2025.docx-1.pdf",
+              "sha256": "21fd5293dcf728fab3ba4ec1f6e840fc0eefdb2d9780c7ce7213a92c69601cd4",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "20J63Z4N3"
+                ],
+                "ffg": []
+              },
+              "paper_dti_check": "match: paper DTI is one of the token's register DTIs"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": [
+        {
+          "esma_row": 70,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2025-08-28",
+          "url": "https://crypto-risk-metrics.com/en/white-paper-jito-staked-sol-ffg-qf1g0xxmm/",
+          "comments": null,
+          "dti": [],
+          "ffg_dti": [],
+          "reason": "JitoSOL liquid-staking token, FFG QF1G0XXMM"
+        },
+        {
+          "esma_row": 115,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-02-19",
+          "url": "https://crypto-risk-metrics.com/en/white-paper-jito-staked-sol-ffg-qf1g0xxmm/",
+          "comments": "Modification",
+          "dti": [
+            "QF1G0XXMM"
+          ],
+          "ffg_dti": [
+            "QF1G0XXMM"
+          ],
+          "reason": "JitoSOL liquid-staking token, FFG QF1G0XXMM"
+        },
+        {
+          "esma_row": 517,
+          "filer": "Solana Mobile, Inc.",
+          "filer_lei": null,
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": "9845003D98SCC2851458",
+          "competent_authority": "Central Bank of Ireland (CBI)",
+          "home_member_state": "IE",
+          "register_last_update": "2026-03-06",
+          "url": "https://solanamobile.com/mica_whitepaper",
+          "comments": null,
+          "dti": [],
+          "ffg_dti": [],
+          "reason": "Solana Mobile token (DTI 3B29MH8TM in later row), not SOL"
+        },
+        {
+          "esma_row": 599,
+          "filer": "Solana Mobile Inc.",
+          "filer_lei": "254900FMOYDRQVFB4B86",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Central Bank of Ireland (CBI)",
+          "home_member_state": "IE",
+          "register_last_update": "2026-09-04",
+          "url": "https://solanamobile.com/mica-whitepaper",
+          "comments": "Art.12 Mod",
+          "dti": [
+            "3B29MH8TM"
+          ],
+          "ffg_dti": [
+            "D4X6WQD28"
+          ],
+          "reason": "Solana Mobile token, DTI 3B29MH8TM, not SOL"
+        }
+      ]
+    },
+    {
+      "network": "bnb",
+      "name": "BNB Chain",
+      "token": "BNB",
+      "caip2": "eip155:56",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "8N2VXJKB1",
+      "dti_summary": {
+        "register_dtis": [],
+        "dtis_printed_in_papers": [
+          "8N2VXJKB1",
+          "HWRGLMT9T",
+          "T4FV9055Q"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 43,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2025-07-07",
+          "url": "https://crypto-risk-metrics.com/en/white-paper-binance-coin-ffg-8n2vxjkb1/",
+          "comments": null,
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "binance-coin-ffg-8n2vxjkb1"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "8N2VXJKB1"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://crypto-risk-metrics.com/wp-content/uploads/2025-07-07-White-paper-Binance-Coin-FFG-8N2VXJKB1.pdf",
+              "sha256": "54d38fe831a907b43eb23934c632c7139aeb57fd6a6fe691ff28256c909af57e",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "HWRGLMT9T",
+                  "T4FV9055Q"
+                ],
+                "ffg": [
+                  "8N2VXJKB1"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "tron",
+      "name": "TRON",
+      "token": "TRX",
+      "caip2": "tron:0x2b6653dc",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "HZ9HHNPLG",
+      "dti_summary": {
+        "register_dtis": [
+          "523PVPHKS",
+          "6PF7WDK49",
+          "993D8X1FB",
+          "HZ9HHNPLG"
+        ],
+        "dtis_printed_in_papers": [
+          "523PVPHKS",
+          "6PF7WDK49",
+          "993D8X1FB",
+          "HZ9HHNPLG"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Bitstamp Europe S.A.",
+        "LCX AG",
+        "Tron Tech Limited"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 677,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-09-12",
+          "url": "https://www.lcx.com/tron-mica-white-paper/",
+          "comments": "Admission to trading of TRON",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/tron-mica-white-paper"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "HZ9HHNPLG"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://wp.lcx.com/wp-content/uploads/TRON-MiCA-Whitepaper-v-1.0-1.pdf",
+              "sha256": "5874c15bfe67158f3f904cf3b06661fa6596c5fe879abceca3b02a1fd206681d",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "HZ9HHNPLG"
+                ],
+                "ffg": [
+                  "523PVPHKS",
+                  "6PF7WDK49",
+                  "993D8X1FB"
+                ]
+              },
+              "paper_dti_check": "match, but the paper prints the FFG DTI in its DTI field"
+            }
+          ]
+        },
+        {
+          "esma_row": 736,
+          "filer": "Bitstamp Europe S.A.",
+          "filer_lei": "549300XIBGTJ0PLIEO72",
+          "person_seeking_admission": "Bitstamp Europe S.A.",
+          "person_seeking_admission_lei": "549300XIBGTJ0PLIEO72",
+          "competent_authority": "Commission de Surveillance du Secteur Financier",
+          "home_member_state": "LU",
+          "register_last_update": "2026-01-22",
+          "url": "https://www.bitstamp.net/s/documents/2026-01-12-White-paper-TRON-TRX-FFG-HZ9HHNPLG.xhtml",
+          "comments": null,
+          "dti": [
+            "523PVPHKS",
+            "6PF7WDK49",
+            "993D8X1FB"
+          ],
+          "ffg_dti": [
+            "HZ9HHNPLG"
+          ],
+          "matched_by": {
+            "url": "white-paper-tron-trx-ffg-hz9hhnplg"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "HZ9HHNPLG"
+          },
+          "document_status": "blocked by the publisher's bot protection (Incapsula) for scripted downloads; fetch in a browser and add to .cache manually",
+          "documents": []
+        },
+        {
+          "esma_row": 878,
+          "filer": "Tron Tech Limited",
+          "filer_lei": null,
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Malta Financial Services Authority (MFSA)",
+          "home_member_state": "MT",
+          "register_last_update": "2026-01-16",
+          "url": "https://trondao.org/files/TRX-MiCA_Whitepaper.pdf",
+          "comments": null,
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "filer": "Tron Tech Limited"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "HZ9HHNPLG"
+          },
+          "document_status": "fetch failed: HTTPError: HTTP Error 404: Not Found",
+          "documents": []
+        }
+      ],
+      "rejected_false_positives": [
+        {
+          "esma_row": 208,
+          "filer": "CheerBitcoin SASU",
+          "filer_lei": "9695002O8ZCCK9IHQ969",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Autorité des Marchés Financiers (AMF)",
+          "home_member_state": "FR",
+          "register_last_update": "2025-06-19",
+          "url": "https://drive.google.com/file/d/1IrTRXdr4w8HKdfKBxHZHMJDhBTDyFysM/view?usp=sharing\n\nhttps://drive.google.com/file/d/11oWkYWhXIZTSVMDCVV2pC3wDeFTJz3QZ/view?usp=sharing",
+          "comments": "First submitted by email in february 2024 – update (MiCA) 2025",
+          "dti": [],
+          "ffg_dti": [],
+          "reason": "CheerBitcoin token; matched only on the word 'tron' in the comments"
+        }
+      ]
+    },
+    {
+      "network": "avalanche",
+      "name": "Avalanche C-Chain",
+      "token": "AVAX",
+      "caip2": "eip155:43114",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "S6JCBF70N",
+      "dti_summary": {
+        "register_dtis": [
+          "4FHS0SNBQ",
+          "CZHS0S2RB",
+          "M3Z631TN4",
+          "S6JCBF70N"
+        ],
+        "dtis_printed_in_papers": [
+          "4FHS0SNBQ",
+          "CZHS0S2RB",
+          "M3Z631TN4",
+          "S6JCBF70N"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH",
+        "LCX AG"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 131,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-04-21",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/avalanche-ffg-s6jcbf70n/index.html",
+          "comments": null,
+          "dti": [
+            "4FHS0SNBQ",
+            "CZHS0S2RB",
+            "M3Z631TN4"
+          ],
+          "ffg_dti": [
+            "S6JCBF70N"
+          ],
+          "matched_by": {
+            "url": "avalanche-ffg-s6jcbf70n"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "S6JCBF70N"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-04-21-White-paper-Avalanche-AVAX-FFG-S6JCBF70N.pdf",
+              "sha256": "0a7cc1b17863f4619b07a3aab0701c46372168c3ef5d35fc3a1eb3b3c492ebf6",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "4FHS0SNBQ",
+                  "CZHS0S2RB",
+                  "M3Z631TN4"
+                ],
+                "ffg": [
+                  "S6JCBF70N"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-04-21-White-paper-Avalanche-AVAX-FFG-S6JCBF70N.xhtml",
+              "sha256": "d139388e4236b3a81343a1eb6bbedd24b88c2ad0307f5e3ea88654f6be815636",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "4FHS0SNBQ",
+                  "CZHS0S2RB",
+                  "M3Z631TN4"
+                ],
+                "ffg": [
+                  "S6JCBF70N"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 642,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-04-14",
+          "url": "https://www.lcx.com/avax-mica-white-paper/",
+          "comments": "Admission to trading of Avalanche (AVAX)",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/avax-mica-white-paper"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "S6JCBF70N"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://wp.lcx.com/wp-content/uploads/Avalanche-AVAX-MiCA-Whitepaper-v-1.1-.docx.pdf",
+              "sha256": "a9b5f4573943cc2f702a3497e0fe584eccebcb53f3c4863c96ec85ba022dc552",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "M3Z631TN4"
+                ],
+                "ffg": []
+              },
+              "paper_dti_check": "match: paper DTI is one of the token's register DTIs"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": [
+        {
+          "esma_row": 779,
+          "filer": "Aivalanche LLC",
+          "filer_lei": null,
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Malta Financial Services Authority (MFSA)",
+          "home_member_state": "MT",
+          "register_last_update": "2025-02-26",
+          "url": "https://docs.avaxai.org/mica+K5",
+          "comments": null,
+          "dti": [],
+          "ffg_dti": [],
+          "reason": "AVAXAI token, not AVAX"
+        }
+      ]
+    },
+    {
+      "network": "polygon",
+      "name": "Polygon PoS",
+      "token": "POL",
+      "caip2": "eip155:137",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "GB8DQ8DWN",
+      "dti_summary": {
+        "register_dtis": [
+          "612RCQLCX",
+          "GB8DQ8DWN",
+          "HGMF3TRBK",
+          "RQWW6J6K0"
+        ],
+        "dtis_printed_in_papers": [
+          "612RCQLCX",
+          "GB8DQ8DWN",
+          "HGMF3TRBK",
+          "RQWW6J6K0"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Bitstamp Europe S.A.",
+        "Crypto Risk Metrics GmbH",
+        "LCX AG",
+        "Polygon Labs Services (Switzerland) AG"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 147,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-06-17",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/polygon-pol-ffg-gb8dq8dwn/index.html",
+          "comments": null,
+          "dti": [
+            "612RCQLCX",
+            "HGMF3TRBK",
+            "RQWW6J6K0"
+          ],
+          "ffg_dti": [
+            "GB8DQ8DWN"
+          ],
+          "matched_by": {
+            "url": "polygon-pol-ffg-gb8dq8dwn"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "GB8DQ8DWN"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2025-09-19-White-paper-Polygon-POL-FFG-GB8DQ8DWN.pdf",
+              "sha256": "76f60623296e1f19b74c4e9668a63a46cb18f11d85ee026517b8062e0a0d8113",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "612RCQLCX",
+                  "HGMF3TRBK",
+                  "RQWW6J6K0"
+                ],
+                "ffg": [
+                  "GB8DQ8DWN"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2025-09-29-White-paper-Polygon-POL-FFG-GB8DQ8DWN.pdf",
+              "sha256": "ddd0226572daec537b02533042f8da7b29942499c594b48aab74b779c25da4e8",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "612RCQLCX",
+                  "HGMF3TRBK",
+                  "RQWW6J6K0"
+                ],
+                "ffg": [
+                  "GB8DQ8DWN"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-06-17-White-paper-Polygon-POL-FFG-GB8DQ8DWN.pdf",
+              "sha256": "ed4dc2eb3a2f4023c768c51cb3bb1e0ffa7a99bba5bce675faf7e126a8cd4318",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "612RCQLCX",
+                  "HGMF3TRBK",
+                  "RQWW6J6K0"
+                ],
+                "ffg": [
+                  "GB8DQ8DWN"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-06-17-White-paper-Polygon-POL-FFG-GB8DQ8DWN.xhtml",
+              "sha256": "a5f2a325abb15fdeefa363b1ac21b40e0a27597c680b176b7c1b15c5a62c2aa1",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "612RCQLCX",
+                  "HGMF3TRBK",
+                  "RQWW6J6K0"
+                ],
+                "ffg": [
+                  "GB8DQ8DWN"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 618,
+          "filer": "Polygon Labs Services (Switzerland) AG",
+          "filer_lei": null,
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Central Bank of Ireland (CBI)",
+          "home_member_state": "IE",
+          "register_last_update": "2026-09-25",
+          "url": "https://polygon.technology/papers/pol-micar-whitepaper-v2.xhtml",
+          "comments": null,
+          "dti": [
+            "612RCQLCX"
+          ],
+          "ffg_dti": [
+            "GB8DQ8DWN"
+          ],
+          "matched_by": {
+            "url": "pol-micar-whitepaper"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "GB8DQ8DWN"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://polygon.technology/papers/pol-micar-whitepaper-v2.xhtml",
+              "sha256": "4d140468ece4e3fa623f0d146fea16263567867f58ecf11bb8b265c358ae0249",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "612RCQLCX"
+                ],
+                "ffg": [
+                  "GB8DQ8DWN"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 641,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-04-14",
+          "url": "https://www.lcx.com/pol-mica-white-paper/",
+          "comments": "Admission to trading of Polygon (POL)",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/pol-mica-white-paper"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "GB8DQ8DWN"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://wp.lcx.com/wp-content/uploads/POL-MiCA-Whitepaper-v-1.1-.pdf",
+              "sha256": "91dfe28ca54807217d848357afcdbb444442d0f114090cf7028acc5030f41af8",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "RQWW6J6K0"
+                ],
+                "ffg": []
+              },
+              "paper_dti_check": "match: paper DTI is one of the token's register DTIs"
+            }
+          ]
+        },
+        {
+          "esma_row": 715,
+          "filer": "Bitstamp Europe S.A.",
+          "filer_lei": "549300XIBGTJ0PLIEO72",
+          "person_seeking_admission": "Bitstamp Europe S.A.",
+          "person_seeking_admission_lei": "549300XIBGTJ0PLIEO72",
+          "competent_authority": "Commission de Surveillance du Secteur Financier",
+          "home_member_state": "LU",
+          "register_last_update": "2026-01-22",
+          "url": "https://www.bitstamp.net/s/documents/2025-12-23-White-paper-Polygon-POL-FFG-GB8DQ8DWN.xhtml",
+          "comments": "•\tin order to pass the validation rules, Section A was left blank.\n•\tcorporate information for Bitstamp was updated with the latest details",
+          "dti": [
+            "612RCQLCX",
+            "HGMF3TRBK",
+            "RQWW6J6K0"
+          ],
+          "ffg_dti": [
+            "GB8DQ8DWN"
+          ],
+          "matched_by": {
+            "url": "polygon-pol-ffg-gb8dq8dwn"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "GB8DQ8DWN"
+          },
+          "document_status": "blocked by the publisher's bot protection (Incapsula) for scripted downloads; fetch in a browser and add to .cache manually",
+          "documents": []
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "arbitrum",
+      "name": "Arbitrum One",
+      "token": "ARB",
+      "caip2": "eip155:42161",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "44TP35HF9",
+      "dti_summary": {
+        "register_dtis": [
+          "44TP35HF9",
+          "63TGWHVCD",
+          "93K9SQP62"
+        ],
+        "dtis_printed_in_papers": [
+          "44TP35HF9",
+          "63TGWHVCD",
+          "93K9SQP62"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH",
+        "LCX AG"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 117,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-03-12",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/arbitrum-ffg-44tp35hf9/index.html",
+          "comments": "note that the publication date for the white paper is 14.04.2026 at which point this record will be updated with the link",
+          "dti": [
+            "63TGWHVCD",
+            "93K9SQP62"
+          ],
+          "ffg_dti": [
+            "44TP35HF9"
+          ],
+          "matched_by": {
+            "url": "arbitrum-ffg-44tp35hf9"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "44TP35HF9"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-03-12-White-paper-Arbitrum-FFG-44TP35HF9.pdf",
+              "sha256": "13b00083222678353996779b6da20ca38004b01112e8ba9dd5dfc9d5b1a3b2bc",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "63TGWHVCD",
+                  "93K9SQP62"
+                ],
+                "ffg": [
+                  "44TP35HF9"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-03-12-White-paper-Arbitrum-FFG-44TP35HF9.xhtml",
+              "sha256": "3b4c4009d9a7f55482d09d81ded47c51f7eb85c6db07e7f05b99f56e3a4700c2",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "63TGWHVCD",
+                  "93K9SQP62"
+                ],
+                "ffg": [
+                  "44TP35HF9"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-05-05-White-paper-Arbitrum-FFG-44TP35HF9.pdf",
+              "sha256": "ced9c4a535587445159df6047aa538ddddaf784eaee6700324c7068766ec576e",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "63TGWHVCD",
+                  "93K9SQP62"
+                ],
+                "ffg": [
+                  "44TP35HF9"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-05-05-White-paper-Arbitrum-FFG-44TP35HF9.xhtml",
+              "sha256": "945f1c65756756af170e63f3ca03bca5fc97de3aa05c0c27028cec33ba4564e1",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "63TGWHVCD",
+                  "93K9SQP62"
+                ],
+                "ffg": [
+                  "44TP35HF9"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 134,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-05-05",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/arbitrum-ffg-44tp35hf9/index.html",
+          "comments": "Modification",
+          "dti": [
+            "63TGWHVCD",
+            "93K9SQP62"
+          ],
+          "ffg_dti": [
+            "44TP35HF9"
+          ],
+          "matched_by": {
+            "url": "arbitrum-ffg-44tp35hf9"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "44TP35HF9"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-03-12-White-paper-Arbitrum-FFG-44TP35HF9.pdf",
+              "sha256": "13b00083222678353996779b6da20ca38004b01112e8ba9dd5dfc9d5b1a3b2bc",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "63TGWHVCD",
+                  "93K9SQP62"
+                ],
+                "ffg": [
+                  "44TP35HF9"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-03-12-White-paper-Arbitrum-FFG-44TP35HF9.xhtml",
+              "sha256": "3b4c4009d9a7f55482d09d81ded47c51f7eb85c6db07e7f05b99f56e3a4700c2",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "63TGWHVCD",
+                  "93K9SQP62"
+                ],
+                "ffg": [
+                  "44TP35HF9"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-05-05-White-paper-Arbitrum-FFG-44TP35HF9.pdf",
+              "sha256": "ced9c4a535587445159df6047aa538ddddaf784eaee6700324c7068766ec576e",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "63TGWHVCD",
+                  "93K9SQP62"
+                ],
+                "ffg": [
+                  "44TP35HF9"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-05-05-White-paper-Arbitrum-FFG-44TP35HF9.xhtml",
+              "sha256": "945f1c65756756af170e63f3ca03bca5fc97de3aa05c0c27028cec33ba4564e1",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "63TGWHVCD",
+                  "93K9SQP62"
+                ],
+                "ffg": [
+                  "44TP35HF9"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 645,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-04-14",
+          "url": "https://www.lcx.com/arb-mica-white-paper/",
+          "comments": "Admission to trading of Arbitrum (ARB)",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/arb-mica-white-paper"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "44TP35HF9"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://wp.lcx.com/wp-content/uploads/Arbitrum-ARB-MiCA-Whitepaper-v-1.1-05_06_2025-1.pdf",
+              "sha256": "19b3f57d453e2a01ff21dfb0fb5bfe6ce203883afc3c4ba6a2b79dc392d9f9e4",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "44TP35HF9"
+                ],
+                "ffg": []
+              },
+              "paper_dti_check": "match, but the paper prints the FFG DTI in its DTI field"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "op",
+      "name": "OP Mainnet",
+      "token": "OP",
+      "caip2": "eip155:10",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": null,
+      "dti_summary": {
+        "register_dtis": [],
+        "dtis_printed_in_papers": [
+          "9NRMM2RC4"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "LCX AG"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 643,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-04-14",
+          "url": "https://www.lcx.com/op-mica-white-paper/",
+          "comments": "Admission to trading of Optimism (OP)",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/op-mica-white-paper"
+          },
+          "dti_check": {
+            "result": "not-checked",
+            "why": "no FFG DTI known for this token in the register"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://wp.lcx.com/wp-content/uploads/Optimism-OP-MiCA-Whitepaper-v-1.1-05_06_2025.docx-1.pdf",
+              "sha256": "e5f55a734a25b146f5e6c7d3ada0d06513099b6a4440ed7e8008777878d0ab80",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "9NRMM2RC4"
+                ],
+                "ffg": []
+              },
+              "paper_dti_check": "unverified: no DTI for this token in the register to compare with"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "mantle",
+      "name": "Mantle",
+      "token": "MNT",
+      "caip2": "eip155:5000",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "QH1GF1J5H",
+      "dti_summary": {
+        "register_dtis": [
+          "C0D7M4H0R",
+          "K1KRW1TFQ",
+          "QH1GF1J5H"
+        ],
+        "dtis_printed_in_papers": [
+          "C0D7M4H0R",
+          "K1KRW1TFQ",
+          "QH1GF1J5H"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Bitstamp Europe S.A.",
+        "Crypto Risk Metrics GmbH",
+        "LCX AG"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 178,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-09-25",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/mantle-ffg-qh1gf1j5h/index.html",
+          "comments": null,
+          "dti": [
+            "C0D7M4H0R",
+            "K1KRW1TFQ"
+          ],
+          "ffg_dti": [
+            "QH1GF1J5H"
+          ],
+          "matched_by": {
+            "url": "mantle-ffg-qh1gf1j5h"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "QH1GF1J5H"
+          },
+          "document_status": "register URL is a web page with no white-paper document linked from it",
+          "documents": []
+        },
+        {
+          "esma_row": 670,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-09-12",
+          "url": "https://www.lcx.com/mnt-mica-white-paper/",
+          "comments": "Admission to trading of MNT",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/mnt-mica-white-paper"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "QH1GF1J5H"
+          },
+          "document_status": "fetch failed: HTTPError: HTTP Error 404: Not Found",
+          "documents": []
+        },
+        {
+          "esma_row": 743,
+          "filer": "Bitstamp Europe S.A.",
+          "filer_lei": "549300XIBGTJ0PLIEO72",
+          "person_seeking_admission": "Bitstamp Europe S.A.",
+          "person_seeking_admission_lei": "549300XIBGTJ0PLIEO72",
+          "competent_authority": "Commission de Surveillance du Secteur Financier",
+          "home_member_state": "LU",
+          "register_last_update": "2026-03-24",
+          "url": "https://assets.bitstamp.net/docs/whitepaper/MNT_2026_03_09.xhtml",
+          "comments": "Note that the publication date for the white paper is 20/04/2026 at which point this record will be updated with the link.",
+          "dti": [
+            "C0D7M4H0R",
+            "K1KRW1TFQ"
+          ],
+          "ffg_dti": [
+            "QH1GF1J5H"
+          ],
+          "matched_by": {
+            "url": "whitepaper/mnt_"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "QH1GF1J5H"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://assets.bitstamp.net/docs/whitepaper/MNT_2026_03_09.xhtml",
+              "sha256": "05a48af4ba82518faa0d1f08e6edfd1b1e4529d9d3a75cddcc4c187878afeb5b",
+              "kind": "xhtml-table",
+              "paper_dti": {
+                "dti": [
+                  "C0D7M4H0R",
+                  "K1KRW1TFQ"
+                ],
+                "ffg": [
+                  "QH1GF1J5H"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": [
+        {
+          "esma_row": 557,
+          "filer": "MantleLSP Limited",
+          "filer_lei": null,
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Central Bank of Ireland (CBI)",
+          "home_member_state": "IE",
+          "register_last_update": "2026-05-22",
+          "url": "methprotocol.xyz/mica-whitepaper",
+          "comments": null,
+          "dti": [
+            "37ZLSZGK1"
+          ],
+          "ffg_dti": [
+            "VSK737T5N"
+          ],
+          "reason": "mETH / cmETH liquid-staking tokens (FFG VSK737T5N), not MNT"
+        },
+        {
+          "esma_row": 558,
+          "filer": "MantleLSP Limited",
+          "filer_lei": null,
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Central Bank of Ireland (CBI)",
+          "home_member_state": "IE",
+          "register_last_update": "2026-05-22",
+          "url": "methprotocol.xyz/mica-whitepaper",
+          "comments": null,
+          "dti": [
+            "X0KHQHP33"
+          ],
+          "ffg_dti": [
+            "VSK737T5N"
+          ],
+          "reason": "mETH / cmETH liquid-staking tokens (FFG VSK737T5N), not MNT"
+        }
+      ]
+    },
+    {
+      "network": "zksync",
+      "name": "ZKsync Era",
+      "token": "ZK",
+      "caip2": "eip155:324",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "BCBLPFRBX",
+      "dti_summary": {
+        "register_dtis": [
+          "BCBLPFRBX",
+          "HKL2NKLD8"
+        ],
+        "dtis_printed_in_papers": [
+          "BCBLPFRBX",
+          "HKL2NKLD8"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Bitstamp Europe S.A.",
+        "ZKsync Association - Ein Verein zur Foerderung des digitalen Oekosystems ZKsync e.V."
+      ],
+      "white_papers": [
+        {
+          "esma_row": 7,
+          "filer": "ZKsync Association - Ein Verein zur Foerderung des digitalen Oekosystems ZKsync e.V.",
+          "filer_lei": "529900SV858GPLFCQK64",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Austrian Financial Market Authority (FMA)",
+          "home_member_state": "AT",
+          "register_last_update": "2025-09-24",
+          "url": "zknation.io",
+          "comments": null,
+          "dti": [
+            "HKL2NKLD8"
+          ],
+          "ffg_dti": [
+            "BCBLPFRBX"
+          ],
+          "matched_by": {
+            "url": "zknation.io"
+          },
+          "note": "Register URL is the project home page, not the paper",
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "BCBLPFRBX"
+          },
+          "document_status": "register URL is a web page with no white-paper document linked from it",
+          "documents": []
+        },
+        {
+          "esma_row": 746,
+          "filer": "Bitstamp Europe S.A.",
+          "filer_lei": "549300XIBGTJ0PLIEO72",
+          "person_seeking_admission": "Bitstamp Europe S.A.",
+          "person_seeking_admission_lei": "549300XIBGTJ0PLIEO72",
+          "competent_authority": "Commission de Surveillance du Secteur Financier",
+          "home_member_state": "LU",
+          "register_last_update": "2026-05-12",
+          "url": "https://assets.bitstamp.net/docs/whitepaper/ZK_2026_05_07.xhtml",
+          "comments": "Note that the publication date for the white paper is 10/06/2026 at which point this record will be updated with the link.",
+          "dti": [
+            "HKL2NKLD8"
+          ],
+          "ffg_dti": [
+            "BCBLPFRBX"
+          ],
+          "matched_by": {
+            "url": "whitepaper/zk_"
+          },
+          "note": "Bitstamp filing; FFG DTI BCBLPFRBX matches the ZKsync Association row",
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "BCBLPFRBX"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://assets.bitstamp.net/docs/whitepaper/ZK_2026_05_07.xhtml",
+              "sha256": "59663d54ee34141505af59bf65a579351ed01ab6c239de08ccaf4232e7f35312",
+              "kind": "xhtml-table",
+              "paper_dti": {
+                "dti": [
+                  "HKL2NKLD8"
+                ],
+                "ffg": [
+                  "BCBLPFRBX"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "polkadot",
+      "name": "Polkadot",
+      "token": "DOT",
+      "caip2": "polkadot:91b171bb158e2d3848fa23a9f1c25182",
+      "caip2_source": "CAIP-2 polkadot namespace (genesis hash prefix); not in sdk/data/chains.json - confirm before signing",
+      "ffg_dti": "SGD9NLTRG",
+      "dti_summary": {
+        "register_dtis": [
+          "KNPTB87Q5",
+          "N3TLFXRZL",
+          "P5B46MFPP",
+          "S8CVG4KKZ",
+          "SGD9NLTRG"
+        ],
+        "dtis_printed_in_papers": [
+          "KNPTB87Q5",
+          "N3TLFXRZL",
+          "P5B46MFPP",
+          "S8CVG4KKZ",
+          "SGD9NLTRG"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH",
+        "LCX AG"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 152,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-07-09",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/polkadot-dot-ffg-sgd9nltrg/index.html",
+          "comments": null,
+          "dti": [
+            "KNPTB87Q5",
+            "N3TLFXRZL",
+            "P5B46MFPP",
+            "S8CVG4KKZ"
+          ],
+          "ffg_dti": [
+            "SGD9NLTRG"
+          ],
+          "matched_by": {
+            "url": "polkadot-dot-ffg-sgd9nltrg"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "SGD9NLTRG"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-07-09-White-paper-Polkadot-DOT-FFG-SGD9NLTRG.pdf",
+              "sha256": "cdae03ef18ac336b79b268936830f5791d8bbdb54c01ef30bae9fcea43390448",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "KNPTB87Q5",
+                  "N3TLFXRZL",
+                  "P5B46MFPP",
+                  "S8CVG4KKZ"
+                ],
+                "ffg": [
+                  "SGD9NLTRG"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-07-09-White-paper-Polkadot-DOT-FFG-SGD9NLTRG.xhtml",
+              "sha256": "91da8c6ff7ab4be3533a57ba8d0a04ce2cd54d5d248c7cd6dded365e4ad797dd",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "KNPTB87Q5",
+                  "N3TLFXRZL",
+                  "P5B46MFPP",
+                  "S8CVG4KKZ"
+                ],
+                "ffg": [
+                  "SGD9NLTRG"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 658,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-06-16",
+          "url": "https://www.lcx.com/dot-mica-white-paper/",
+          "comments": "Admission to trading of DOT",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/dot-mica-white-paper"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "SGD9NLTRG"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://wp.lcx.com/wp-content/uploads/Polkadot-DOT-MiCA-Whitepaper-v1.1.pdf",
+              "sha256": "93f0e362691110b4b2e09d8e114fa99e3bf4e8b43d62f7db18c51bff9dec36b2",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "P5B46MFPP"
+                ],
+                "ffg": []
+              },
+              "paper_dti_check": "match: paper DTI is one of the token's register DTIs"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "cosmoshub",
+      "name": "Cosmos Hub",
+      "token": "ATOM",
+      "caip2": "cosmos:cosmoshub-4",
+      "caip2_source": "CAIP-2 cosmos namespace; not in sdk/data/chains.json - confirm before signing",
+      "ffg_dti": "6C7F2WVZH",
+      "dti_summary": {
+        "register_dtis": [
+          "2RZ13PHH3",
+          "6453368PD",
+          "6C7F2WVZH",
+          "DJ0QPRH0W",
+          "HX1NSP98N",
+          "J51DXB76N",
+          "JVMWS68W1",
+          "MC73KT6K4",
+          "W03RCK39H"
+        ],
+        "dtis_printed_in_papers": [
+          "2RZ13PHH3",
+          "6453368PD",
+          "6C7F2WVZH",
+          "DJ0QPRH0W",
+          "HX1NSP98N",
+          "J51DXB76N",
+          "JVMWS68W1",
+          "MC73KT6K4",
+          "W03RCK39H"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Bitstamp Europe S.A.",
+        "Crypto Risk Metrics GmbH"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 87,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-01-08",
+          "url": "https://www.crypto-risk-metrics.com/en/white-paper-cosmos-atom-ffg-6c7f2wvzh/",
+          "comments": "note that the publication date for the white paper is 06.02.2026 at which point this record will be updated with the link",
+          "dti": [
+            "2RZ13PHH3",
+            "6453368PD",
+            "DJ0QPRH0W",
+            "HX1NSP98N",
+            "J51DXB76N",
+            "JVMWS68W1",
+            "MC73KT6K4",
+            "W03RCK39H"
+          ],
+          "ffg_dti": [
+            "6C7F2WVZH"
+          ],
+          "matched_by": {
+            "url": "cosmos-atom-ffg-6c7f2wvzh"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "6C7F2WVZH"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-01-08-White-paper-Cosmos-ATOM-FFG-6C7F2WVZH.pdf",
+              "sha256": "938456d35dde5cf9e03ffe52d1ec52b26779915c1869c32c737baa2dcc181f2a",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "2RZ13PHH3",
+                  "6453368PD",
+                  "HX1NSP98N",
+                  "J51DXB76N",
+                  "JVMWS68W1",
+                  "MC73KT6K4",
+                  "W03RCK39H"
+                ],
+                "ffg": [
+                  "6C7F2WVZH"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-01-08-White-paper-Cosmos-ATOM-FFG-6C7F2WVZH.xhtml",
+              "sha256": "c90410e49add78c3749eab045c76394571b1b6f6aebf6537b08796bd9122cf46",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "2RZ13PHH3",
+                  "6453368PD",
+                  "DJ0QPRH0W",
+                  "HX1NSP98N",
+                  "J51DXB76N",
+                  "JVMWS68W1",
+                  "MC73KT6K4",
+                  "W03RCK39H"
+                ],
+                "ffg": [
+                  "6C7F2WVZH"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 737,
+          "filer": "Bitstamp Europe S.A.",
+          "filer_lei": "549300XIBGTJ0PLIEO72",
+          "person_seeking_admission": "Bitstamp Europe S.A.",
+          "person_seeking_admission_lei": "549300XIBGTJ0PLIEO72",
+          "competent_authority": "Commission de Surveillance du Secteur Financier",
+          "home_member_state": "LU",
+          "register_last_update": "2026-01-22",
+          "url": "https://www.bitstamp.net/s/documents/2026-01-19-White-paper-Cosmos-ATOM-FFG-6C7F2WVZH.xhtml",
+          "comments": null,
+          "dti": [
+            "2RZ13PHH3",
+            "6453368PD",
+            "DJ0QPRH0W",
+            "HX1NSP98N",
+            "J51DXB76N",
+            "MC73KT6K4",
+            "W03RCK39H"
+          ],
+          "ffg_dti": [
+            "6C7F2WVZH"
+          ],
+          "matched_by": {
+            "url": "cosmos-atom-ffg-6c7f2wvzh"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "6C7F2WVZH"
+          },
+          "document_status": "blocked by the publisher's bot protection (Incapsula) for scripted downloads; fetch in a browser and add to .cache manually",
+          "documents": []
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "injective",
+      "name": "Injective",
+      "token": "INJ",
+      "caip2": "cosmos:injective-1",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "92M9B0DZ7",
+      "dti_summary": {
+        "register_dtis": [
+          "92M9B0DZ7",
+          "G5B2ZPMNZ",
+          "JVHX3MS60",
+          "LGWSMX228",
+          "VKJM0GHDH",
+          "VS82ZDXTF",
+          "WFQSW1L5L"
+        ],
+        "dtis_printed_in_papers": [
+          "92M9B0DZ7",
+          "JVHX3MS60",
+          "LGWSMX228",
+          "VKJM0GHDH",
+          "VS82ZDXTF",
+          "WFQSW1L5L"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH",
+        "Injective Foundation"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 154,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-07-14",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/injective-token-ffg-92m9b0dz7/index.html",
+          "comments": null,
+          "dti": [
+            "JVHX3MS60",
+            "LGWSMX228",
+            "VKJM0GHDH",
+            "VS82ZDXTF",
+            "WFQSW1L5L"
+          ],
+          "ffg_dti": [
+            "92M9B0DZ7"
+          ],
+          "matched_by": {
+            "url": "injective-token-ffg-92m9b0dz7"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "92M9B0DZ7"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-07-13-White-paper-Injective-Token-FFG-92M9B0DZ7.pdf",
+              "sha256": "fbb01636408d112c808adca80038f5f8f68d9d19d6e1f9c12483df160df9a75d",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "JVHX3MS60",
+                  "LGWSMX228",
+                  "VKJM0GHDH",
+                  "VS82ZDXTF",
+                  "WFQSW1L5L"
+                ],
+                "ffg": [
+                  "92M9B0DZ7"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-07-13-White-paper-Injective-Token-FFG-92M9B0DZ7.xhtml",
+              "sha256": "a8438616bf994db2f01d9fec83fc5877c3c922392aa4967ef47ba6aace4bd32a",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "JVHX3MS60",
+                  "LGWSMX228",
+                  "VKJM0GHDH",
+                  "VS82ZDXTF",
+                  "WFQSW1L5L"
+                ],
+                "ffg": [
+                  "92M9B0DZ7"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 182,
+          "filer": "Injective Foundation",
+          "filer_lei": null,
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Finanstilsynet",
+          "home_member_state": "DK",
+          "register_last_update": "2026-07-03",
+          "url": "https://injective.com/research",
+          "comments": null,
+          "dti": [
+            "G5B2ZPMNZ"
+          ],
+          "ffg_dti": [
+            "92M9B0DZ7"
+          ],
+          "matched_by": {
+            "filer": "Injective Foundation"
+          },
+          "note": "Register URL is a research page, not the paper",
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "92M9B0DZ7"
+          },
+          "document_status": "register URL is a web page with no white-paper document linked from it",
+          "documents": []
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "dydx",
+      "name": "dYdX",
+      "token": "DYDX",
+      "caip2": "cosmos:dydx-mainnet-1",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "1HZHK551M",
+      "dti_summary": {
+        "register_dtis": [
+          "1HZHK551M",
+          "728WHR0H1",
+          "P6N1JVK4W"
+        ],
+        "dtis_printed_in_papers": []
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 75,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2025-09-02",
+          "url": "https://crypto-risk-metrics.com/en/white-paper-dydx-ffg-1hzhk551m/",
+          "comments": null,
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "dydx-ffg-1hzhk551m"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "1HZHK551M"
+          },
+          "document_status": "register URL is a web page with no white-paper document linked from it",
+          "documents": []
+        },
+        {
+          "esma_row": 177,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-09-25",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/dydx-ffg-1hzhk551m/index.html",
+          "comments": null,
+          "dti": [
+            "728WHR0H1",
+            "P6N1JVK4W"
+          ],
+          "ffg_dti": [
+            "1HZHK551M"
+          ],
+          "matched_by": {
+            "url": "dydx-ffg-1hzhk551m"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "1HZHK551M"
+          },
+          "document_status": "register URL is a web page with no white-paper document linked from it",
+          "documents": []
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "cronos",
+      "name": "Cronos",
+      "token": "CRO",
+      "caip2": "cosmos:cronosmainnet_25-1",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "GWM30MLW3",
+      "dti_summary": {
+        "register_dtis": [
+          "2MPCC77C1",
+          "5VNCFR2T5",
+          "C77WR20TB",
+          "D00BX2H21",
+          "DQG22RKCR",
+          "G0V71VTTX",
+          "GWM30MLW3",
+          "W4DBTJQ98",
+          "ZBC8DTX8G"
+        ],
+        "dtis_printed_in_papers": [
+          "2MPCC77C1",
+          "5VNCFR2T5",
+          "C77WR20TB",
+          "D00BX2H21",
+          "DQG22RKCR",
+          "G0V71VTTX",
+          "GWM30MLW3",
+          "W4DBTJQ98",
+          "ZBC8DTX8G"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 166,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-09-01",
+          "url": "https://white-paper.crypto-risk-metrics.com/de/cronos-ffg-gwm30mlw3/index.html",
+          "comments": "Modification",
+          "dti": [
+            "2MPCC77C1",
+            "5VNCFR2T5",
+            "C77WR20TB",
+            "D00BX2H21",
+            "DQG22RKCR",
+            "G0V71VTTX",
+            "W4DBTJQ98",
+            "ZBC8DTX8G"
+          ],
+          "ffg_dti": [
+            "GWM30MLW3"
+          ],
+          "matched_by": {
+            "url": "cronos-ffg-gwm30mlw3"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "GWM30MLW3"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-01-20-White-paper-Cronos-FFG-GWM30MLW3.pdf",
+              "sha256": "880d0fd3120491a90ce614acc7849019e853d94539cbdc2bf995665e04a12a0f",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "2MPCC77C1",
+                  "5VNCFR2T5",
+                  "C77WR20TB",
+                  "D00BX2H21",
+                  "DQG22RKCR",
+                  "G0V71VTTX",
+                  "ZBC8DTX8G"
+                ],
+                "ffg": [
+                  "GWM30MLW3"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-01-20-White-paper-Cronos-FFG-GWM30MLW3.xhtml",
+              "sha256": "97cda92799e52f2b39e104499f5ffacce88c4fc696a7e6dba4bb8804bd6b128e",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "2MPCC77C1",
+                  "5VNCFR2T5",
+                  "C77WR20TB",
+                  "D00BX2H21",
+                  "DQG22RKCR",
+                  "G0V71VTTX",
+                  "ZBC8DTX8G"
+                ],
+                "ffg": [
+                  "GWM30MLW3"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-09-01-White-paper-Cronos-FFG-GWM30MLW3.pdf",
+              "sha256": "4190582e8d80131627bcad624e23c5e3e00e40ad6d1931fa4e6d6bc9a8057e66",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "2MPCC77C1",
+                  "5VNCFR2T5",
+                  "C77WR20TB",
+                  "DQG22RKCR",
+                  "G0V71VTTX",
+                  "W4DBTJQ98",
+                  "ZBC8DTX8G"
+                ],
+                "ffg": [
+                  "GWM30MLW3"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-09-01-White-paper-Cronos-FFG-GWM30MLW3.xhtml",
+              "sha256": "9927756afe3ce8d1962da6578225e104f4e754842b2f3322bedfc82ecb81493f",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "2MPCC77C1",
+                  "5VNCFR2T5",
+                  "C77WR20TB",
+                  "D00BX2H21",
+                  "DQG22RKCR",
+                  "G0V71VTTX",
+                  "W4DBTJQ98",
+                  "ZBC8DTX8G"
+                ],
+                "ffg": [
+                  "GWM30MLW3"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "flare",
+      "name": "Flare",
+      "token": "FLR",
+      "caip2": "eip155:14",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "DVRV6HSK5",
+      "dti_summary": {
+        "register_dtis": [
+          "3KXTVG1Q5",
+          "DVRV6HSK5"
+        ],
+        "dtis_printed_in_papers": [
+          "3KXTVG1Q5",
+          "DVRV6HSK5"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Bitstamp Europe S.A."
+      ],
+      "white_papers": [
+        {
+          "esma_row": 756,
+          "filer": "Bitstamp Europe S.A.",
+          "filer_lei": "549300XIBGTJ0PLIEO72",
+          "person_seeking_admission": "Bitstamp Europe S.A.",
+          "person_seeking_admission_lei": "549300XIBGTJ0PLIEO72",
+          "competent_authority": "Commission de Surveillance du Secteur Financier (CSSF)",
+          "home_member_state": "LU",
+          "register_last_update": "2026-06-12",
+          "url": "https://assets.bitstamp.net/docs/whitepaper/FLR_2026_06_10.xhtml",
+          "comments": "Note that the publication date for the white paper is 10/07/2026 at which point this record will be updated with the link.",
+          "dti": [
+            "3KXTVG1Q5"
+          ],
+          "ffg_dti": [
+            "DVRV6HSK5"
+          ],
+          "matched_by": {
+            "url": "whitepaper/flr_"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "DVRV6HSK5"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://assets.bitstamp.net/docs/whitepaper/FLR_2026_06_10.xhtml",
+              "sha256": "9b33a5d568cd54ccf4071fefe52127b001192298e57e2fed5a208a2b374947eb",
+              "kind": "xhtml-table",
+              "paper_dti": {
+                "dti": [
+                  "3KXTVG1Q5"
+                ],
+                "ffg": [
+                  "DVRV6HSK5"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "canton",
+      "name": "Canton",
+      "token": "CC",
+      "caip2": "canton:global",
+      "caip2_source": "provisional (no CAIP-2 namespace yet; sdk/data/chains.json pins canton:sandbox for e2e) - confirm before signing",
+      "ffg_dti": null,
+      "dti_summary": {
+        "register_dtis": [],
+        "dtis_printed_in_papers": []
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Canton Foundation"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 390,
+          "filer": "Canton Foundation",
+          "filer_lei": null,
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Central Bank of Ireland (CBI)",
+          "home_member_state": "IE",
+          "register_last_update": "2025-11-01",
+          "url": "https://www.canton.network/hubfs/Canton%20Network%20Files/whitepapers/Canton%20Coin%20%20-%20MiCA%20Whitepaper.pdf",
+          "comments": null,
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "filer": "Canton Foundation"
+          },
+          "dti_check": {
+            "result": "not-checked",
+            "why": "no FFG DTI known for this token in the register"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://www.canton.network/hubfs/Canton%20Network%20Files/whitepapers/Canton%20Coin%20%20-%20MiCA%20Whitepaper.pdf",
+              "sha256": "07f10cccf62d8558fa338acad4d6fd9098a802ef347dad9237021acafa88fe4b",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [],
+                "ffg": []
+              },
+              "paper_dti_check": "paper prints no DTI"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "sui",
+      "name": "Sui",
+      "token": "SUI",
+      "caip2": "sui:mainnet",
+      "caip2_source": "CAIP-2 sui namespace; not in sdk/data/chains.json - confirm before signing",
+      "ffg_dti": "64RFW3D8P",
+      "dti_summary": {
+        "register_dtis": [
+          "64RFW3D8P",
+          "90KLX8GQX",
+          "Z4WDVXT0Z"
+        ],
+        "dtis_printed_in_papers": [
+          "64RFW3D8P",
+          "90KLX8GQX",
+          "Z4WDVXT0Z"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH",
+        "LCX AG",
+        "Sui Foundation"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 123,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-04-02",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/sui-ffg-64rfw3d8p/index.html",
+          "comments": null,
+          "dti": [
+            "90KLX8GQX",
+            "Z4WDVXT0Z"
+          ],
+          "ffg_dti": [
+            "64RFW3D8P"
+          ],
+          "matched_by": {
+            "url": "sui-ffg-64rfw3d8p"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "64RFW3D8P"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-03-25-White-paper-Sui-FFG-64RFW3D8P.pdf",
+              "sha256": "b0bb8c2a85413e4b2771457c86e49320f344fbb44e9a325c2555ab7b34ed186d",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "90KLX8GQX",
+                  "Z4WDVXT0Z"
+                ],
+                "ffg": [
+                  "64RFW3D8P"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-03-25-White-paper-Sui-FFG-64RFW3D8P.xhtml",
+              "sha256": "472f594bd505c6f27cec88eef34ad4ae35411e4d66fda2a2549a02e74fa8d847",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "90KLX8GQX",
+                  "Z4WDVXT0Z"
+                ],
+                "ffg": [
+                  "64RFW3D8P"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 676,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-09-12",
+          "url": "https://www.lcx.com/sui-mica-white-paper/",
+          "comments": "Admission to trading of SUI",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/sui-mica-white-paper"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "64RFW3D8P"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://wp.lcx.com/wp-content/uploads/SUI-MiCA-Whitepaper-v-1.1.pdf",
+              "sha256": "4c5fc12b507a199848e9426377213b2594ee2e8c26b4f2d93ee7c6f75d52000a",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "64RFW3D8P"
+                ],
+                "ffg": [
+                  "90KLX8GQX"
+                ]
+              },
+              "paper_dti_check": "match, but the paper prints the FFG DTI in its DTI field"
+            }
+          ]
+        },
+        {
+          "esma_row": 988,
+          "filer": "Sui Foundation",
+          "filer_lei": null,
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Netherlands Authority for the Financial Markets (AFM)",
+          "home_member_state": "NL",
+          "register_last_update": "2025-12-15",
+          "url": "https://www.onetrading.com/policy",
+          "comments": "wp update",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "filer": "Sui Foundation "
+          },
+          "note": "Register URL is a trading-platform policy page; token identity rests on the filer name only (no DTI in the row)",
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "64RFW3D8P"
+          },
+          "document_status": "register URL is a web page with no white-paper document linked from it",
+          "documents": []
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "aptos",
+      "name": "Aptos",
+      "token": "APT",
+      "caip2": "aptos:1",
+      "caip2_source": "CAIP-2 aptos namespace; not in sdk/data/chains.json - confirm before signing",
+      "ffg_dti": "C4CQCGLH2",
+      "dti_summary": {
+        "register_dtis": [
+          "C4CQCGLH2",
+          "SMB9ZBCGN",
+          "SSFZXXTDD"
+        ],
+        "dtis_printed_in_papers": [
+          "C4CQCGLH2",
+          "SMB9ZBCGN",
+          "SSFZXXTDD"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Bitstamp Europe S.A.",
+        "Crypto Risk Metrics GmbH"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 102,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-01-29",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/aptos-coin-ffg-c4cqcglh2/index.html",
+          "comments": "note that the publication date for the white paper is 27.02.2026 at which point this record will be updated with the link",
+          "dti": [
+            "SMB9ZBCGN",
+            "SSFZXXTDD"
+          ],
+          "ffg_dti": [
+            "C4CQCGLH2"
+          ],
+          "matched_by": {
+            "url": "aptos-coin-ffg-c4cqcglh2"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "C4CQCGLH2"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-01-29-White-paper-Aptos-Coin-FFG-C4CQCGLH2.pdf",
+              "sha256": "daca8474050ebe42166d10c5869fa1fdc00651545f7b5f04a40e722019e3ec25",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "SMB9ZBCGN",
+                  "SSFZXXTDD"
+                ],
+                "ffg": [
+                  "C4CQCGLH2"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-01-29-White-paper-Aptos-Coin-FFG-C4CQCGLH2.xhtml",
+              "sha256": "1da76543e05b7dd2692df7c3f4dabe0bfc1306ca2e900737ef8228f4ef0d844c",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "SMB9ZBCGN",
+                  "SSFZXXTDD"
+                ],
+                "ffg": [
+                  "C4CQCGLH2"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 734,
+          "filer": "Bitstamp Europe S.A.",
+          "filer_lei": "549300XIBGTJ0PLIEO72",
+          "person_seeking_admission": "Bitstamp Europe S.A.",
+          "person_seeking_admission_lei": "549300XIBGTJ0PLIEO72",
+          "competent_authority": "Commission de Surveillance du Secteur Financier",
+          "home_member_state": "LU",
+          "register_last_update": "2026-01-22",
+          "url": "https://www.bitstamp.net/s/documents/2026-01-12-White-paper-Aptos-Coin-FFG-C4CQCGLH2.xhtml",
+          "comments": null,
+          "dti": [
+            "SMB9ZBCGN",
+            "SSFZXXTDD"
+          ],
+          "ffg_dti": [
+            "C4CQCGLH2"
+          ],
+          "matched_by": {
+            "url": "aptos-coin-ffg-c4cqcglh2"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "C4CQCGLH2"
+          },
+          "document_status": "blocked by the publisher's bot protection (Incapsula) for scripted downloads; fetch in a browser and add to .cache manually",
+          "documents": []
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "near",
+      "name": "NEAR",
+      "token": "NEAR",
+      "caip2": "near:mainnet",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": null,
+      "dti_summary": {
+        "register_dtis": [],
+        "dtis_printed_in_papers": [
+          "DC83NXWML"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "LCX AG"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 640,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-04-14",
+          "url": "https://www.lcx.com/near-mica-white-paper/",
+          "comments": "Admission to trading of NEAR (NEAR)",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/near-mica-white-paper"
+          },
+          "dti_check": {
+            "result": "not-checked",
+            "why": "no FFG DTI known for this token in the register"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://wp.lcx.com/wp-content/uploads/NEAR-MiCA-Whitepaper-v-1.1-05_06_2025-1.pdf",
+              "sha256": "3877211fe06e2e70ff61d235592e58b77985241c097b13f0936a738f82e4f8fa",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "DC83NXWML"
+                ],
+                "ffg": []
+              },
+              "paper_dti_check": "unverified: no DTI for this token in the register to compare with"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "ton",
+      "name": "TON",
+      "token": "TON",
+      "caip2": "ton:mainnet",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "KK12JMBTX",
+      "dti_summary": {
+        "register_dtis": [
+          "KK12JMBTX",
+          "QBZLT5MT1"
+        ],
+        "dtis_printed_in_papers": [
+          "KK12JMBTX",
+          "QBZLT5MT1"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Crypto Risk Metrics GmbH",
+        "LCX AG"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 92,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-01-13",
+          "url": "https://www.crypto-risk-metrics.com/en/white-paper-toncoin-ffg-kk12jmbtx/",
+          "comments": "note that the publication date for the white paper is 11.02.2026 at which point this record will be updated with the link",
+          "dti": [
+            "QBZLT5MT1"
+          ],
+          "ffg_dti": [
+            "KK12JMBTX"
+          ],
+          "matched_by": {
+            "url": "toncoin-ffg-kk12jmbtx"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "KK12JMBTX"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-01-13-White-paper-Toncoin-FFG-KK12JMBTX.pdf",
+              "sha256": "b3218f89194a8ba8cc41d96b451d5420cab8844268da5241abf8051e0836fe0e",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "QBZLT5MT1"
+                ],
+                "ffg": [
+                  "KK12JMBTX"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-01-13-White-paper-Toncoin-FFG-KK12JMBTX.xhtml",
+              "sha256": "b6d4410b5e273916e2e064e0bd28a26d944f94f2c5a1a941f66832d24d576e9c",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "QBZLT5MT1"
+                ],
+                "ffg": [
+                  "KK12JMBTX"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 156,
+          "filer": "Crypto Risk Metrics GmbH",
+          "filer_lei": "39120077M9TG0O1FE242",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+          "home_member_state": "DE",
+          "register_last_update": "2026-08-03",
+          "url": "https://white-paper.crypto-risk-metrics.com/en/gram-ffg-kk12jmbtx/index.html",
+          "comments": null,
+          "dti": [
+            "QBZLT5MT1"
+          ],
+          "ffg_dti": [
+            "KK12JMBTX"
+          ],
+          "matched_by": {
+            "url": "gram-ffg-kk12jmbtx"
+          },
+          "note": "Crypto Risk Metrics re-filed the Toncoin paper under the name 'Gram' (TON's original name); same FFG DTI KK12JMBTX and DTI QBZLT5MT1 as its Toncoin row",
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "KK12JMBTX"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-01-13-White-paper-Toncoin-FFG-KK12JMBTX.pdf",
+              "sha256": "b3218f89194a8ba8cc41d96b451d5420cab8844268da5241abf8051e0836fe0e",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "QBZLT5MT1"
+                ],
+                "ffg": [
+                  "KK12JMBTX"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-01-13-White-paper-Toncoin-FFG-KK12JMBTX.xhtml",
+              "sha256": "b6d4410b5e273916e2e064e0bd28a26d944f94f2c5a1a941f66832d24d576e9c",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "QBZLT5MT1"
+                ],
+                "ffg": [
+                  "KK12JMBTX"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-08-03-White-paper-Gram-FFG-KK12JMBTX.pdf",
+              "sha256": "020b85a0002211092d449bf367f67d799fad91f961f401b03e6553d4b959349f",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "QBZLT5MT1"
+                ],
+                "ffg": [
+                  "KK12JMBTX"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            },
+            {
+              "url": "https://white-paper.crypto-risk-metrics.com/2026-08-03-White-paper-Gram-FFG-KK12JMBTX.xhtml",
+              "sha256": "4442ea333b7a8de5e529b988b8e0ff2791640b8d6bc3c83e7210abbf3b7d9d8e",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "QBZLT5MT1"
+                ],
+                "ffg": [
+                  "KK12JMBTX"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        },
+        {
+          "esma_row": 660,
+          "filer": null,
+          "filer_lei": null,
+          "person_seeking_admission": "LCX AG",
+          "person_seeking_admission_lei": "529900SN07Z6RTX8R418",
+          "competent_authority": "Finanzmarktaufsicht (FMA)",
+          "home_member_state": "LI",
+          "register_last_update": "2025-06-16",
+          "url": "https://www.lcx.com/ton-mica-white-paper/",
+          "comments": "Admission to trading of TON",
+          "dti": [],
+          "ffg_dti": [],
+          "matched_by": {
+            "url": "lcx.com/ton-mica-white-paper"
+          },
+          "dti_check": {
+            "result": "row-has-no-dti",
+            "expected_ffg_dti": "KK12JMBTX"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://wp.lcx.com/wp-content/uploads/TON-MiCA-Whitepaper-v1.1.pdf",
+              "sha256": "85319c9b5d814cfd55eb805149888c1201c89475a64e77d365f2e139424f7ceb",
+              "kind": "pdf",
+              "paper_dti": {
+                "dti": [
+                  "QBZLT5MT1"
+                ],
+                "ffg": []
+              },
+              "paper_dti_check": "match: paper DTI is one of the token's register DTIs"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": [
+        {
+          "esma_row": 529,
+          "filer": "DuckChain Foundation",
+          "filer_lei": "254900D14600EDO8T480",
+          "person_seeking_admission": "Kraken",
+          "person_seeking_admission_lei": "2138007WXW95L989QP22",
+          "competent_authority": "Central Bank of Ireland (CBI)",
+          "home_member_state": "IE",
+          "register_last_update": "2026-03-27",
+          "url": "https://duckchain.io/micar/DuckChain_MiCAR_WP.html",
+          "comments": null,
+          "dti": [
+            "QBZLT5MT1"
+          ],
+          "ffg_dti": [],
+          "shared_dti": [
+            "QBZLT5MT1"
+          ],
+          "reason": "DuckChain token (DUCK). Its register row carries DTI QBZLT5MT1, the same DTI as Crypto Risk Metrics' Toncoin row - a DTI collision, most likely the DTI of the TON-network implementation listed by mistake. Not a TON white paper."
+        }
+      ]
+    },
+    {
+      "network": "bittensor",
+      "name": "Bittensor",
+      "token": "TAO",
+      "caip2": "eip155:964",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": "6N7FD6DBX",
+      "dti_summary": {
+        "register_dtis": [
+          "6N7FD6DBX",
+          "LBQFC0FVK"
+        ],
+        "dtis_printed_in_papers": [
+          "6N7FD6DBX",
+          "LBQFC0FVK"
+        ]
+      },
+      "white_paper_in_register": true,
+      "filers": [
+        "Opentensor Foundation"
+      ],
+      "white_papers": [
+        {
+          "esma_row": 932,
+          "filer": "Opentensor Foundation",
+          "filer_lei": null,
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Malta Financial Services Authority (MFSA)",
+          "home_member_state": "MT",
+          "register_last_update": "2026-07-13",
+          "url": "https://my.okx.com/whitepaper/bittensor-tao.xhtml",
+          "comments": null,
+          "dti": [
+            "LBQFC0FVK"
+          ],
+          "ffg_dti": [
+            "6N7FD6DBX"
+          ],
+          "matched_by": {
+            "filer": "Opentensor Foundation"
+          },
+          "dti_check": {
+            "result": "match",
+            "expected_ffg_dti": "6N7FD6DBX"
+          },
+          "document_status": "resolved",
+          "documents": [
+            {
+              "url": "https://my.okx.com/whitepaper/bittensor-tao.xhtml",
+              "sha256": "5969def54fcdcf662b16b9a80240d188c174e2a1e19337f04a126e6ebe5f0498",
+              "kind": "ixbrl",
+              "paper_dti": {
+                "dti": [
+                  "LBQFC0FVK"
+                ],
+                "ffg": [
+                  "6N7FD6DBX"
+                ]
+              },
+              "paper_dti_check": "match: paper's FFG DTI field = token FFG DTI"
+            }
+          ]
+        }
+      ],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "xdc",
+      "name": "XDC Network",
+      "token": "XDC",
+      "caip2": "eip155:50",
+      "caip2_source": "EVM chain id 50; not in sdk/data/chains.json - confirm before signing",
+      "ffg_dti": null,
+      "dti_summary": {
+        "register_dtis": [],
+        "dtis_printed_in_papers": []
+      },
+      "white_paper_in_register": false,
+      "filers": [],
+      "white_papers": [],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "iota",
+      "name": "IOTA",
+      "token": "IOTA",
+      "caip2": "iota:mainnet",
+      "caip2_source": "assumed; no CAIP-2 namespace confirmed - confirm before signing",
+      "ffg_dti": null,
+      "dti_summary": {
+        "register_dtis": [],
+        "dtis_printed_in_papers": []
+      },
+      "white_paper_in_register": false,
+      "filers": [],
+      "white_papers": [],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "thorchain",
+      "name": "THORChain",
+      "token": "RUNE",
+      "caip2": "cosmos:thorchain-1",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": null,
+      "dti_summary": {
+        "register_dtis": [],
+        "dtis_printed_in_papers": []
+      },
+      "white_paper_in_register": false,
+      "filers": [],
+      "white_papers": [],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "starknet",
+      "name": "Starknet",
+      "token": "STRK",
+      "caip2": "starknet:SN_MAIN",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": null,
+      "dti_summary": {
+        "register_dtis": [],
+        "dtis_printed_in_papers": []
+      },
+      "white_paper_in_register": false,
+      "filers": [],
+      "white_papers": [],
+      "rejected_false_positives": []
+    },
+    {
+      "network": "gnosis",
+      "name": "Gnosis Chain",
+      "token": "GNO",
+      "caip2": "eip155:100",
+      "caip2_source": "sdk/data/chains.json",
+      "ffg_dti": null,
+      "dti_summary": {
+        "register_dtis": [],
+        "dtis_printed_in_papers": []
+      },
+      "white_paper_in_register": false,
+      "filers": [],
+      "white_papers": [],
+      "rejected_false_positives": [
+        {
+          "esma_row": 596,
+          "filer": "NewTendermint, LLC",
+          "filer_lei": "98450001BQK77812E747",
+          "person_seeking_admission": null,
+          "person_seeking_admission_lei": null,
+          "competent_authority": "Central Bank of Ireland (CBI)",
+          "home_member_state": "IE",
+          "register_last_update": "2026-08-28",
+          "url": "https://github.com/gnolang/gno/blob/master/docs/gnoland-whitepaper.pdf",
+          "comments": null,
+          "dti": [
+            "LFJTPFK8D"
+          ],
+          "ffg_dti": [
+            "6537KDT7Q"
+          ],
+          "reason": "gno.land (GNOT, gnolang) - a different project from Gnosis (GNO)"
+        }
+      ]
+    }
+  ],
+  "stablecoins": {
+    "emt_issuers": [
+      {
+        "issuer": "Payment Corporation SE",
+        "lei": "315700IJDQF91J9C8B68",
+        "commercial_name": "Stable Labs",
+        "home_member_state": "CZ",
+        "competent_authority": "Czech National Bank (CNB)",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2017-04-26",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 1,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://stablelabs.co/whitepaper0.pdf",
+            "notified": "2025-05-17",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "YES",
+            "exemption_48_5": "YES",
+            "comments": "EMT is issued under the limited network exception. It is not offered to the general public, but is used solely within a clearly defined, functionally limited ecosystem."
+          },
+          {
+            "esma_row": 2,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://stablelabs.co/whitepaper.pdf",
+            "notified": "2025-09-20",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "YES",
+            "exemption_48_5": "YES",
+            "comments": "EMT is issued under the limited network exception. It is not offered to the general public, but is used solely within a clearly defined, functionally limited ecosystem."
+          },
+          {
+            "esma_row": 3,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://stablelabs.co/whitepaper1.pdf",
+            "notified": "2025-10-16",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "YES",
+            "exemption_48_5": "YES",
+            "comments": "EMT is issued under the limited network exception. It is not offered to the general public, but is used solely within a clearly defined, functionally limited ecosystem."
+          }
+        ]
+      },
+      {
+        "issuer": "AllUnity GmbH",
+        "lei": "3912007G8L8CD3HFIV26",
+        "commercial_name": "AllUnity GmbH",
+        "home_member_state": "DE",
+        "competent_authority": "Federal Financial Supervisory Authority (BaFin)",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2026-06-20",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 4,
+            "token_hint": "EURAU",
+            "token_hint_source": "wp_comments",
+            "url": "https://allunity.com/whitepaper",
+            "notified": "2025-06-20",
+            "dti": [
+              "4T8Q7PXDR",
+              "72FFN7360",
+              "8F9FV1RW0",
+              "DP8LJM6WW",
+              "R21VFQH41"
+            ],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "EURAU"
+          },
+          {
+            "esma_row": 5,
+            "token_hint": "CHFAU",
+            "token_hint_source": "wp_comments",
+            "url": "https://allunity.com/whitepaper",
+            "notified": "2026-01-19",
+            "dti": [
+              "D1PFLVZDZ",
+              "VP84J2JSS"
+            ],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "CHFAU"
+          },
+          {
+            "esma_row": 6,
+            "token_hint": "SEKAU",
+            "token_hint_source": "wp_comments",
+            "url": "https://allunity.com/whitepaper",
+            "notified": "2026-05-06",
+            "dti": [
+              "6TR5F3KKF",
+              "7BN8BLGZH",
+              "HTKFL04WZ",
+              "VTFCC12GK",
+              "X10CDHLZQ"
+            ],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "SEKAU"
+          },
+          {
+            "esma_row": 7,
+            "token_hint": "CHFAU",
+            "token_hint_source": "wp_comments",
+            "url": "https://allunity.com/whitepaper",
+            "notified": "2026-06-09",
+            "dti": [
+              "35PTC5Z63",
+              "5Z0LL4J7S",
+              "D1PFLVZDZ",
+              "GCN4ZMN5R",
+              "PGBKBZRH2",
+              "VP84J2JSS"
+            ],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "CHFAU, V1.2"
+          },
+          {
+            "esma_row": 8,
+            "token_hint": "USDAU",
+            "token_hint_source": "wp_comments",
+            "url": "https://allunity.com/whitepaper",
+            "notified": "2026-06-09",
+            "dti": [
+              "25XRLGD08",
+              "3RH5FHFMR",
+              "67JKQ4MKT",
+              "95139NRZ1",
+              "Q9MZ20BGM",
+              "S19Z4M49R"
+            ],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "USDAU, V.1.0"
+          },
+          {
+            "esma_row": 9,
+            "token_hint": "SEKAU",
+            "token_hint_source": "wp_comments",
+            "url": "https://allunity.com/whitepaper",
+            "notified": "2026-05-06",
+            "dti": [
+              "6TR5F3KKF",
+              "7BN8BLGZH",
+              "HTKFL04WZ",
+              "JPJHD47F4",
+              "VTFCC12GK",
+              "X10CDHLZQ"
+            ],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "SEKAU, V.1.1"
+          }
+        ]
+      },
+      {
+        "issuer": "Eurodollar ApS",
+        "lei": "8945001XWFMRUTCAK575",
+        "commercial_name": "Eurodollar",
+        "home_member_state": "DK",
+        "competent_authority": "Finanstilsynet",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2025-02-17",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 10,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "EMT_NO_WP",
+            "notified": "2025-04-10",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          }
+        ]
+      },
+      {
+        "issuer": "Paxos Issuance Europe Oy",
+        "lei": "743700KYSSTKZYGEUF50",
+        "commercial_name": "Paxos EU",
+        "home_member_state": "FI",
+        "competent_authority": "Finanssivalvonta (FIN-FSA)",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2022-11-23",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 11,
+            "token_hint": "EUROe",
+            "token_hint_source": "wp_url",
+            "url": "https://www.membrane.fi/whitepapers/EUROe.html",
+            "notified": "2024-06-29",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          },
+          {
+            "esma_row": 12,
+            "token_hint": "eUSD",
+            "token_hint_source": "wp_url",
+            "url": "https://www.membrane.fi/whitepapers/eUSD.html",
+            "notified": "2024-06-29",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          },
+          {
+            "esma_row": 13,
+            "token_hint": "USDG",
+            "token_hint_source": "wp_comments",
+            "url": "https://www.paxos.com/terms-and-conditions/usdg-eu-whitepaper",
+            "notified": "2025-12-19",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "NO",
+            "exemption_48_5": "NO",
+            "comments": "Added the functionality to use USDG on X layer blockchain"
+          },
+          {
+            "esma_row": 14,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://www.paxos.com/white-paper",
+            "notified": "2025-06-09",
+            "dti": [
+              "2VT5W3GH7"
+            ],
+            "ffg_dti": [
+              "R9MZCNWS4"
+            ],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "machine-readable version made available"
+          }
+        ]
+      },
+      {
+        "issuer": "CACEIS BANK SA",
+        "lei": "96950023SCR9X9F3L662",
+        "commercial_name": "CACEIS BANK",
+        "home_member_state": "FR",
+        "competent_authority": "Autorité de Contrôle Prudentiel et de Resolution (ACPR)",
+        "authorisation": "Credit institution",
+        "authorisation_date": "1979-05-19",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 22,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://stable-xt.io",
+            "notified": "2026-06-30",
+            "dti": [
+              "2GPH3VZ45"
+            ],
+            "ffg_dti": [
+              "JTSXN8VGH"
+            ],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "No comment. Ongoing additional review of the qualitative information provided in each WP item,  in accordance with MiCA/ESMA ITS provisions and other MiCA compliant WP"
+          }
+        ]
+      },
+      {
+        "issuer": "Circle Internet Financial Europe SAS",
+        "lei": "969500OYUDADGZKCR583",
+        "commercial_name": null,
+        "home_member_state": "FR",
+        "competent_authority": "Autorité de Contrôle Prudentiel et de Resolution (ACPR)",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2024-07-01",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 15,
+            "token_hint": "EURC",
+            "token_hint_source": "wp_url",
+            "url": "https://www.circle.com/fr/legal/mica-eurc-whitepaper",
+            "notified": "2024-07-01",
+            "dti": [
+              "FJM594L0V",
+              "FMXXP963M",
+              "FZQ4WZNHC",
+              "T1J8XQBSD"
+            ],
+            "ffg_dti": [
+              "13XTMPZT3"
+            ],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "No comment. Ongoing additional review of the qualitative information provided in each WP item, in accordance with MiCA/ESMA ITS provision and other MiCA compliant WP"
+          },
+          {
+            "esma_row": 16,
+            "token_hint": "USDC",
+            "token_hint_source": "wp_url",
+            "url": "https://www.circle.com/fr/legal/mica-usdc-whitepaper",
+            "notified": "2024-07-01",
+            "dti": [
+              "2ZTG3NNVB",
+              "45J6XJX7H",
+              "4ZSZS1F4F",
+              "54VFN74B3",
+              "56V43DKZ3",
+              "5R3XFPZSM",
+              "6BGZTT6GF",
+              "6TNZQDKZK",
+              "7NZRGQZ87",
+              "898NNTPZJ",
+              "9F3G4V14R",
+              "CK9PW1MFH",
+              "CP6817N4B",
+              "DWBBXD2F1",
+              "DWCZ3239L",
+              "FXZLG37L6",
+              "GGMLHMDVQ",
+              "GN9M0Z238",
+              "J2TPM5RFQ",
+              "LS71LQK3L",
+              "M8G59S1ZR",
+              "MKC04VFBQ",
+              "N064ZKXDM",
+              "P7H2X1B9H",
+              "QQKDMF6N9",
+              "R3SV04GX9",
+              "RN81GQLBH",
+              "RWPZZPR7C",
+              "S28NDWCSX",
+              "SKXZGD4J8",
+              "T6TQ8GN7L",
+              "T9F5C3ZCC",
+              "TSLS4S9R8",
+              "VXJX1WW6V",
+              "W2PQJJCPM",
+              "XTS66R22W"
+            ],
+            "ffg_dti": [
+              "TJWK5QTRK"
+            ],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "No comment. Ongoing additional review of the qualitative information provided in each WP item, in accordance with MiCA/ESMA ITS provisionand other MiCA compliant WP\""
+          }
+        ]
+      },
+      {
+        "issuer": "HEURO SAS",
+        "lei": "984500DB91E5A48E7F26",
+        "commercial_name": "OuiTrust",
+        "home_member_state": "FR",
+        "competent_authority": "Autorité de Contrôle Prudentiel et de Resolution (ACPR)",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2021-12-02",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 21,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://www.heuro.com/about",
+            "notified": "2026-02-26",
+            "dti": [
+              "4ZTHF0N0H",
+              "DP1R488SF"
+            ],
+            "ffg_dti": [
+              "TFGXFRD1J"
+            ],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "No comment. Ongoing additional review of the qualitative information provided in each WP item,  in accordance with MiCA/ESMA ITS provisions and other MiCA compliant WP"
+          }
+        ]
+      },
+      {
+        "issuer": "Oddo BHF SCA",
+        "lei": "9695002I9DJHZ3449O66",
+        "commercial_name": "Oddo BHF",
+        "home_member_state": "FR",
+        "competent_authority": "Autorité de Contrôle Prudentiel et de Resolution (ACPR)",
+        "authorisation": "Credit Institution",
+        "authorisation_date": "2007-06-26",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 20,
+            "token_hint": "EUROD",
+            "token_hint_source": "wp_url",
+            "url": "https://www.oddo-bhf.com/eurod-stablecoin/",
+            "notified": "2025-10-15",
+            "dti": [
+              "H1LDKQR5B"
+            ],
+            "ffg_dti": [
+              "WJV6THJ2D"
+            ],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "No comment. Ongoing additional review of the qualitative information provided in each WP item,  in accordance with MiCA/ESMA ITS provisions and other MiCA compliant WP"
+          }
+        ]
+      },
+      {
+        "issuer": "SALVUS",
+        "lei": "969500SGAEBRXYUAJ739",
+        "commercial_name": null,
+        "home_member_state": "FR",
+        "competent_authority": "Autorité de Contrôle Prudentiel et de Resolution (ACPR)",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2024-11-22",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 19,
+            "token_hint": "EUROP",
+            "token_hint_source": "wp_url",
+            "url": "https://schuman.io/wp-content/uploads/EUROP-White-Paper.pdf",
+            "notified": "2024-11-22",
+            "dti": [
+              "BNTTMH9HK",
+              "KR4DF4ZJ2"
+            ],
+            "ffg_dti": [
+              "2BKLSP3D6"
+            ],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "No comment. Ongoing additional review of the qualitative information provided in each WP item, in accordance with MiCA/ESMA ITS provisionand other MiCA compliant WP\""
+          }
+        ]
+      },
+      {
+        "issuer": "Société Générale - Forge",
+        "lei": "969500FX8K40ZDW4F377",
+        "commercial_name": null,
+        "home_member_state": "FR",
+        "competent_authority": "Autorité de Contrôle Prudentiel et de Resolution (ACPR)",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2024-07-01",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 17,
+            "token_hint": "EURCV",
+            "token_hint_source": "wp_url",
+            "url": "https://www.sgforge.com/wp-content/uploads/2025/10/EURCV-WP-Ethereum-Solana_XRPL_Stellar_2025.10.14.pdf",
+            "notified": "2024-07-01",
+            "dti": [
+              "24QFRJ6Q9",
+              "3NG1PDSJM",
+              "HF8RCHVWW",
+              "LTJP3BH2R"
+            ],
+            "ffg_dti": [
+              "9W5C49FJV"
+            ],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "No comment. Ongoing additional review of the qualitative information provided in each WP item, in accordance with MiCA/ESMA ITS provisionand other MiCA compliant WP\""
+          },
+          {
+            "esma_row": 18,
+            "token_hint": "USDCV",
+            "token_hint_source": "wp_url",
+            "url": "https://www.sgforge.com/wp-content/uploads/2025/08/SG-Forge-USDCV-White-Paper_V2.0_Ethereum_Solana_11082025.pdf",
+            "notified": "2024-07-16",
+            "dti": [
+              "8TF1FZX7H",
+              "9XDHG5RZQ"
+            ],
+            "ffg_dti": [
+              "LD6JM2JN2"
+            ],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "No comment. Ongoing additional review of the qualitative information provided in each WP item, in accordance with MiCA/ESMA ITS provisionand other MiCA compliant WP\""
+          }
+        ]
+      },
+      {
+        "issuer": "Monerium ehf",
+        "lei": "2549003QDNZWASSSCY31",
+        "commercial_name": "Monerium",
+        "home_member_state": "IS",
+        "competent_authority": "Central Bank of Iceland",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2019-09-25",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 23,
+            "token_hint": "EURe",
+            "token_hint_source": "wp_url",
+            "url": "https://monerium.com/assets/whitepapers/eure/EURe-WP-static.xhtml",
+            "notified": "2026-01-09",
+            "dti": [
+              "3P9X6K6P2",
+              "5LN265K07",
+              "6KL7TK20G",
+              "81PTSP744",
+              "JVM0S87GB",
+              "S45L7172C",
+              "ZHKQJ78VZ"
+            ],
+            "ffg_dti": [
+              "N7B1L2FBK"
+            ],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          }
+        ]
+      },
+      {
+        "issuer": "Newrails, UAB",
+        "lei": "875500AX7AO0XVYSQD64",
+        "commercial_name": "Newrails",
+        "home_member_state": "LT",
+        "competent_authority": "Bank of Lithuania",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2020-06-04",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 25,
+            "token_hint": "EURW",
+            "token_hint_source": "wp_url",
+            "url": "https://www.newrails.xyz/docs/newrails-whitepaper-eurw.xhtml",
+            "notified": "2026-01-26",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "No comments"
+          }
+        ]
+      },
+      {
+        "issuer": "UAB BLUE EMI LT",
+        "lei": "254900XFMACGD0L7AI73",
+        "commercial_name": "BLUE EMI LT",
+        "home_member_state": "LT",
+        "competent_authority": "Bank of Lithuania (LSC)",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2022-10-11",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 24,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://blueemi.com/policies/emt-white-paper/",
+            "notified": "2025-08-01",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "No comments"
+          }
+        ]
+      },
+      {
+        "issuer": "AIEU Services Limited S.A.",
+        "lei": "254900VUR90QF0G3T387",
+        "commercial_name": "AIEU Services Limited S.A.",
+        "home_member_state": "LU",
+        "competent_authority": "Commission de Surveillance du Secteur Financier (CSSF)",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2018-12-21",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 27,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://www.bettrsettlementtoken.com/policy",
+            "notified": "2025-10-22",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          },
+          {
+            "esma_row": 29,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://www.bettrsettlementtoken.com/policy",
+            "notified": "2026-09-22",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          },
+          {
+            "esma_row": 30,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://www.bettrsettlementtoken.com/policy",
+            "notified": "2026-09-22",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          }
+        ]
+      },
+      {
+        "issuer": "Banking Circle S.A.",
+        "lei": "213800W1NGBLERUS6M39",
+        "commercial_name": "Banking Circle",
+        "home_member_state": "LU",
+        "competent_authority": "Commission de Surveillance du Secteur Financier (CSSF)",
+        "authorisation": "Credit institution",
+        "authorisation_date": "2019-10-29",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 26,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://www.eurite.com/download-whitepaper/",
+            "notified": "2024-08-28",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          }
+        ]
+      },
+      {
+        "issuer": "Bridge Building S.A.",
+        "lei": "254900MVWQXMF77YZP65",
+        "commercial_name": "Bridge Building S.A.",
+        "home_member_state": "LU",
+        "competent_authority": "Commission de Surveillance du Secteur Financier (CSSF)",
+        "authorisation": "N/A",
+        "authorisation_date": "2026-07-23",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 28,
+            "token_hint": "EURR",
+            "token_hint_source": "wp_url",
+            "url": "https://bridge.xyz/transparency/EURR",
+            "notified": "2026-07-23",
+            "dti": [
+              "8KV3CMVM5",
+              "9J1RXQWBK",
+              "GR77N4VQN",
+              "H81G32M97",
+              "KHWWMMF9T",
+              "LP00X1Q54",
+              "R79DN2VHD",
+              "TD3BGWM5Z"
+            ],
+            "ffg_dti": [
+              "4ZD0FM2VG"
+            ],
+            "limited_network_exemption_48_4": "N/A",
+            "exemption_48_5": "N/A",
+            "comments": "N/A"
+          }
+        ]
+      },
+      {
+        "issuer": "SIA GR8 PAY",
+        "lei": "6488GKH17O8XT1326F66",
+        "commercial_name": "GR8.money",
+        "home_member_state": "LV",
+        "competent_authority": "Latvijas Banka",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2025-12-10",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 31,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://gr8.money/eur.pa/wp",
+            "notified": "2026-04-21",
+            "dti": [
+              "5X779H3M3"
+            ],
+            "ffg_dti": [
+              "9JDH8QBV2"
+            ],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          },
+          {
+            "esma_row": 32,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://gr8.money/usd.pa/wp",
+            "notified": "2026-04-21",
+            "dti": [
+              "PJM1C1PM6"
+            ],
+            "ffg_dti": [
+              "FFBSF3LWN"
+            ],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          }
+        ]
+      },
+      {
+        "issuer": "StablR Ltd",
+        "lei": "984500AA0OCA9CE0D796",
+        "commercial_name": "StablR Ltd",
+        "home_member_state": "MT",
+        "competent_authority": "Malta Financial Services Authority",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2024-06-21",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 33,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://www.stablr.com/whitepapers",
+            "notified": "2025-11-14",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          },
+          {
+            "esma_row": 34,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://www.stablr.com/whitepapers",
+            "notified": "2025-11-14",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          }
+        ]
+      },
+      {
+        "issuer": "Stable mint Ltd",
+        "lei": "984500A64C0EA64BC554",
+        "commercial_name": "Stable mint",
+        "home_member_state": "MT",
+        "competent_authority": "Malta Financial Services Authority",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2024-08-05",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 35,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://stablemintpublicdocs.blob.core.windows.net/docs/StableMint_Whitepaper_EUR.html",
+            "notified": "2024-08-08",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          },
+          {
+            "esma_row": 36,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "https://stablemintpublicdocs.blob.core.windows.net/docs/StableMint_Whitepaper_USD.html",
+            "notified": "2024-11-27",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          }
+        ]
+      },
+      {
+        "issuer": "Aplauz NL B.V.",
+        "lei": "72450039GAIN4MNI4V12",
+        "commercial_name": "Aplauz",
+        "home_member_state": "NL",
+        "competent_authority": "De Nederlansche Bank (DNB)",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": null,
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 46,
+            "token_hint": "WEUR",
+            "token_hint_source": "wp_comments",
+            "url": "https://www.weur.io",
+            "notified": "2026-06-25",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": null,
+            "exemption_48_5": null,
+            "comments": "WEUR white paper"
+          }
+        ]
+      },
+      {
+        "issuer": "Fiat Republic Netherlands",
+        "lei": "724500GVWT7QULV8CR59",
+        "commercial_name": "Fiat Republic",
+        "home_member_state": "NL",
+        "competent_authority": "De Nederlandsche Bank (DNB)",
+        "authorisation": "Electronic money Institution",
+        "authorisation_date": "2021-11-29",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 37,
+            "token_hint": "ENEUR",
+            "token_hint_source": "wp_comments",
+            "url": "https://fiatrepublic.com/about/eaglenetcoin/",
+            "notified": "2024-12-02",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "ENEUR white paper"
+          },
+          {
+            "esma_row": 38,
+            "token_hint": "ENGBP",
+            "token_hint_source": "wp_comments",
+            "url": "https://fiatrepublic.com/about/eaglenetcoin/",
+            "notified": "2024-12-02",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "ENGBP white paper"
+          },
+          {
+            "esma_row": 39,
+            "token_hint": "ENUSD",
+            "token_hint_source": "wp_comments",
+            "url": "https://fiatrepublic.com/about/eaglenetcoin/",
+            "notified": "2025-03-24",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "ENUSD white paper"
+          }
+        ]
+      },
+      {
+        "issuer": "Quantoz Payments B.V",
+        "lei": "7245008P1HPUPVM7XL94",
+        "commercial_name": "Quantoz Payments",
+        "home_member_state": "NL",
+        "competent_authority": "De Nederlandsche Bank (DNB)",
+        "authorisation": "Electronic money Institution",
+        "authorisation_date": "2023-10-13",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 40,
+            "token_hint": "EURQ",
+            "token_hint_source": "wp_comments",
+            "url": "https://www.quantoz.com/resources",
+            "notified": "2025-03-24",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "EURQ white paper"
+          },
+          {
+            "esma_row": 41,
+            "token_hint": "USDQ",
+            "token_hint_source": "wp_comments",
+            "url": "https://www.quantoz.com/resources",
+            "notified": "2025-03-24",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "USDQ white paper"
+          },
+          {
+            "esma_row": 42,
+            "token_hint": "EURD",
+            "token_hint_source": "wp_comments",
+            "url": "https://www.quantoz.com/resources",
+            "notified": "2025-08-01",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": "EURD EMT white paper"
+          },
+          {
+            "esma_row": 43,
+            "token_hint": "PLNQ",
+            "token_hint_source": "wp_comments",
+            "url": "https://www.quantoz.com/resources",
+            "notified": "2026-04-07",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": null,
+            "exemption_48_5": null,
+            "comments": "PLNQ white paper"
+          },
+          {
+            "esma_row": 44,
+            "token_hint": "GBPQ",
+            "token_hint_source": "wp_comments",
+            "url": "https://www.quantoz.com/resources",
+            "notified": "2026-04-07",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": null,
+            "exemption_48_5": null,
+            "comments": "GBPQ white paper"
+          },
+          {
+            "esma_row": 45,
+            "token_hint": "RONQ",
+            "token_hint_source": "wp_comments",
+            "url": "https://www.quantoz.com/resources",
+            "notified": "2026-04-15",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": null,
+            "exemption_48_5": null,
+            "comments": "RONQ white paper"
+          }
+        ]
+      },
+      {
+        "issuer": "StaBillon sp. z o.o.",
+        "lei": "2594008EL5UN8RIA8P23",
+        "commercial_name": "StaBillon",
+        "home_member_state": "PL",
+        "competent_authority": "Polish Financial Supervision Authority (KNF)",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2019-04-23",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 47,
+            "token_hint": null,
+            "token_hint_source": null,
+            "url": "EMT_NO_WP",
+            "notified": "2025-10-30",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          }
+        ]
+      },
+      {
+        "issuer": "BISON BANK, S.A.",
+        "lei": "549300V4H4USWZUCE073",
+        "commercial_name": "BISON BANK, S.A.",
+        "home_member_state": "PT",
+        "competent_authority": "Banco de Portugal (BdP)",
+        "authorisation": "Credit institution",
+        "authorisation_date": "2014-02-11",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 48,
+            "token_hint": "EUB",
+            "token_hint_source": "wp_url",
+            "url": "https://bisonbank.com/wp-content/uploads/2026/04/Bison-Bank-EUB-White-Paper_20260312-1.pdf",
+            "notified": "2026-03-12",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          },
+          {
+            "esma_row": 49,
+            "token_hint": "USB",
+            "token_hint_source": "wp_url",
+            "url": "https://bisonbank.com/wp-content/uploads/2026/04/Bison-Bank-USB-White-Paper_20260312-1.pdf",
+            "notified": "2026-03-12",
+            "dti": [],
+            "ffg_dti": [],
+            "limited_network_exemption_48_4": "No",
+            "exemption_48_5": "No",
+            "comments": null
+          }
+        ]
+      },
+      {
+        "issuer": "DINARO company for electronic money issuing and payment services Ltd.",
+        "lei": "48510062OP64BYKPNO22",
+        "commercial_name": "Dinaro",
+        "home_member_state": "SI",
+        "competent_authority": "Bank of Slovenia",
+        "authorisation": "Electronic money institution",
+        "authorisation_date": "2021-11-02",
+        "authorisation_end": null,
+        "white_papers": [
+          {
+            "esma_row": 50,
+            "token_hint": "EURGH",
+            "token_hint_source": "wp_url",
+            "url": "https://dinaro.si/mica-eurgh-whitepaper",
+            "notified": "2026-09-01",
+            "dti": [
+              "M5ZR1C4B3"
+            ],
+            "ffg_dti": [
+              "2682FMR4J"
+            ],
+            "limited_network_exemption_48_4": null,
+            "exemption_48_5": null,
+            "comments": null
+          }
+        ]
+      }
+    ],
+    "emt_white_paper_rows": 50,
+    "art_issuers": [],
+    "art_rows": 0,
+    "tether_usdt_in_emt_or_art_register": false,
+    "casp_rows": 364,
+    "casp_distinct_lei": 358,
+    "non_compliant_entities_rows": 173
+  }
+}
