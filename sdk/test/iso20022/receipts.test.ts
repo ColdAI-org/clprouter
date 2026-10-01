@@ -19,12 +19,15 @@ import {
   resolveCancellation,
   returnPayment,
   toXml,
-  uetrToRouteId,
+  uetrToBytes,
 } from "../../src/iso20022/index.js";
 import { CREDITOR_AGENT, DEBTOR_AGENT, HIERO_AGENT, PII, UETR, UETR_009, pacs008, pacs009 } from "./fixtures.js";
 
 const AT = new Date("2026-10-01T09:31:00Z");
-const ref = paymentReference(pacs008());
+/** Route ids are Router-derived; these tests reuse the UETRs' bytes as arbitrary 16-byte route ids. */
+const ROUTE_ID = uetrToBytes(UETR);
+const ROUTE_ID_009 = uetrToBytes(UETR_009);
+const ref = { ...paymentReference(pacs008()), routeId: ROUTE_ID };
 const opts = { messageId: "STS-1", creationDateTime: AT };
 const CASE = `0x${"c4".repeat(32)}` as const;
 const CONTACT = "https://provider.example/clprouter/cases";
@@ -46,7 +49,7 @@ const HOPS: RouteHop[] = [
 ];
 
 describe("ClprRouteReceipt codec and hop-list commitment", () => {
-  const r = makeReceipt(UETR, {
+  const r = makeReceipt(ROUTE_ID, {
     status: "QUARANTINED",
     hop_index: 1,
     ledger_id: "hedera:mainnet",
@@ -68,7 +71,7 @@ describe("ClprRouteReceipt codec and hop-list commitment", () => {
   });
 
   it("omits zero bytes32 fields like the Solidity codec and round trips", () => {
-    const d = makeReceipt(UETR, { status: "DELIVERED", hop_index: 2, ledger_id: "eip155:1", route_edge: edgeDigest(HOPS[2]!), route_rest: b32(0) });
+    const d = makeReceipt(ROUTE_ID, { status: "DELIVERED", hop_index: 2, ledger_id: "eip155:1", route_edge: edgeDigest(HOPS[2]!), route_rest: b32(0) });
     const back = decodeRouteReceipt(encodeRouteReceipt(d));
     expect(back.route_rest).toBe("0x");
     expect(back.route_edge).toBe(d.route_edge);
@@ -85,7 +88,7 @@ describe("ClprRouteReceipt codec and hop-list commitment", () => {
     expect(receiptCommitment(r, reporter, [{ ...HOPS[0]!, fee: 6n }])).not.toBe(SOL.c0);
     expect(() => receiptCommitment(r, reporter, [])).toThrow(/prefix hops/);
     // the destination's DELIVERED receipt: zero rest
-    const d = makeReceipt(UETR, { status: "DELIVERED", hop_index: 2, route_edge: edgeDigest(HOPS[2]!), route_rest: "0x" });
+    const d = makeReceipt(ROUTE_ID, { status: "DELIVERED", hop_index: 2, route_edge: edgeDigest(HOPS[2]!), route_rest: "0x" });
     expect(receiptCommitment(d, { ledger_id: "eip155:1", application: HOPS[2]!.router }, HOPS.slice(0, 2))).toBe(SOL.c0);
   });
 });
@@ -100,14 +103,14 @@ describe("receipts → pacs.002", () => {
   });
 
   it("ACCC at the destination", () => {
-    const p = receiptToPacs002(makeReceipt(UETR, { status: "DELIVERED", hop_index: 2, ledger_id: "test:b" }), ref, opts);
+    const p = receiptToPacs002(makeReceipt(ROUTE_ID, { status: "DELIVERED", hop_index: 2, ledger_id: "test:b" }), ref, opts);
     expect(p.tx.status).toBe("ACCC");
     expect(p.tx.statusReasons).toBeUndefined();
     expect(pacs002Outcome(fromXml(toXml(p), "pacs.002")).status).toBe("DELIVERED");
   });
 
   it("QUARANTINED → RJCT / RR04 with case id and provider contact in AddtlInf", () => {
-    const r = makeReceipt(UETR, { status: "QUARANTINED", reason: "BLACKLIST", hop_index: 1, ledger_id: "hedera:mainnet", case_id: CASE, contact: CONTACT });
+    const r = makeReceipt(ROUTE_ID, { status: "QUARANTINED", reason: "BLACKLIST", hop_index: 1, ledger_id: "hedera:mainnet", case_id: CASE, contact: CONTACT });
     const p = receiptToPacs002(r, ref, opts);
     expect(p.tx.status).toBe("RJCT");
     expect(p.tx.statusReasons).toEqual([{ code: "RR04", additionalInfo: [`CASE/${CASE}`, `CONTACT/${CONTACT}`] }]);
@@ -121,19 +124,19 @@ describe("receipts → pacs.002", () => {
   });
 
   it("quarantine needs a case id and a contact", () => {
-    expect(() => receiptToPacs002(makeReceipt(UETR, { status: "QUARANTINED", contact: CONTACT }), ref, opts)).toThrow(/case id/);
-    expect(() => receiptToPacs002(makeReceipt(UETR, { status: "QUARANTINED", case_id: CASE }), ref, opts)).toThrow(/contact/);
-    expect(() => receiptToPacs002(makeReceipt(UETR, { status: "QUARANTINED", case_id: CASE, contact: `https://${"x".repeat(100)}` }), ref, opts)).toThrow(/longer/);
+    expect(() => receiptToPacs002(makeReceipt(ROUTE_ID, { status: "QUARANTINED", contact: CONTACT }), ref, opts)).toThrow(/case id/);
+    expect(() => receiptToPacs002(makeReceipt(ROUTE_ID, { status: "QUARANTINED", case_id: CASE }), ref, opts)).toThrow(/contact/);
+    expect(() => receiptToPacs002(makeReceipt(ROUTE_ID, { status: "QUARANTINED", case_id: CASE, contact: `https://${"x".repeat(100)}` }), ref, opts)).toThrow(/longer/);
   });
 
   it("EXPIRED → RJCT / AB05", () => {
-    const p = receiptToPacs002(makeReceipt(UETR, { status: "EXPIRED", reason: "DEADLINE", hop_index: 1, ledger_id: "hedera:mainnet" }), ref, opts);
+    const p = receiptToPacs002(makeReceipt(ROUTE_ID, { status: "EXPIRED", reason: "DEADLINE", hop_index: 1, ledger_id: "hedera:mainnet" }), ref, opts);
     expect(p.tx.statusReasons?.[0]?.code).toBe("AB05");
     expect(pacs002Outcome(p).status).toBe("EXPIRED");
   });
 
   it.each(RECEIPT_REASONS.filter((r) => r !== "BLACKLIST" && r !== "DEADLINE"))("FAILED / %s → RJCT with an ISO reason code", (reason) => {
-    const p = receiptToPacs002(makeReceipt(UETR, { status: "FAILED", reason, hop_index: 1, ledger_id: "hedera:mainnet" }), ref, opts);
+    const p = receiptToPacs002(makeReceipt(ROUTE_ID, { status: "FAILED", reason, hop_index: 1, ledger_id: "hedera:mainnet" }), ref, opts);
     expect(p.tx.status).toBe("RJCT");
     expect(p.tx.statusReasons?.[0]?.code).toBe(REJECT_REASON_CODES[reason]);
     expect(p.tx.statusReasons?.[0]?.additionalInfo).toEqual([`CLPR/${reason}/HOP/1/hedera:mainnet`]);
@@ -142,23 +145,23 @@ describe("receipts → pacs.002", () => {
   });
 
   it("ACCC only from the destination (zero route_rest)", () => {
-    expect(() => receiptToPacs002(makeReceipt(UETR, { status: "DELIVERED", route_rest: b32(9) }), ref, opts)).toThrow(/destination/);
+    expect(() => receiptToPacs002(makeReceipt(ROUTE_ID, { status: "DELIVERED", route_rest: b32(9) }), ref, opts)).toThrow(/destination/);
   });
 
   it("TRUST_FLOOR → RJCT / AGNT", () => {
-    const p = receiptToPacs002(makeReceipt(UETR, { status: "FAILED", reason: "TRUST_FLOOR", hop_index: 0, ledger_id: "stellar:pubnet" }), ref, opts);
+    const p = receiptToPacs002(makeReceipt(ROUTE_ID, { status: "FAILED", reason: "TRUST_FLOOR", hop_index: 0, ledger_id: "stellar:pubnet" }), ref, opts);
     expect(p.tx.statusReasons?.[0]?.code).toBe("AGNT");
   });
 
   it("refuses a receipt for another route and UNSPECIFIED receipts", () => {
-    expect(() => receiptToPacs002(makeReceipt(UETR_009, { status: "DELIVERED" }), ref, opts)).toThrow(/UETR/);
-    expect(() => receiptToPacs002(makeReceipt(UETR, {}), ref, opts)).toThrow(/no pacs.002 mapping/);
+    expect(() => receiptToPacs002(makeReceipt(ROUTE_ID_009, { status: "DELIVERED" }), ref, opts)).toThrow(/route/);
+    expect(() => receiptToPacs002(makeReceipt(ROUTE_ID, {}), ref, opts)).toThrow(/no pacs.002 mapping/);
   });
 
   it("works for pacs.009 and with reporting agents", () => {
     const r = paymentReference(pacs009());
     expect(r.messageNameId).toBe("pacs.009.001.08");
-    const p = receiptToPacs002({ ...makeReceipt(UETR_009, { status: "DELIVERED" }), route_id: uetrToRouteId(UETR_009) }, r, {
+    const p = receiptToPacs002({ ...makeReceipt(ROUTE_ID_009, { status: "DELIVERED" }), route_id: ROUTE_ID_009 }, r, {
       ...opts,
       instructingAgent: HIERO_AGENT,
       instructedAgent: DEBTOR_AGENT,

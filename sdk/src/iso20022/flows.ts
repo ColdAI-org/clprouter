@@ -7,8 +7,8 @@
  *   failure or expiry receipt (spec "Failure handling"), so no pacs.004 is needed; the pacs.002 RJCT is the answer.
  * - **After settlement** (ACCC): the debtor agent sends a camt.056 to the creditor agent as a new ISO 20022 route. The
  *   creditor agent answers with a camt.029 (`RJCR` to refuse) or returns the funds with a pacs.004 (`FOCR`) plus a
- *   camt.029 (`CNCL`). Each follow-up is its own route with a fresh UETR as `route_id` and the payment's UETR as
- *   `original_uetr` in the envelope header, because Routers never accept a route id twice.
+ *   camt.029 (`CNCL`). Each follow-up is its own route (with its own Router-derived route id) carrying a fresh UETR as
+ *   `iso_uetr` and the payment's UETR as `original_uetr` in the ISO payload header.
  * - **Quarantine release** to the original sender: the provider's vault release is reported to the debtor agent as a
  *   pacs.004 with reason RR04 and the case id, so the sender's books close against the same UETR.
  */

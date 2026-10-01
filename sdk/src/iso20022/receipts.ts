@@ -19,7 +19,7 @@ import type { RouteHop } from "../envelope.js";
 import { ProtoWriter, fieldString, readFields } from "../proto.js";
 import type { FinancialInstitution, IsoMessage, Pacs002, ReasonInfo } from "./model.js";
 import { MESSAGE_DEFINITIONS } from "./model.js";
-import { routeIdToUetr, uetrToRouteId } from "./uetr.js";
+
 import { assertValidMessage, isoDateTime } from "./validate.js";
 
 export const RECEIPT_STATUSES = ["UNSPECIFIED", "DELIVERED", "FAILED", "EXPIRED", "QUARANTINED"] as const;
@@ -230,6 +230,11 @@ export function receiptCommitment(r: RouteReceipt, reporter: { ledger_id: string
 /** The original payment a status report refers to. */
 export interface PaymentReference {
   uetr: string;
+  /**
+   * On-chain route id of the route that carried the payment (from `RouteSent`, or `deriveRouteId`). When set,
+   * {@link receiptToPacs002} checks that the receipt reports on that route. The UETR is no longer the route id.
+   */
+  routeId?: Hex;
   messageId: string;
   messageNameId: string;
   creationDateTime?: string;
@@ -298,7 +303,9 @@ export function hopAcceptedStatus(ref: PaymentReference, hop: { hopIndex: number
  * held and whom to contact.
  */
 export function receiptToPacs002(receipt: RouteReceipt, ref: PaymentReference, o: StatusReportOptions): Pacs002 {
-  if (routeIdToUetr(receipt.route_id) !== ref.uetr) throw new Error("receipt route_id is not the payment's UETR");
+  if (ref.routeId !== undefined && receipt.route_id.toLowerCase() !== ref.routeId.toLowerCase()) {
+    throw new Error("receipt route_id is not the payment's route");
+  }
   switch (receipt.status) {
     case "DELIVERED":
       // Only the destination may report delivery: it has no hops after it, so its rest commitment is zero.
@@ -365,10 +372,10 @@ export function pacs002Outcome(p: Pacs002): Pacs002Outcome {
   }
 }
 
-/** Helper for tests and tooling: a receipt for a route id (the UETR), with defaults for the unset fields. */
-export function makeReceipt(uetr: string, r: Partial<Omit<RouteReceipt, "route_id">>): RouteReceipt {
+/** Helper for tests and tooling: a receipt for route `routeId` (16 bytes), with defaults for the unset fields. */
+export function makeReceipt(routeId: Hex, r: Partial<Omit<RouteReceipt, "route_id">>): RouteReceipt {
   return {
-    route_id: uetrToRouteId(uetr),
+    route_id: routeId,
     status: "UNSPECIFIED",
     hop_index: 0,
     ledger_id: "",

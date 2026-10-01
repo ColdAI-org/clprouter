@@ -176,8 +176,9 @@ class Scan {
 export function findClearPersonalData(envelope: ClprRouteEnvelope | Hex): PiiViolation[] {
   const env = typeof envelope === "string" ? decodeEnvelope(envelope) : envelope;
   const s = new Scan();
+  // route_id is derived by the origin Router: empty before send, 16 bytes after.
   s.binary(env.route_id, "route_id", [16]);
-  if (!asBytes(env.route_id)?.length) s.add("route_id", "malformed", "must be 16 bytes");
+  s.binary(env.iso_uetr, "iso_uetr", [16]);
   s.caip2(env.origin.ledger_id, "origin.ledger_id");
   s.binary(env.origin.application, "origin.application", [20, 32]);
   s.caip2(env.destination.ledger_id, "destination.ledger_id");

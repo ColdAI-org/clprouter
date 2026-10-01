@@ -1,11 +1,22 @@
 import type { Hex, LocalAccount } from "viem";
-import { bytesToHex, hexToBytes, isHex, keccak256, recoverMessageAddress, stringToBytes } from "viem";
+import {
+  bytesToHex,
+  concatHex,
+  encodeAbiParameters,
+  getAddress,
+  hexToBytes,
+  isHex,
+  keccak256,
+  recoverMessageAddress,
+  stringToBytes,
+} from "viem";
 import { kgToUg } from "./filters.js";
 import type { PlanSuccess } from "./planner.js";
 import { ProtoWriter, fieldString, readFields } from "./proto.js";
 import type { RouteQuote } from "./quote.js";
 import type { Caip10, Caip2, FilterLabel, Mode, TrustTier } from "./types.js";
 import { TRUST_TIER_ORDER, trustRank } from "./types.js";
+import { normalizeLedgerId } from "./graph.js";
 
 /**
  * `ClprRouteEnvelope` as defined in proto/clprouter/v1/route_envelope.proto (spec "Route envelope").
@@ -62,7 +73,10 @@ export interface FilterRegistryVersion {
 }
 
 export interface ClprRouteEnvelope {
-  /** 16 bytes; the UETR under the ISO 20022 filter. */
+  /**
+   * 16 bytes, derived by the origin Router at `send` from (origin ledger, origin Router, sender, per-sender nonce);
+   * never chosen by the sender (see {@link deriveRouteId}). `0x` in an envelope built before sending unless predicted.
+   */
   route_id: Hex;
   origin: RouteEndpoint;
   destination: RouteEndpoint;
@@ -80,6 +94,8 @@ export interface ClprRouteEnvelope {
   origin_signature: Hex;
   filter_registry_versions: FilterRegistryVersion[];
   router_version: number;
+  /** 16 bytes: UETR (UUIDv4) of the ISO 20022 message (required under the ISO 20022 filter), else `0x`. */
+  iso_uetr: Hex;
 }
 
 export interface AssetInfo {
@@ -126,16 +142,82 @@ export interface BuildEnvelopeInput {
    * Router stamps at `send`.
    */
   registryVersion?: bigint;
-  /** `reverse` writes the reversed hops; `auto` (default) leaves the path empty, which Routers read as reverse hops. */
+  /**
+   * `reverse` writes the reversed hops; `auto` (default) leaves the path empty, which Routers read as reverse hops.
+   * Routers accept an explicit path only on routes that carry no value (no fee budget, no escrow).
+   */
   receiptPath?: "auto" | "reverse";
-  /** CLPRouter deployment per ledger, pinned into the hops. */
+  /**
+   * CLPRouter deployment per ledger, pinned into the hops. Routers only accept the canonical Router of each ledger
+   * (see {@link canonicalRouterAddress}); pass `deployment` instead to compute them.
+   */
   routers?: Partial<Record<Caip2, Hex>>;
+  /** The deployment's CREATE2 parameters: fills in the canonical Router of every EVM ledger not in `routers`. */
+  deployment?: RouterDeployment;
   /** Origin-ledger fee payee per hop index. */
   feePayees?: Partial<Record<number, Hex>>;
   routerVersion?: number;
-  /** 16 bytes; random UUIDv4 bytes when omitted. */
-  routeId?: Hex;
+  /**
+   * The sender's next nonce on the origin Router (`ClprRouter.nonces(sender)`): when given (and the origin Router is
+   * known), `route_id` is the id the Router will derive; otherwise `route_id` is left empty (`0x`).
+   */
+  nonce?: bigint;
+  /** ISO 20022 UETR as a UUID or 16 bytes; under the ISO 20022 filter a fresh UUIDv4 when omitted. */
+  isoUetr?: string;
   now?: Date;
+}
+
+/** CREATE2 parameters of a CLPRouter deployment (`ClprRouterDeployer` address, its salt and the Router init hash). */
+export interface RouterDeployment {
+  deployer: Hex;
+  salt: Hex;
+  initCodeHash: Hex;
+}
+
+/** Canonical Router address of an EVM ledger in `d` (as `ClprRouter.canonicalRouter`). */
+export function canonicalRouterAddress(d: RouterDeployment, ledgerId: Caip2): Hex {
+  const salt = keccak256(
+    encodeAbiParameters([{ type: "bytes32" }, { type: "bytes32" }], [d.salt, keccak256(stringToBytes(ledgerId))]),
+  );
+  const h = keccak256(concatHex(["0xff", d.deployer, salt, d.initCodeHash]));
+  return getAddress(`0x${h.slice(26)}`);
+}
+
+const ROUTE_TAG = keccak256(stringToBytes("clprouter.v1.route"));
+const RECEIPT_TAG = keccak256(stringToBytes("clprouter.v1.receipt"));
+
+/** Route id the origin Router derives for the `nonce`-th route of `sender` (as `RouteLogic.routeId`). */
+export function deriveRouteId(originLedger: Caip2, originRouter: Hex, sender: Hex, nonce: bigint): Hex {
+  const h = keccak256(
+    encodeAbiParameters(
+      [{ type: "bytes32" }, { type: "bytes32" }, { type: "address" }, { type: "address" }, { type: "uint256" }],
+      [ROUTE_TAG, keccak256(stringToBytes(originLedger)), originRouter, sender, nonce],
+    ),
+  );
+  return `0x${h.slice(2, 34)}`;
+}
+
+/** Id of the receipt hop `hopIndex` sends for route `routeId` of (`originLedger`, `originRouter`). */
+export function deriveReceiptId(originLedger: Caip2, originRouter: Hex, routeId: Hex, hopIndex: number): Hex {
+  const h = keccak256(
+    encodeAbiParameters(
+      [{ type: "bytes32" }, { type: "bytes32" }, { type: "bytes32" }, { type: "bytes16" }, { type: "uint256" }],
+      [RECEIPT_TAG, keccak256(stringToBytes(originLedger)), keccak256(originRouter), routeId, BigInt(hopIndex)],
+    ),
+  );
+  return `0x${h.slice(2, 34)}`;
+}
+
+/**
+ * Replay / hop-state key Routers use for an envelope (`ClprRouter.hopState(key)`): its origin (hops[0]) and its id.
+ */
+export function inboundKey(hop0LedgerId: Caip2, hop0Router: Hex, id: Hex): Hex {
+  return keccak256(
+    encodeAbiParameters(
+      [{ type: "bytes32" }, { type: "bytes32" }, { type: "bytes16" }],
+      [keccak256(stringToBytes(hop0LedgerId)), keccak256(hop0Router), id],
+    ),
+  );
 }
 
 /**
@@ -147,13 +229,17 @@ export const DEFAULT_ONCHAIN_TRUST_FLOOR: TrustTier = "attested";
 
 const CAIP10 = /^([-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}):([-.%a-zA-Z0-9]{1,128})$/;
 
+/** Parse a CAIP-10 account id; a bare EIP-155 chain id ("296:0xabc…") is accepted and normalised to CAIP-2. */
 export function parseCaip10(id: string): { chain: Caip2; address: string } {
+  const bare = /^([0-9]{1,32}):([-.%a-zA-Z0-9]{1,128})$/.exec(id);
+  if (bare) return { chain: normalizeLedgerId(bare[1]!), address: bare[2]! };
   const m = CAIP10.exec(id);
   if (!m) throw new Error(`not a CAIP-10 account id: ${id}`);
-  return { chain: m[1]!, address: m[2]! };
+  return { chain: normalizeLedgerId(m[1]!), address: m[2]! };
 }
 
-export function randomRouteId(): Hex {
+/** 16 random bytes shaped as a UUIDv4 (a fresh UETR). */
+export function randomUuidV4Bytes(): Hex {
   const b = new Uint8Array(16);
   crypto.getRandomValues(b);
   b[6] = (b[6]! & 0x0f) | 0x40; // UUID version 4
@@ -161,8 +247,8 @@ export function randomRouteId(): Hex {
   return bytesToHex(b);
 }
 
-/** The route id formatted as a UUID (the UETR under the ISO 20022 filter). */
-export function routeIdToUuid(id: Hex): string {
+/** 16 bytes formatted as a UUID. */
+export function bytes16ToUuid(id: Hex): string {
   const h = id.slice(2).toLowerCase();
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
@@ -170,6 +256,12 @@ export function routeIdToUuid(id: Hex): string {
 function isUuidV4(id: Hex): boolean {
   const b = hexToBytes(id);
   return b.length === 16 && b[6]! >> 4 === 4 && (b[8]! & 0xc0) === 0x80;
+}
+
+function uetrBytes(u: string): Hex {
+  const h = (isHex(u) ? u : `0x${u.replaceAll("-", "")}`).toLowerCase() as Hex;
+  if (!isHex(h) || hexToBytes(h).length !== 16) throw new Error(`iso_uetr must be a UUID or 16 bytes: ${u}`);
+  return h;
 }
 
 /**
@@ -194,8 +286,8 @@ export function buildEnvelope(input: BuildEnvelopeInput): ClprRouteEnvelope {
   const filters = plan.filters;
   const iso = filters.includes("ISO20022");
   const mica = filters.includes("MICA");
-  const origin = route.ledgers[0]!;
-  const destination = route.ledgers[route.ledgers.length - 1]!;
+  const origin = normalizeLedgerId(route.ledgers[0]!);
+  const destination = normalizeLedgerId(route.ledgers[route.ledgers.length - 1]!);
 
   const sender = parseCaip10(input.sender);
   const recipient = parseCaip10(input.recipient);
@@ -230,18 +322,26 @@ export function buildEnvelope(input: BuildEnvelopeInput): ClprRouteEnvelope {
   const maxFeeUsd = input.maxFeeUsd ?? route.totals.costUsd;
   if (route.totals.costUsd > maxFeeUsd + 1e-12) throw new Error("route cost exceeds maxFeeUsd");
 
-  const routeId = input.routeId ?? randomRouteId();
-  if (hexToBytes(routeId).length !== 16) throw new Error("route_id must be 16 bytes");
-  if (iso && !isUuidV4(routeId)) throw new Error("ISO 20022 filter: route_id must be a UUIDv4 (the UETR)");
+  const isoUetr: Hex =
+    input.isoUetr !== undefined ? uetrBytes(input.isoUetr) : iso ? randomUuidV4Bytes() : "0x";
+  if (iso && !isUuidV4(isoUetr)) throw new Error("ISO 20022 filter: iso_uetr must be a UUIDv4 (the UETR)");
 
   const now = input.now ?? new Date();
   const deadlineS = input.deadlineS ?? Math.max(600, Math.ceil(route.totals.timeP90S * 2));
   const routers = input.routers ?? {};
-  const hops: RouteHop[] = route.ledgers.map((ledger, i) => {
+  const routerOf = (ledger: Caip2): Hex =>
+    routers[ledger] ?? (input.deployment ? canonicalRouterAddress(input.deployment, ledger) : "0x");
+  const originRouter = routerOf(origin);
+  const routeId: Hex =
+    input.nonce !== undefined && originRouter !== "0x"
+      ? deriveRouteId(origin, originRouter, sender.address as Hex, input.nonce)
+      : "0x";
+  const hops: RouteHop[] = route.ledgers.map((l, i) => {
     const q = route.hops[i];
+    const ledger = normalizeLedgerId(l);
     return {
       ledger_id: ledger,
-      router: routers[ledger] ?? "0x",
+      router: routerOf(ledger),
       channel_id: q ? toBytes32Id(q.channelId) : "0x",
       connector_id: q ? toBytes32Id(q.connectorId) : "0x",
       fee: q ? usdToUnits(q.cost.totalUsd, input.feeUnit) : 0n,
@@ -255,6 +355,9 @@ export function buildEnvelope(input: BuildEnvelopeInput): ClprRouteEnvelope {
   const carriesValue = budget > 0n || payloadType === "asset";
   if (input.loose && carriesValue) {
     throw new Error("loose routing is only for routes without value: Routers reject loose routes with fees or assets");
+  }
+  if (input.receiptPath === "reverse" && carriesValue) {
+    throw new Error("an explicit receipt path is only for routes without value: Routers reject it with fees or assets");
   }
 
   const capKg = input.energyCapKgPerTx ?? plan.energyCapKgPerTx;
@@ -271,8 +374,8 @@ export function buildEnvelope(input: BuildEnvelopeInput): ClprRouteEnvelope {
     route_id: routeId,
     origin: { ledger_id: origin, application: input.originApp },
     destination: { ledger_id: destination, application: input.destinationApp },
-    sender: input.sender,
-    recipient: input.recipient,
+    sender: `${sender.chain}:${sender.address}`,
+    recipient: `${recipient.chain}:${recipient.address}`,
     hops,
     hop_index: 0,
     mode: plan.mode,
@@ -304,12 +407,13 @@ export function buildEnvelope(input: BuildEnvelopeInput): ClprRouteEnvelope {
     origin_signature: "0x",
     filter_registry_versions: filters.map((f) => ({ filter: f, version: input.registryVersion! })),
     router_version: input.routerVersion ?? 1,
+    iso_uetr: isoUetr,
   };
 }
 
-/** `uetr` view of an ISO 20022 envelope's route id. */
+/** UETR of an envelope (its `iso_uetr` as a UUID), if it carries one. */
 export function envelopeUetr(env: ClprRouteEnvelope): string | undefined {
-  return env.constraints.filters.includes("ISO20022") ? routeIdToUuid(env.route_id) : undefined;
+  return hexToBytes(env.iso_uetr).length === 16 ? bytes16ToUuid(env.iso_uetr) : undefined;
 }
 
 // ── protobuf codec ─────────────────────────────────────────────────────────
@@ -383,6 +487,7 @@ export function encodeEnvelope(env: ClprRouteEnvelope): Hex {
     w.element(14, new ProtoWriter().uint(1, FILTER_BIT[v.filter]).uint(2, v.version));
   }
   w.uint(15, env.router_version);
+  w.bytes(16, idField(env.iso_uetr));
   return w.hex();
 }
 
@@ -408,8 +513,20 @@ function decodeEndpoint(b: Uint8Array): RouteEndpoint {
   return e;
 }
 
-/** Decode protobuf bytes; unknown fields are skipped. */
+/**
+ * Decode protobuf bytes. Like the Solidity `RouteCodec`, only the canonical encoding is accepted (the exact bytes
+ * {@link encodeEnvelope} produces): unknown fields, repeated singular fields, explicit defaults, over-long varints and
+ * fields out of order are rejected, so every party reads the same envelope.
+ */
 export function decodeEnvelope(data: Hex): ClprRouteEnvelope {
+  const env = decodeEnvelopeFields(data);
+  if (encodeEnvelope(env).toLowerCase() !== data.toLowerCase()) {
+    throw new Error("malformed protobuf: not the canonical ClprRouteEnvelope encoding");
+  }
+  return env;
+}
+
+function decodeEnvelopeFields(data: Hex): ClprRouteEnvelope {
   const env: ClprRouteEnvelope = {
     route_id: "0x",
     origin: { ledger_id: "", application: "0x" },
@@ -435,6 +552,7 @@ export function decodeEnvelope(data: Hex): ClprRouteEnvelope {
     origin_signature: "0x",
     filter_registry_versions: [],
     router_version: 0,
+    iso_uetr: "0x",
   };
   const len = (f: { wt: number; bytes?: Uint8Array }) => f.wt === 2 && f.bytes !== undefined;
   for (const f of readFields(hexToBytes(data))) {
@@ -478,6 +596,8 @@ export function decodeEnvelope(data: Hex): ClprRouteEnvelope {
         break;
       }
       case 15: env.router_version = Number(f.int ?? 0n); break;
+      case 16: if (len(f)) env.iso_uetr = bytesToHex(b); break;
+      default: throw new Error(`malformed protobuf: unknown ClprRouteEnvelope field ${f.field}`);
     }
   }
   return env;

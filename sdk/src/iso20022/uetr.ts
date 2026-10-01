@@ -1,7 +1,8 @@
 /**
  * UETR (Unique End-to-end Transaction Reference): an RFC 4122 UUID version 4, lower case, as ISO 20022's
- * `UUIDv4Identifier` requires. Under the ISO 20022 filter the UETR is the envelope's 16-byte `route_id`, so one id
- * tracks the payment across every hop.
+ * `UUIDv4Identifier` requires. Under the ISO 20022 filter the UETR travels in the envelope's own 16-byte `iso_uetr`
+ * field (and in the ISO payload header). It is never the route id: route ids are derived by the origin Router, so a
+ * UETR cannot be used to squat or censor a route, and the same UETR may appear on several routes (follow-ups).
  */
 import type { Hex } from "viem";
 import { bytesToHex, hexToBytes, isHex } from "viem";
@@ -31,16 +32,16 @@ function bytesToUetr(b: Uint8Array): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
-/** UETR → the 16-byte envelope `route_id`. */
-export function uetrToRouteId(uetr: string): Hex {
+/** UETR → its 16 bytes (the envelope `iso_uetr`, the ISO payload `uetr`). */
+export function uetrToBytes(uetr: string): Hex {
   assertUetr(uetr);
   return `0x${uetr.replaceAll("-", "")}`;
 }
 
-/** Envelope `route_id` → UETR; throws if the id is not a UUIDv4. */
-export function routeIdToUetr(routeId: Hex | Uint8Array): string {
-  const b = typeof routeId === "string" ? (isHex(routeId) ? hexToBytes(routeId) : new Uint8Array()) : routeId;
-  if (b.length !== 16) throw new Error("route_id must be 16 bytes");
+/** 16 bytes (envelope `iso_uetr`) → UETR; throws if they are not a UUIDv4. */
+export function bytesToUetr16(value: Hex | Uint8Array): string {
+  const b = typeof value === "string" ? (isHex(value) ? hexToBytes(value) : new Uint8Array()) : value;
+  if (b.length !== 16) throw new Error("uetr must be 16 bytes");
   const u = bytesToUetr(b);
   assertUetr(u);
   return u;

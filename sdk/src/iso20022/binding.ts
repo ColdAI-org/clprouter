@@ -8,7 +8,7 @@
  * | --- | --- | --- |
  * | 1 | `version` | 1 |
  * | 2 | `message_definition` | e.g. `pacs.008.001.08` |
- * | 3 | `uetr` | 16 bytes; equals the envelope `route_id` |
+ * | 3 | `uetr` | 16 bytes; equals the envelope `iso_uetr` |
  * | 4 | `original_uetr` | 16 bytes; set for camt.056 / pacs.004 / camt.029 / pacs.002 (the payment they refer to) |
  * | 5, 6 | `amount`, `currency` | the interbank amount, e.g. `"1250.00"`, `"EUR"` |
  * | 7 | `message_commitment` | keccak256(domain ‖ salt ‖ XML) |
@@ -30,7 +30,7 @@ import { institutionKeyId, open, publicKeyOf, seal, toBytes } from "./crypto.js"
 import { fromXml, toXml } from "./messages.js";
 import type { Amount, CashAccount, FinancialInstitution, IsoMessage, MessageDefinition, Party, PartyOrAgent } from "./model.js";
 import { MESSAGE_DEFINITIONS } from "./model.js";
-import { generateUetr, isUetr, routeIdToUetr, uetrToRouteId } from "./uetr.js";
+import { generateUetr, isUetr, bytesToUetr16, uetrToBytes } from "./uetr.js";
 import { amountProblems } from "./validate.js";
 
 export const ISO_PAYLOAD_VERSION = 1;
@@ -87,8 +87,9 @@ export interface IsoBindInput {
   /** Defaults to the data derived from the message; `null` for none. */
   travelRule?: TravelRuleData | null;
   /**
-   * Route id as a UETR. For pacs.008 / pacs.009 it must be (and defaults to) the payment's own UETR. Other messages
-   * travel as new routes, so they get a fresh UETR unless one is given, and carry the payment's as `original_uetr`.
+   * The route's UETR (envelope `iso_uetr`). For pacs.008 / pacs.009 it must be (and defaults to) the payment's own
+   * UETR. Other messages travel as new routes with a fresh UETR unless one is given, and carry the payment's as
+   * `original_uetr`.
    */
   routeUetr?: string;
   /** Deterministic inputs, for tests only. */
@@ -101,8 +102,8 @@ export interface IsoBinding {
   header: IsoPayloadHeader;
   /** Encoded header: the envelope `payload`. */
   payload: Hex;
-  /** 16-byte route id (the UETR). */
-  routeId: Hex;
+  /** 16-byte UETR for the envelope's `iso_uetr` (the route id itself is derived by the origin Router). */
+  isoUetr: Hex;
   message: IsoMessage;
   xml: string;
   travelRule: TravelRuleData | null;
@@ -203,8 +204,8 @@ function headerWriter(h: IsoPayloadHeader, withSealed: boolean): ProtoWriter {
   const w = new ProtoWriter()
     .uint(1, h.version)
     .string(2, h.messageDefinition)
-    .bytes(3, uetrToRouteId(h.uetr));
-  if (h.originalUetr) w.bytes(4, uetrToRouteId(h.originalUetr));
+    .bytes(3, uetrToBytes(h.uetr));
+  if (h.originalUetr) w.bytes(4, uetrToBytes(h.originalUetr));
   if (h.amount) w.string(5, h.amount.value).string(6, h.amount.currency);
   w.bytes(7, h.messageCommitment).bytes(8, h.travelRuleCommitment).uint(9, DELIVERY_NUM[h.delivery]);
   if (h.recipientKeyId) w.bytes(10, h.recipientKeyId);
@@ -253,8 +254,8 @@ export function decodeIsoPayload(payload: Hex | Uint8Array): IsoPayloadHeader {
     switch (f.field) {
       case 1: h.version = Number(f.int); break;
       case 2: h.messageDefinition = str(f, "message_definition") as MessageDefinition; break;
-      case 3: h.uetr = routeIdToUetr(fixed(f.bytes, 16, "uetr")); break;
-      case 4: h.originalUetr = routeIdToUetr(fixed(f.bytes, 16, "original_uetr")); break;
+      case 3: h.uetr = bytesToUetr16(fixed(f.bytes, 16, "uetr")); break;
+      case 4: h.originalUetr = bytesToUetr16(fixed(f.bytes, 16, "original_uetr")); break;
       case 5: h.amountValue = str(f, "amount"); break;
       case 6: h.currency = str(f, "currency"); break;
       case 7: h.messageCommitment = fixed(f.bytes, 32, "message_commitment"); break;
@@ -336,7 +337,7 @@ export function bindIsoMessage(input: IsoBindInput): IsoBinding {
   } else {
     uetr = input.routeUetr ?? generateUetr();
     if (!isUetr(uetr)) throw new Error(`not a UUIDv4 UETR: ${uetr}`);
-    if (uetr === facts.originalUetr) throw new Error("a follow-up message needs its own route UETR (route ids are never reused)");
+    if (uetr === facts.originalUetr) throw new Error("a follow-up message needs its own UETR");
   }
   const travelRule = input.travelRule === undefined ? deriveTravelRule(message) : input.travelRule;
   const travelRuleJson = canonicalJson(travelRule);
@@ -369,15 +370,15 @@ export function bindIsoMessage(input: IsoBindInput): IsoBinding {
   } else {
     offChain = { xml, salt: bytesToHex(salt), travelRule: travelRuleJson };
   }
-  return { header, payload: encodeIsoPayload(header), routeId: uetrToRouteId(uetr), message, xml, travelRule, offChain };
+  return { header, payload: encodeIsoPayload(header), isoUetr: uetrToBytes(uetr), message, xml, travelRule, offChain };
 }
 
 /**
- * Build the `ClprRouteEnvelope` for an ISO 20022 message: `route_id` = UETR, `payload_type` = `iso20022`, payload =
+ * Build the `ClprRouteEnvelope` for an ISO 20022 message: `iso_uetr` = UETR, `payload_type` = `iso20022`, payload =
  * the clear header. The route must be planned with the ISO 20022 filter.
  */
 export function buildIsoEnvelope(
-  envelope: Omit<BuildEnvelopeInput, "payload" | "payloadType" | "payloadProtection" | "routeId">,
+  envelope: Omit<BuildEnvelopeInput, "payload" | "payloadType" | "payloadProtection" | "isoUetr">,
   iso: IsoBindInput,
 ): { envelope: ClprRouteEnvelope; binding: IsoBinding } {
   if (!envelope.plan.filters.includes("ISO20022")) throw new Error("ISO 20022 payloads need a route planned with the ISO 20022 filter");
@@ -388,7 +389,7 @@ export function buildIsoEnvelope(
     payloadType: "iso20022",
     // The header carries hashes and (optionally) ciphertext, never the message: the builder's non-plaintext class.
     payloadProtection: "ciphertext",
-    routeId: binding.routeId,
+    isoUetr: binding.isoUetr,
   });
   return { envelope: env, binding };
 }
@@ -397,7 +398,7 @@ function headerFrom(source: ClprRouteEnvelope | Hex): IsoPayloadHeader {
   if (typeof source === "string") return decodeIsoPayload(source);
   if (source.payload_type !== "iso20022") throw new Error(`envelope payload_type is ${source.payload_type}, not iso20022`);
   const header = decodeIsoPayload(source.payload);
-  if (source.route_id.toLowerCase() !== uetrToRouteId(header.uetr)) throw new Error("envelope route_id is not the payload's UETR");
+  if (source.iso_uetr.toLowerCase() !== uetrToBytes(header.uetr)) throw new Error("envelope iso_uetr is not the payload's UETR");
   return header;
 }
 

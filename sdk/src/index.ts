@@ -1,5 +1,5 @@
 export * from "./types.js";
-export { RouteGraph, edgeId, isCaip2 } from "./graph.js";
+export { RouteGraph, edgeId, isCaip2, normalizeLedgerId } from "./graph.js";
 export { activeFilters, certValid, ledgerFilterFailures } from "./filters.js";
 export type { ActiveFilters } from "./filters.js";
 export {
@@ -28,15 +28,19 @@ export {
   DEFAULT_ONCHAIN_TRUST_FLOOR,
   advanceEnvelope,
   buildEnvelope,
+  bytes16ToUuid,
+  canonicalRouterAddress,
   decodeEnvelope,
+  deriveReceiptId,
+  deriveRouteId,
   encodeEnvelope,
   envelopeHash,
   envelopeUetr,
   envelopeSigningHash,
+  inboundKey,
   parseCaip10,
-  randomRouteId,
+  randomUuidV4Bytes,
   recoverEnvelopeSigner,
-  routeIdToUuid,
   signEnvelope,
   toBytes32Id,
 } from "./envelope.js";
@@ -50,6 +54,7 @@ export type {
   RouteConstraints,
   RouteEndpoint,
   RouteHop,
+  RouterDeployment,
 } from "./envelope.js";
 export { StaticJsonSource } from "./sources/static.js";
 export type { GraphSource } from "./sources/static.js";

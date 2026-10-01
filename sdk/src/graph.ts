@@ -7,6 +7,14 @@ export function isCaip2(id: string): boolean {
   return CAIP2.test(id);
 }
 
+/**
+ * CAIP-2 form of a ledger id: a bare EIP-155 chain id (as some CLPR Services report it, e.g. "296") becomes
+ * "eip155:296"; anything else is returned unchanged. Routers apply the same normalisation on-chain.
+ */
+export function normalizeLedgerId(id: string): Caip2 {
+  return /^[0-9]+$/.test(id) ? `eip155:${id}` : id;
+}
+
 export function edgeId(e: Pick<Edge, "id" | "channelId" | "from" | "to">): string {
   return e.id ?? `${e.channelId}:${e.from}->${e.to}`;
 }
@@ -18,7 +26,13 @@ export class RouteGraph {
   private readonly out = new Map<Caip2, Edge[]>();
   private readonly edgeById = new Map<string, Edge>();
 
-  constructor(data: RouteGraphData) {
+  constructor(input: RouteGraphData) {
+    // Accept bare EIP-155 chain ids and emit CAIP-2 everywhere.
+    const data: RouteGraphData = {
+      ...input,
+      ledgers: input.ledgers.map((l) => ({ ...l, id: normalizeLedgerId(l.id) })),
+      edges: input.edges.map((e) => ({ ...e, from: normalizeLedgerId(e.from), to: normalizeLedgerId(e.to) })),
+    };
     this.data = data;
     for (const l of data.ledgers) {
       if (!isCaip2(l.id)) throw new Error(`ledger id is not CAIP-2: ${l.id}`);

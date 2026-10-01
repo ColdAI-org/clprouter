@@ -23,7 +23,7 @@ export {
   isoDateTime,
   validateMessage,
 } from "./validate.js";
-export { assertUetr, generateUetr, isUetr, routeIdToUetr, uetrToRouteId } from "./uetr.js";
+export { assertUetr, bytesToUetr16, generateUetr, isUetr, uetrToBytes } from "./uetr.js";
 export { fromXml, toXml } from "./messages.js";
 export { buildDocument, parseDocument } from "./xml.js";
 export type { ParsedDocument } from "./xml.js";

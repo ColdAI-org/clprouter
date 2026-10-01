@@ -1,7 +1,8 @@
 /**
  * Minimal proto3 codec for `clprouter.v1.ClprRouteEnvelope` (proto/clprouter/v1/route_envelope.proto), byte-compatible
  * with the Solidity `RouteCodec`: fields in ascending order, default-valued scalars and empty bytes omitted, repeated
- * message elements always emitted (even when empty), unknown fields skipped on decode.
+ * message elements always emitted (even when empty). {@link readFields} is a structural reader; the envelope decoder
+ * (`decodeEnvelope`) additionally accepts only the canonical encoding, exactly as the Solidity codec does.
  */
 import type { Hex } from "viem";
 import { bytesToHex, hexToBytes } from "viem";

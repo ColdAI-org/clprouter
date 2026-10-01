@@ -14,6 +14,7 @@ import {
   looksLikeText,
   makeReceipt,
   toXml,
+  uetrToBytes,
 } from "../../src/iso20022/index.js";
 import { A, B, NOW, fixtureGraph } from "../fixtures.js";
 import { PII, UETR, pacs008 } from "./fixtures.js";
@@ -110,7 +111,7 @@ describe("no personal data in the clear", () => {
 
   it("receipts may carry the provider contact, not free text", () => {
     const { envelope } = isoEnvelope();
-    const ok = makeReceipt(UETR, { status: "QUARANTINED", reason: "BLACKLIST", ledger_id: "test:hub", case_id: `0x${"c4".repeat(32)}`, contact: "https://provider.example/cases" });
+    const ok = makeReceipt(uetrToBytes(UETR), { status: "QUARANTINED", reason: "BLACKLIST", ledger_id: "test:hub", case_id: `0x${"c4".repeat(32)}`, contact: "https://provider.example/cases" });
     expect(kinds({ ...envelope, payload_type: "receipt", payload: encodeRouteReceipt(ok) })).toEqual([]);
     const bad = { ...ok, contact: `Call ${PII.creditorName} at home` };
     expect(kinds({ ...envelope, payload_type: "receipt", payload: encodeRouteReceipt(bad) })).toEqual(["payload.contact:free-text"]);

@@ -80,6 +80,7 @@ const ENVELOPE_ABI = [
         ],
       },
       { name: "routerVersion", type: "uint32" },
+      { name: "isoUetr", type: "bytes16" },
     ],
   },
 ] as const;
@@ -132,6 +133,7 @@ function fromAbi(data: Hex): ClprRouteEnvelope {
     origin_signature: e.originSignature,
     filter_registry_versions: e.filterRegistryVersions.map((v) => ({ filter: filterOf(v.filter), version: v.version })),
     router_version: e.routerVersion,
+    iso_uetr: id(e.isoUetr),
   };
 }
 

@@ -14,10 +14,10 @@ import {
   isUetr,
   open,
   openIsoPayload,
-  routeIdToUetr,
+  bytesToUetr16,
   seal,
   toXml,
-  uetrToRouteId,
+  uetrToBytes,
   verifyOffChainDelivery,
 } from "../../src/iso20022/index.js";
 import { A, B, NOW } from "../fixtures.js";
@@ -54,13 +54,13 @@ function flip(h: Hex, i: number): Hex {
 }
 
 describe("UETR", () => {
-  it("generates lower-case UUIDv4s and maps them to 16-byte route ids and back", () => {
+  it("generates lower-case UUIDv4s and maps them to 16 bytes (iso_uetr) and back", () => {
     for (let i = 0; i < 50; i++) {
       const u = generateUetr();
       expect(isUetr(u)).toBe(true);
-      expect(routeIdToUetr(uetrToRouteId(u))).toBe(u);
+      expect(bytesToUetr16(uetrToBytes(u))).toBe(u);
     }
-    expect(uetrToRouteId(UETR)).toBe("0x8a562c67ca1648bab07465581be6f001");
+    expect(uetrToBytes(UETR)).toBe("0x8a562c67ca1648bab07465581be6f001");
   });
 
   it("rejects non-v4, upper-case and malformed ids", () => {
@@ -68,8 +68,8 @@ describe("UETR", () => {
     expect(isUetr("8a562c67-ca16-18ba-b074-65581be6f001")).toBe(false); // version 1
     expect(isUetr("8a562c67-ca16-48ba-c074-65581be6f001")).toBe(false); // wrong variant
     expect(isUetr("8a562c67ca1648bab07465581be6f001")).toBe(false);
-    expect(() => routeIdToUetr("0x8a562c67ca1618bab07465581be6f001")).toThrow(/UUIDv4/);
-    expect(() => routeIdToUetr("0x1234")).toThrow(/16 bytes/);
+    expect(() => bytesToUetr16("0x8a562c67ca1618bab07465581be6f001")).toThrow(/UUIDv4/);
+    expect(() => bytesToUetr16("0x1234")).toThrow(/16 bytes/);
   });
 });
 
@@ -103,9 +103,10 @@ describe("sealing (X25519 + HKDF-SHA256 + XChaCha20-Poly1305)", () => {
 describe("envelope binding", () => {
   const bank = generateInstitutionKeyPair();
 
-  it("route_id is the UETR; only UETR, amount, currency and hashes are in clear", () => {
+  it("iso_uetr is the UETR (not the route id); only UETR, amount, currency and hashes are in clear", () => {
     const { envelope, binding } = buildIsoEnvelope(envInput(), { message: pacs008(), recipientPublicKey: bank.publicKey });
-    expect(envelope.route_id).toBe(uetrToRouteId(UETR));
+    expect(envelope.iso_uetr).toBe(uetrToBytes(UETR));
+    expect(envelope.route_id).toBe("0x"); // derived by the origin Router at send
     expect(envelopeUetr(envelope)).toBe(UETR);
     expect(envelope.payload_type).toBe("iso20022");
     const h = decodeIsoPayload(envelope.payload);
@@ -170,11 +171,11 @@ describe("envelope binding", () => {
       { ...h, messageDefinition: "pacs.009.001.08" as const },
     ];
     for (const t of tampered) expect(() => openIsoPayload(encodeIsoPayload(t), bank.secretKey)).toThrow();
-    // A different UETR in the header no longer matches the envelope's route id.
+    // A different UETR in the header no longer matches the envelope's iso_uetr.
     const other = { ...h, uetr: generateUetr() };
-    expect(() => openIsoPayload({ ...envelope, payload: encodeIsoPayload(other) }, bank.secretKey)).toThrow(/route_id/);
-    // A different route id no longer matches the header.
-    expect(() => openIsoPayload({ ...envelope, route_id: uetrToRouteId(generateUetr()) }, bank.secretKey)).toThrow(/route_id/);
+    expect(() => openIsoPayload({ ...envelope, payload: encodeIsoPayload(other) }, bank.secretKey)).toThrow(/iso_uetr/);
+    // A different iso_uetr no longer matches the header.
+    expect(() => openIsoPayload({ ...envelope, iso_uetr: uetrToBytes(generateUetr()) }, bank.secretKey)).toThrow(/iso_uetr/);
     expect(() => openIsoPayload(envelope, generateInstitutionKeyPair().secretKey)).toThrow(/different institution key/);
   });
 
@@ -218,7 +219,7 @@ describe("envelope binding", () => {
     const b = bindIsoMessage({ message: camt, recipientPublicKey: bank.publicKey });
     expect(b.header.uetr).not.toBe(UETR);
     expect(b.header.originalUetr).toBe(UETR);
-    expect(() => bindIsoMessage({ message: camt, recipientPublicKey: bank.publicKey, routeUetr: UETR })).toThrow(/own route UETR/);
+    expect(() => bindIsoMessage({ message: camt, recipientPublicKey: bank.publicKey, routeUetr: UETR })).toThrow(/own UETR/);
     expect(() => bindIsoMessage({ message: pacs008(), recipientPublicKey: bank.publicKey, routeUetr: generateUetr() })).toThrow(/must equal/);
     expect(openIsoPayload(b.payload, bank.secretKey).travelRule).toBeNull();
   });

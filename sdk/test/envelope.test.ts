@@ -12,11 +12,16 @@ import {
   encodeEnvelope,
   envelopeUetr,
   parseCaip10,
+  bytes16ToUuid,
+  canonicalRouterAddress,
+  deriveReceiptId,
+  deriveRouteId,
+  inboundKey,
+  normalizeLedgerId,
   plan,
-  randomRouteId,
+  randomUuidV4Bytes,
   readFields,
   recoverEnvelopeSigner,
-  routeIdToUuid,
   signEnvelope,
   toBytes32Id,
 } from "../src/index.js";
@@ -55,7 +60,8 @@ describe("envelope builder", () => {
   it("fills every spec field", () => {
     const p = planned({ mode: "reliable" });
     const env = buildEnvelope(input(p, { maxFeeUsd: 5, deadlineS: 3600, routers: { [H]: "0x0000000000000000000000000000000000000abc" } }));
-    expect(env.route_id).toMatch(/^0x[0-9a-f]{32}$/);
+    // The route id is derived by the origin Router at send; without a nonce the builder leaves it empty.
+    expect(env.route_id).toBe("0x");
     expect(env.origin).toEqual({ ledger_id: A, application: APP_A });
     expect(env.destination).toEqual({ ledger_id: B, application: APP_B });
     expect(env.sender).toBe(SENDER);
@@ -89,8 +95,11 @@ describe("envelope builder", () => {
     expect(envelopeUetr(env)).toBeUndefined();
   });
 
-  it("an explicit reverse receipt path uses the same Channels backwards", () => {
-    const env = buildEnvelope(input(planned({ mode: "reliable" }), { receiptPath: "reverse" }));
+  it("an explicit reverse receipt path uses the same Channels backwards (routes without value only)", () => {
+    // Fees round to zero units: a data route without value, the only kind Routers accept a receipt path on.
+    const free = { nativeUsd: 1e12, decimals: 0 };
+    const env = buildEnvelope(input(planned({ mode: "reliable" }), { receiptPath: "reverse", feeUnit: free }));
+    expect(env.constraints.remaining_fee_budget).toBe(0n);
     expect(env.receipt_path.map((h) => h.ledger_id)).toEqual([B, H, A]);
     expect(env.receipt_path.map((h) => h.channel_id)).toEqual([env.hops[1]!.channel_id, env.hops[0]!.channel_id, "0x"]);
   });
@@ -112,25 +121,30 @@ describe("envelope builder", () => {
     expect(env.constraints.loose).toBe(false);
   });
 
-  it("ISO 20022: route id is the UETR, payload_type iso20022, registry pinned to the registry version", () => {
+  it("ISO 20022: UETR in iso_uetr (not the route id), payload_type iso20022, registry pinned", () => {
     const p = planned({ mode: "fastest", filters: { iso20022: true } });
     const env = buildEnvelope(input(p, { payload: HASH, payloadProtection: "hash", registryVersion: 42n }));
     expect(env.payload_type).toBe("iso20022");
     const uetr = envelopeUetr(env)!;
     expect(uetr).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-    expect(uetr).toBe(routeIdToUuid(env.route_id));
+    expect(uetr).toBe(bytes16ToUuid(env.iso_uetr));
+    expect(env.route_id).toBe("0x");
+    const given = buildEnvelope(
+      input(p, { payload: HASH, payloadProtection: "hash", registryVersion: 42n, isoUetr: "8a562c67-ca16-48ba-b074-65581be6f001" }),
+    );
+    expect(given.iso_uetr).toBe("0x8a562c67ca1648bab07465581be6f001");
     expect(env.constraints.filters).toEqual(["ISO20022"]);
     // ProviderRegistry.version() is a decision counter, not the planning time.
     expect(env.filter_registry_versions).toEqual([{ filter: "ISO20022", version: 42n }]);
     expect(env.hops.map((h) => h.ledger_id)).toEqual([A, Y, B]);
   });
 
-  it("ISO 20022 refuses plaintext payloads, wrong payload types and non-UUIDv4 route ids", () => {
+  it("ISO 20022 refuses plaintext payloads, wrong payload types and non-UUIDv4 UETRs", () => {
     const p = planned({ mode: "fastest", filters: { iso20022: true } });
     expect(() => buildEnvelope(input(p, { registryVersion: 1n }))).toThrow(/never plaintext/);
     expect(() => buildEnvelope(input(p, { payloadType: "raw", payloadProtection: "ciphertext", registryVersion: 1n }))).toThrow(/iso20022/);
     expect(() =>
-      buildEnvelope(input(p, { payload: HASH, payloadProtection: "hash", routeId: `0x${"00".repeat(16)}`, registryVersion: 1n })),
+      buildEnvelope(input(p, { payload: HASH, payloadProtection: "hash", isoUetr: `0x${"00".repeat(16)}`, registryVersion: 1n })),
     ).toThrow(/UUIDv4/);
     expect(() => buildEnvelope(input(p, { payload: "0x12", payloadProtection: "hash", registryVersion: 1n }))).toThrow(/32 bytes/);
   });
@@ -198,28 +212,65 @@ describe("envelope builder", () => {
     expect(env.hops.map((h) => h.ledger_id)).toEqual(p.fallback!.route.ledgers);
   });
 
-  it("random route ids are UUIDv4 and unique; 32-byte ids pass through, readable ids are hashed", () => {
-    const ids = new Set(Array.from({ length: 50 }, randomRouteId));
+  it("random UETR bytes are UUIDv4 and unique; 32-byte ids pass through, readable ids are hashed", () => {
+    const ids = new Set(Array.from({ length: 50 }, randomUuidV4Bytes));
     expect(ids.size).toBe(50);
-    for (const id of ids) expect(routeIdToUuid(id)[14]).toBe("4");
+    for (const id of ids) expect(bytes16ToUuid(id)[14]).toBe("4");
     expect(toBytes32Id(HASH)).toBe(HASH);
     expect(toBytes32Id("ch-1")).toBe(keccak256(stringToBytes("ch-1")));
+  });
+});
+
+describe("ids, canonical Routers and ledger ids", () => {
+  const DEPLOYMENT = {
+    deployer: "0x00000000000000000000000000000000000000d1" as Hex,
+    salt: keccak256(stringToBytes("clprouter-test")),
+    initCodeHash: keccak256(stringToBytes("init")),
+  };
+
+  it("predicts the Router-derived route id from the sender's nonce", () => {
+    const p = planned();
+    const router = canonicalRouterAddress(DEPLOYMENT, A);
+    const env = buildEnvelope(input(p, { deployment: DEPLOYMENT, nonce: 3n }));
+    expect(env.hops[0]!.router).toBe(router);
+    expect(env.hops[1]!.router).toBe(canonicalRouterAddress(DEPLOYMENT, H));
+    expect(env.route_id).toBe(deriveRouteId(A, router, "0x1111111111111111111111111111111111111111", 3n));
+    expect(deriveRouteId(A, router, "0x1111111111111111111111111111111111111111", 4n)).not.toBe(env.route_id);
+    const receipt = deriveReceiptId(A, router, env.route_id, 2);
+    expect(receipt).toMatch(/^0x[0-9a-f]{32}$/);
+    expect(receipt).not.toBe(env.route_id);
+    expect(inboundKey(A, router, env.route_id)).toMatch(/^0x[0-9a-f]{64}$/);
+  });
+
+  it("refuses an explicit receipt path on a route that carries value", () => {
+    expect(() => buildEnvelope(input(planned(), { receiptPath: "reverse" }))).toThrow(/receipt path/);
+  });
+
+  it("accepts bare EIP-155 chain ids and emits CAIP-2", () => {
+    expect(normalizeLedgerId("296")).toBe("eip155:296");
+    expect(normalizeLedgerId("hedera:testnet")).toBe("hedera:testnet");
+    expect(parseCaip10("296:0xabc")).toEqual({ chain: "eip155:296", address: "0xabc" });
   });
 });
 
 describe("protobuf codec", () => {
   function full(): ClprRouteEnvelope {
     const p = planned({ mode: "fastest", filters: { iso20022: true, energy: { capKgPerTx: 1 } } });
-    return buildEnvelope(
+    const env = buildEnvelope(
       input(p, {
         payload: HASH,
         payloadProtection: "hash",
-        receiptPath: "reverse",
         feePayees: { 0: "0x00000000000000000000000000000000000000fe" },
         routerVersion: 3,
         registryVersion: 12n,
       }),
     );
+    // Exercise every field: an explicit receipt path and a route id (Routers would refuse the path with value).
+    return {
+      ...env,
+      route_id: `0x${"5a".repeat(16)}`,
+      receipt_path: [...env.hops].reverse().map((h) => ({ ...h, connector_id: "0x", fee: 0n, fee_payee: "0x" })),
+    };
   }
 
   it("round-trips every field", () => {
@@ -257,11 +308,16 @@ describe("protobuf codec", () => {
     expect(expected.endsWith("40024a05080510ac02")).toBe(true); // field 8 = 2; field 9 { 1: 5, 2: 300 }
   });
 
-  it("decoder skips unknown fields", () => {
+  it("decoder accepts only the canonical encoding (like RouteCodec)", () => {
     const env = full();
-    const extra = new ProtoWriter().uint(99, 7).string(100, "future").hex();
-    const withUnknown = (encodeEnvelope(env) + extra.slice(2)) as Hex;
-    expect(decodeEnvelope(withUnknown)).toEqual(env);
+    const bytes = encodeEnvelope(env);
+    const extra = new ProtoWriter().uint(99, 7).hex();
+    expect(() => decodeEnvelope((bytes + extra.slice(2)) as Hex)).toThrow(/malformed/); // unknown field
+    expect(() => decodeEnvelope(`${bytes}3801` as Hex)).toThrow(/malformed/); // hop_index twice / out of order
+    expect(() => decodeEnvelope("0x388100")).toThrow(/malformed/); // over-long varint
+    expect(() => decodeEnvelope("0x3800")).toThrow(/malformed/); // explicit default
+    expect(() => decodeEnvelope("0x4a0238014a023801")).toThrow(/malformed/); // singular message twice
+    expect(decodeEnvelope(bytes)).toEqual(env);
     expect(readFields(new ProtoWriter().uint(1, 300).finish())).toEqual([{ field: 1, wt: 0, int: 300n }]);
   });
 
