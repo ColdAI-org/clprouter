@@ -1,0 +1,4 @@
+[submodule "lib/clpr-smart-contracts"]
+	path = lib/clpr-smart-contracts
+	url = /Users/shayansalehi/clpr/clpr-smart-contracts
+	branch = pr/eth-live-proofs

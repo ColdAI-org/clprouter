@@ -1,0 +1,31 @@
+[profile.default]
+src = "src"
+out = "out"
+test = "test"
+script = "script"
+libs = ["lib"]
+# Same compiler settings as the CLPR reference contracts (lib/clpr-smart-contracts),
+# so the reference ClprService used by the tests is byte-for-byte the upstream build.
+solc = "0.8.30"
+optimizer = true
+optimizer_runs = 2000
+via_ir = true
+evm_version = "osaka"
+bytecode_hash = "none"
+cbor_metadata = false
+ignored_error_codes = [5740, 2394]
+fs_permissions = [{ access = "read-write", path = "./e2e-out" }]
+# CLPRouter's Router is compiled with fewer optimizer runs to stay under EIP-170 (24,576 B).
+additional_compiler_profiles = [{ name = "small", optimizer_runs = 200 }]
+compilation_restrictions = [{ paths = "src/ClprRouter.sol", optimizer_runs = 200 }]
+
+[profile.default.fuzz]
+runs = 256
+
+[profile.test]
+ignored_error_codes = [5740, 2394, 3860, 5574]
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = false

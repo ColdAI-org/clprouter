@@ -1,0 +1,5 @@
+@hiero-ledger/clpr/=lib/clpr-smart-contracts/src/
+@test/=lib/clpr-smart-contracts/test/
+forge-std/=lib/clpr-smart-contracts/lib/forge-std/src/
+@openzeppelin/contracts/=lib/clpr-smart-contracts/lib/openzeppelin-contracts/contracts/
+@clprouter/=src/
