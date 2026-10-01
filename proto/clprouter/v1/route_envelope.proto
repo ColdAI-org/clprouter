@@ -1,0 +1,141 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// CLPRouter route envelope, version 1.
+//
+// A ClprRouteEnvelope is carried as the `message_data` of a CLPR Data Message
+// (ClprMessage.message_data, CLPR spec §1.4) on every hop of a routed message.
+// The CLPR protocol itself is unchanged: CLPRouter is an application that sends
+// and receives envelopes through `sendMessage` and application delivery.
+//
+// Wire rules (enforced by the Solidity codec in src/libraries/RouteCodec.sol):
+//   * proto3 encoding; fields equal to their default value are omitted;
+//   * unknown fields are skipped on decode (forward compatible);
+//   * `bytes` fields that carry ids have fixed lengths: route_id 16 bytes,
+//     channel_id / connector_id / case_id / response_hash 32 bytes.
+syntax = "proto3";
+
+package clprouter.v1;
+
+// The one objective the off-chain planner optimised when it chose the route.
+// On-chain Routers carry the mode but never re-plan with it.
+enum RouteMode {
+  ROUTE_MODE_BALANCED = 0;       // default: weighted cost, time, reliability, carbon
+  ROUTE_MODE_CHEAPEST = 1;
+  ROUTE_MODE_FASTEST = 2;
+  ROUTE_MODE_MOST_RELIABLE = 3;
+  ROUTE_MODE_GREENEST = 4;
+}
+
+// Compliance filters, as bits of ClprRouteConstraints.filters.
+// Any combination may be set; every ledger on the route must pass all of them.
+enum RouteFilter {
+  ROUTE_FILTER_NONE = 0;
+  ROUTE_FILTER_ISO20022 = 1;
+  ROUTE_FILTER_MICA = 2;
+  ROUTE_FILTER_ENERGY = 4;
+}
+
+enum PayloadType {
+  PAYLOAD_TYPE_RAW = 0;          // opaque application bytes
+  PAYLOAD_TYPE_ISO20022 = 1;     // hash or ciphertext of an ISO 20022 message (UETR = route_id)
+  PAYLOAD_TYPE_ASSET = 2;        // asset transfer instruction (per-hop escrow is phase 4)
+  PAYLOAD_TYPE_RECEIPT = 3;      // payload is a ClprRouteReceipt travelling back to the origin
+}
+
+// One end of the route: a ledger and an application address on it.
+message ClprRouteEndpoint {
+  string ledger_id = 1;          // CAIP-2, e.g. "eip155:1", "hedera:mainnet"
+  bytes application = 2;         // platform address bytes (20 bytes on EVM)
+}
+
+// hops[i] describes the i-th ledger the route touches and the edge that leaves it.
+// hops[0] is the origin, hops[last] the destination (channel/connector empty there).
+message ClprRouteHop {
+  string ledger_id = 1;          // CAIP-2 id of this ledger
+  bytes router = 2;              // CLPRouter deployment on this ledger
+  bytes channel_id = 3;          // 32 bytes: CLPR Channel to hops[i+1]
+  bytes connector_id = 4;        // 32 bytes: CLPR Connector authorising that send
+  uint64 fee = 5;                // fee (origin native units) this hop takes for the next hop
+  bytes fee_payee = 6;           // origin-ledger account paid `fee` when the route settles
+}
+
+message ClprRouteConstraints {
+  uint32 filters = 1;            // bitmask of RouteFilter
+  uint64 deadline = 2;           // unix seconds; any hop past it drops the message
+  uint64 max_fee = 3;            // cap on the sum of hop fees (0 = budget only)
+  uint64 remaining_fee_budget = 4; // decremented by each forwarding hop
+  uint32 trust_floor = 5;        // minimum verifier trust tier (planner-enforced in phase 1)
+  uint32 max_hops = 6;           // maximum edges (0 = default 3)
+  bool loose = 7;                // false = strict source routing; true = hops may re-route
+  uint64 energy_cap = 8;         // Energy filter: max certified emissions, in micrograms CO2e (µgCO2e)
+                                 // per transaction (0 = no cap); same unit as the registry's figure
+}
+
+// The registry version a filter was checked against: the provider registry's
+// decision counter (ProviderRegistry.version(), incremented on every applied
+// committee decision) when the route was sent. Decisions are applied in nonce
+// order on every ledger, so a version names the same registry state everywhere.
+// Each hop reads the next ledger's certification as of this version; entries
+// applied later are ignored, and a registry that has not reached the version
+// fails the check (never falls back). Notice periods and expiry are evaluated
+// separately, against the hop's current time.
+message ClprFilterRegistryVersion {
+  uint32 filter = 1;             // one RouteFilter bit
+  uint64 version = 2;            // registry decision counter (not a timestamp)
+}
+
+message ClprRouteEnvelope {
+  bytes route_id = 1;                          // 16 bytes; the UETR under the ISO 20022 filter
+  ClprRouteEndpoint origin = 2;
+  ClprRouteEndpoint destination = 3;
+  string sender = 4;                           // CAIP-10 of the paying sender (stamped by the origin Router)
+  string recipient = 5;                        // CAIP-10 of the final recipient
+  repeated ClprRouteHop hops = 6;
+  uint32 hop_index = 7;                        // index into hops of the ledger holding this copy
+  RouteMode mode = 8;
+  ClprRouteConstraints constraints = 9;
+  PayloadType payload_type = 10;
+  bytes payload = 11;
+  repeated ClprRouteHop receipt_path = 12;     // explicit way back for the delivery receipt; empty = reverse hops
+  bytes origin_signature = 13;                 // optional end-to-end signature by the origin application
+  repeated ClprFilterRegistryVersion filter_registry_versions = 14;
+  uint32 router_version = 15;                  // CLPRouter version every hop must run
+}
+
+enum ReceiptStatus {
+  RECEIPT_STATUS_UNSPECIFIED = 0;
+  RECEIPT_STATUS_DELIVERED = 1;    // ISO 20022: pacs.002 ACCC
+  RECEIPT_STATUS_FAILED = 2;       // ISO 20022: pacs.002 RJCT + reason
+  RECEIPT_STATUS_EXPIRED = 3;      // ISO 20022: pacs.002 RJCT (AB05 timeout)
+  RECEIPT_STATUS_QUARANTINED = 4;  // ISO 20022: pacs.002 RJCT, reason RR04 (regulatory)
+}
+
+enum ReceiptReason {
+  RECEIPT_REASON_NONE = 0;
+  RECEIPT_REASON_APPLICATION_ERROR = 1;
+  RECEIPT_REASON_DEADLINE = 2;
+  RECEIPT_REASON_DISABLED_EDGE = 3;
+  RECEIPT_REASON_DISABLED_LEDGER = 4;
+  RECEIPT_REASON_DISABLED_ROUTER = 5;
+  RECEIPT_REASON_DISABLED_INBOUND = 6;
+  RECEIPT_REASON_FILTER = 7;
+  RECEIPT_REASON_FEE_BUDGET = 8;
+  RECEIPT_REASON_BLACKLIST = 9;
+  RECEIPT_REASON_NEXT_HOP_ERROR = 10;
+  RECEIPT_REASON_SEND_FAILED = 11;
+  RECEIPT_REASON_BAD_ROUTE = 12;
+}
+
+// Payload of an envelope with payload_type = PAYLOAD_TYPE_RECEIPT.
+// A receipt is a new routed message from the reporting Router back to the origin Router.
+message ClprRouteReceipt {
+  bytes route_id = 1;              // the route this receipt reports on
+  ReceiptStatus status = 2;
+  uint32 hop_index = 3;            // index (in the route's hops) of the reporting ledger
+  string ledger_id = 4;            // reporting ledger
+  ReceiptReason reason = 5;
+  bytes case_id = 6;               // 32 bytes; set when QUARANTINED
+  string contact = 7;              // provider contact address; set when QUARANTINED
+  bytes response_hash = 8;         // 32 bytes; keccak256 of the destination application's response
+  repeated ClprRouteHop route_hops = 9; // the route's hops as the reporter held them (origin re-checks them)
+}
