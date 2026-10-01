@@ -818,6 +818,19 @@ export const REGISTRY_ABI = [
   },
   {
     "type": "function",
+    "name": "DEPLOYMENT_ID",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "DISABLE_LAPSE",
     "inputs": [],
     "outputs": [
@@ -961,6 +974,25 @@ export const REGISTRY_ABI = [
   },
   {
     "type": "function",
+    "name": "headAt",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "isDisabled",
     "inputs": [
       {
@@ -987,6 +1019,34 @@ export const REGISTRY_ABI = [
         "name": "",
         "type": "address[]",
         "internalType": "address[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingCommittee",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "epoch_",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "members_",
+        "type": "address[]",
+        "internalType": "address[]"
+      },
+      {
+        "name": "threshold_",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "activatesAt",
+        "type": "uint64",
+        "internalType": "uint64"
       }
     ],
     "stateMutability": "view"
@@ -1227,6 +1287,49 @@ export const REGISTRY_ABI = [
   },
   {
     "type": "event",
+    "name": "CommitteeScheduled",
+    "inputs": [
+      {
+        "name": "epoch",
+        "type": "uint64",
+        "indexed": true,
+        "internalType": "uint64"
+      },
+      {
+        "name": "members",
+        "type": "address[]",
+        "indexed": false,
+        "internalType": "address[]"
+      },
+      {
+        "name": "threshold",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "activatesAt",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      },
+      {
+        "name": "evidenceHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "digest",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "ContactChanged",
     "inputs": [
       {
@@ -1423,12 +1526,18 @@ export const REGISTRY_ABI = [
   },
   {
     "type": "error",
-    "name": "DecisionAlreadyUsed",
-    "inputs": []
+    "name": "CommitteeNotYetActive",
+    "inputs": [
+      {
+        "name": "activatesAt",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ]
   },
   {
     "type": "error",
-    "name": "DecisionExpired",
+    "name": "EffectiveTooFar",
     "inputs": []
   },
   {
@@ -1460,6 +1569,11 @@ export const REGISTRY_ABI = [
   {
     "type": "error",
     "name": "InvalidLabel",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidParameters",
     "inputs": []
   },
   {
@@ -1516,6 +1630,30 @@ export const REGISTRY_ABI = [
 ] as const;
 
 export const VAULT_ABI = [
+  {
+    "type": "function",
+    "name": "challengedAt",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
   {
     "type": "function",
     "name": "depositCount",
@@ -1603,11 +1741,19 @@ export const VAULT_ABI = [
         "name": "releasableAt",
         "type": "uint64",
         "internalType": "uint64"
-      },
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "router",
+    "inputs": [],
+    "outputs": [
       {
-        "name": "challenged",
-        "type": "bool",
-        "internalType": "bool"
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -1672,9 +1818,21 @@ export const VAULT_ABI = [
         "internalType": "bytes32"
       },
       {
+        "name": "depositId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
         "name": "by",
         "type": "address",
         "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "to",
+        "type": "address",
+        "indexed": false,
         "internalType": "address"
       },
       {
@@ -1773,6 +1931,36 @@ export const VAULT_ABI = [
     "anonymous": false
   },
   {
+    "type": "event",
+    "name": "RouterBound",
+    "inputs": [
+      {
+        "name": "router",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "evidenceHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "digest",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "AlreadyBound",
+    "inputs": []
+  },
+  {
     "type": "error",
     "name": "AlreadyReleased",
     "inputs": []
@@ -1804,6 +1992,11 @@ export const VAULT_ABI = [
   },
   {
     "type": "error",
+    "name": "InvalidParameters",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "MissingEvidence",
     "inputs": []
   },
@@ -1820,6 +2013,21 @@ export const VAULT_ABI = [
   {
     "type": "error",
     "name": "NotAParty",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotChallenged",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotRouter",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotYetEffective",
     "inputs": []
   },
   {

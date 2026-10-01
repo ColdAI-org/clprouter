@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { foldRegistry, keys, registryView, subjectIndex } from "../src/registry.js";
-import { G, V, ev, h32, rid } from "./helpers.js";
+import { foldRegistry, keys, registryView, subjectIndex, supermajority } from "../src/registry.js";
+import { G, V, ev, h32, rid, type LogSpec } from "./helpers.js";
 
 const L = "eip155:31001";
 const M1 = "0x00000000000000000000000000000000000000A1" as const;
@@ -85,5 +85,64 @@ describe("registry fold", () => {
 
   it("derives account keys case-insensitively like Caip.accountKey", () => {
     expect(keys.account("eip155:1:0xABC")).toBe(keys.account("eip155:1:0xabc"));
+  });
+});
+
+describe("registry fold: hash chain, scheduled committee, per-deposit challenges", () => {
+  const caseId = h32("case-9");
+  const A1 = "0x00000000000000000000000000000000000000b1" as const;
+  const A2 = "0x00000000000000000000000000000000000000b2" as const;
+  const scheduled = (epoch: number, members: `0x${string}`[], threshold: number, activatesAt: number): LogSpec => ({
+    contract: "registry",
+    event: "CommitteeScheduled",
+    args: { epoch: BigInt(epoch), members, threshold, activatesAt: BigInt(activatesAt), evidenceHash: h32("e"), digest: h32("s") },
+  });
+  const named = (to: `0x${string}`): LogSpec => ({
+    contract: "vault",
+    event: "RecoveryNamed",
+    args: { caseId, to, releasableAt: 5000n, evidenceHash: h32("e"), digest: h32(`n${to}`) },
+  });
+  const challenged = (depositId: number, to: `0x${string}`): LogSpec => ({
+    contract: "vault",
+    event: "RecoveryChallenged",
+    args: { caseId, depositId: BigInt(depositId), by: "0xa11ce00000000000000000000000000000000001", to, evidenceHash: h32("x") },
+  });
+
+  it("tracks the head and a scheduled committee until it takes over", () => {
+    const members = [M1, M2, M3, A1, A2];
+    const pend = foldRegistry(L, [ev(L, G.applied(1, 7), { block: 1 }), ev(L, scheduled(1, members, 3, 9000), { block: 1, log: 1 })], []);
+    expect(pend.head).toBe(h32("d1"));
+    expect(pend.pendingCommittee).toMatchObject({ epoch: 1, threshold: 3, activatesAt: 9000 });
+    expect(pend.pendingCommittee!.members.map((m) => m.toLowerCase())).toEqual(members.map((m) => m.toLowerCase()));
+    const done = foldRegistry(
+      L,
+      [
+        ev(L, G.applied(1, 7), { block: 1 }),
+        ev(L, scheduled(1, members, 3, 9000), { block: 1, log: 1 }),
+        ev(L, G.committee(1, members, 3), { block: 2 }),
+        ev(L, G.applied(2, 8), { block: 2, log: 1 }),
+      ],
+      [],
+    );
+    expect(done.pendingCommittee).toBeNull();
+    expect(done.head).toBe(h32("d2"));
+    expect(done.committee).toMatchObject({ epoch: 1, threshold: 3, disableThreshold: 4, committeeThreshold: 4 });
+    expect(supermajority(3, 5)).toBe(4);
+    expect(supermajority(5, 9)).toBe(6);
+  });
+
+  it("keeps a challenge across a renaming of the same address and scopes it to its deposit", () => {
+    const vault = [
+      ev(L, V.deposited(1, rid(1), caseId, 10n), { block: 1 }),
+      ev(L, V.deposited(2, rid(2), caseId, 20n), { block: 2 }),
+      ev(L, named(A1), { block: 3 }),
+      ev(L, challenged(1, A1), { block: 4 }),
+      ev(L, named(A1), { block: 5 }),
+    ];
+    const r = foldRegistry(L, [], vault).recoveries[0]!;
+    expect(r.challenged).toBe(true);
+    expect(r.challenges.map((c) => [c.depositId, c.to.toLowerCase()])).toEqual([[1, A1]]);
+    const renamed = foldRegistry(L, [], [...vault, ev(L, named(A2), { block: 6 })]).recoveries[0]!;
+    expect(renamed.challenged).toBe(false);
   });
 });

@@ -48,9 +48,36 @@ export interface Committee {
   epoch: number;
   members: Address[];
   threshold: number;
-  /** Signatures a disable or blacklist entry needs (k + 1). */
+  /** Signatures a disable, blacklist entry, delisting, recovery naming or Router binding needs (k + 1). */
   disableThreshold: number;
+  /** Signatures a committee change or a challenged-recovery override needs: max(k + 1, ceil(2n / 3)). */
+  committeeThreshold: number;
   source: "event" | "snapshot";
+}
+
+/** A committee change signed but not yet taken over (`ProviderRegistry.pendingCommittee`). */
+export interface PendingCommittee {
+  epoch: number;
+  members: Address[];
+  threshold: number;
+  /** Earliest take-over time; the new committee takes over with the first decision it signs. */
+  activatesAt: number;
+}
+
+/** max(k + 1, ceil(2n / 3)), as `ProviderRegistry` requires for committee changes. */
+export function supermajority(k: number, n: number): number {
+  return Math.max(k + 1, Math.ceil((2 * n) / 3));
+}
+
+function committeeOf(epoch: number, members: Address[], threshold: number, source: Committee["source"]): Committee {
+  return {
+    epoch,
+    members,
+    threshold,
+    disableThreshold: threshold + 1,
+    committeeThreshold: supermajority(threshold, members.length),
+    source,
+  };
 }
 
 export interface DepositEntry {
@@ -74,14 +101,30 @@ export interface LedgerRegistryState {
   cursor: Cursor | null;
   /** Registry version (decisions applied). */
   version: number;
+  /**
+   * Head of the decision hash chain after `version` (the digest of the last applied decision); null when only a
+   * snapshot is known. Two ledgers at the same version agree on the registry state iff their heads are equal.
+   */
+  head: Hex | null;
   contact: string | null;
   committee: Committee | null;
+  pendingCommittee: PendingCommittee | null;
   /** Full certification log (append-only), oldest first. */
   certificationLog: CertEntry[];
   switches: SwitchEntry[];
   listings: ListingEntry[];
   deposits: DepositEntry[];
-  recoveries: { caseId: Hex; to: Address; releasableAt: number; challenged: boolean }[];
+  /**
+   * Recovery address per case. `challenged` is true when a party of any deposit of the case challenged the current
+   * address; `challenges` lists them (a challenge binds only its own deposit and is never cleared by a renaming).
+   */
+  recoveries: {
+    caseId: Hex;
+    to: Address;
+    releasableAt: number;
+    challenged: boolean;
+    challenges: { depositId: number; by: Address; to: Address }[];
+  }[];
 }
 
 const s = (v: unknown) => String(v);
@@ -100,16 +143,10 @@ export function foldRegistry(
     ledger,
     cursor,
     version: snapshot?.version ?? 0,
+    head: null,
     contact: snapshot?.contact ?? null,
-    committee: snapshot
-      ? {
-          epoch: snapshot.epoch,
-          members: snapshot.members,
-          threshold: snapshot.threshold,
-          disableThreshold: snapshot.threshold + 1,
-          source: "snapshot",
-        }
-      : null,
+    committee: snapshot ? committeeOf(snapshot.epoch, snapshot.members, snapshot.threshold, "snapshot") : null,
+    pendingCommittee: null,
     certificationLog: [],
     switches: [],
     listings: [],
@@ -124,7 +161,10 @@ export function foldRegistry(
     const a = e.args;
     switch (e.name) {
       case "DecisionApplied":
-        versionFromEvents = Math.max(versionFromEvents, n(a.version));
+        if (n(a.version) >= versionFromEvents) {
+          versionFromEvents = n(a.version);
+          st.head = (a.digest as Hex) ?? null; // the digest of decision N is the head after N
+        }
         break;
       case "CertificationScheduled":
         st.certificationLog.push({
@@ -185,17 +225,21 @@ export function foldRegistry(
         if (l && Boolean(a.applied)) l.lapseAt = e.timestamp;
         break;
       }
+      case "CommitteeScheduled":
+        // A later schedule replaces an earlier one that has not taken over.
+        st.pendingCommittee = {
+          epoch: n(a.epoch),
+          members: a.members as Address[],
+          threshold: n(a.threshold),
+          activatesAt: n(a.activatesAt),
+        };
+        break;
       case "CommitteeChanged": {
         const epoch = n(a.epoch);
         if (!st.committee || epoch >= st.committee.epoch) {
-          st.committee = {
-            epoch,
-            members: a.members as Address[],
-            threshold: n(a.threshold),
-            disableThreshold: n(a.threshold) + 1,
-            source: "event",
-          };
+          st.committee = committeeOf(epoch, a.members as Address[], n(a.threshold), "event");
         }
+        if (st.pendingCommittee && st.pendingCommittee.epoch <= epoch) st.pendingCommittee = null;
         break;
       }
       case "ContactChanged":
@@ -210,6 +254,7 @@ export function foldRegistry(
 
   const deposits = new Map<number, DepositEntry>();
   const recoveries = new Map<string, LedgerRegistryState["recoveries"][number]>();
+  const challenges = new Map<string, { depositId: number; by: Address; to: Address }[]>();
   for (const e of vaultEvents) {
     const a = e.args;
     if (e.name === "Deposited") {
@@ -232,13 +277,27 @@ export function foldRegistry(
         d.releaseKind = s(a.kindName);
       }
     } else if (e.name === "RecoveryNamed") {
-      recoveries.set(s(a.caseId), { caseId: a.caseId as Hex, to: a.to as Address, releasableAt: n(a.releasableAt), challenged: false });
+      recoveries.set(s(a.caseId), {
+        caseId: a.caseId as Hex,
+        to: a.to as Address,
+        releasableAt: n(a.releasableAt),
+        challenged: false,
+        challenges: [],
+      });
     } else if (e.name === "RecoveryChallenged") {
-      const r = recoveries.get(s(a.caseId));
-      if (r) r.challenged = true;
+      const list = challenges.get(s(a.caseId)) ?? [];
+      // Older vaults emitted (caseId, by, evidenceHash) only: the challenge then applies to the named address.
+      const to = (a.to as Address | undefined) ?? recoveries.get(s(a.caseId))?.to;
+      if (to) list.push({ depositId: a.depositId === undefined ? 0 : n(a.depositId), by: a.by as Address, to });
+      challenges.set(s(a.caseId), list);
     }
   }
   st.deposits = [...deposits.values()];
+  for (const r of recoveries.values()) {
+    const lower = r.to.toLowerCase();
+    r.challenges = (challenges.get(r.caseId) ?? []).filter((c) => c.to.toLowerCase() === lower);
+    r.challenged = r.challenges.length > 0;
+  }
   st.recoveries = [...recoveries.values()];
   return st;
 }
@@ -264,7 +323,7 @@ export function certificationsInEffect(
   const latest = new Map<string, CertEntry>();
   for (const c of log) {
     if (c.effectiveFrom > now) continue;
-    latest.set(c.certKey, c); // log is in version order, and the contract keeps effective times ordered too
+    latest.set(c.certKey, c); // log is in version order: the newest entry already in effect wins, as on-chain
   }
   return [...latest.values()].map((c) => ({ ...c, valid: c.certified && now < c.expiry }));
 }
@@ -331,8 +390,10 @@ export function registryView(st: LedgerRegistryState, now: number) {
     ledger: st.ledger,
     asOf: st.cursor,
     version: st.version,
+    head: st.head,
     contact: st.contact,
     committee: st.committee,
+    pendingCommittee: st.pendingCommittee,
     certifications: certificationsInEffect(st.certificationLog, now),
     scheduledCertifications: scheduledCertifications(st.certificationLog, now),
     disabled: st.switches.filter((x) => switchActive(x, now)),
