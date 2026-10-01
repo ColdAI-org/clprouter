@@ -105,20 +105,55 @@ describe("forward trigger", () => {
     expect(call.args).toEqual(["0xabcd", []]);
   });
 
-  it("completes rejected hops only when configured, and only with an envelope", async () => {
+  it("completes rejected hops only when configured (local send failure: envelope in the event)", async () => {
     const chain = new MockRouter();
     const envelope: Hex = "0x0102";
     chain.state.set(rid(4), { hop: 4, hash: keccak256(envelope) }); // NACKED
     let s = setup(chain, false);
-    s.bus.emitEvent(ev(B, R.rejected(rid(4), 3, envelope), { block: 5 }));
+    s.bus.emitEvent(ev(B, R.rejected(rid(4), 0, envelope), { block: 5 }));
     await settle();
     expect(s.store.jobs()).toHaveLength(0);
 
     s = setup(chain, true);
-    s.bus.emitEvent(ev(B, R.rejected(rid(4), 3, "0x"), { block: 5 })); // NACK via CLPR Response: no envelope
-    s.bus.emitEvent(ev(B, R.rejected(rid(4), 3, envelope), { block: 6 }));
+    s.bus.emitEvent(ev(B, R.rejected(rid(4), 0, envelope), { block: 6 }));
     await settle();
-    expect(s.store.jobs()).toEqual([expect.objectContaining({ kind: "reject", status: "done" })]);
+    expect(s.store.jobs()).toEqual([expect.objectContaining({ kind: "reject", status: "done", payload: expect.objectContaining({ reason: "SEND_FAILED", hopIndex: 1 }) })]);
+    expect(chain.calls).toEqual([`forward:${envelope}`]);
+  });
+
+  it("a NACK from a CLPR Response is completed with the envelope from the earlier RouteForwarded", async () => {
+    const chain = new MockRouter();
+    const envelope: Hex = "0x0a0b0c";
+    chain.state.set(rid(5), { hop: 4, hash: keccak256(envelope) }); // NACKED
+    const s = setup(chain, true);
+    s.bus.emitEvent(ev(B, R.forwarded(rid(5), 1, h32("BC"), 9n, envelope), { block: 5 }));
+    s.bus.emitEvent(ev(B, R.rejected(rid(5), 3, "0x", 1, keccak256(envelope)), { block: 6 }));
+    await settle();
+    expect(s.store.jobs()).toEqual([expect.objectContaining({ kind: "reject", status: "done", payload: expect.objectContaining({ envelope, reason: "NEXT_HOP_ERROR" }) })]);
+    expect(chain.calls).toEqual([`forward:${envelope}`]);
+  });
+
+  it("finds the RouteForwarded envelope in the store after a restart", async () => {
+    const chain = new MockRouter();
+    const envelope: Hex = "0x0d0e";
+    chain.state.set(rid(6), { hop: 4, hash: keccak256(envelope) });
+    const store = new Store();
+    const fwd = ev(B, R.forwarded(rid(6), 1, h32("BC"), 9n, envelope), { block: 5 });
+    const rej = ev(B, R.rejected(rid(6), 3, "0x", 1, keccak256(envelope)), { block: 6 });
+    store.applyRange(B, [fwd, rej], { blockNumber: 6, blockHash: h32("b6") }, []);
+    const t = new ForwardTrigger({ store, bus: new EventBus(), routers: { [B]: ADDR.router }, chains: { [B]: chain }, completeRejected: true });
+    t.start();
+    await settle();
+    await t.stop();
+    expect(chain.calls).toEqual([`forward:${envelope}`]);
+  });
+
+  it("leaves a NACK whose envelope was never indexed", async () => {
+    const chain = new MockRouter();
+    const s = setup(chain, true);
+    s.bus.emitEvent(ev(B, R.rejected(rid(7), 3, "0x", 1, h32("unknown")), { block: 6 }));
+    await settle();
+    expect(s.store.jobs()).toHaveLength(0);
   });
 
   it("only treats local RPC URLs as signable", () => {

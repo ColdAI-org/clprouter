@@ -30,8 +30,8 @@ export function viemRouterChain(pub: PublicClient, wallet: WalletClient, router:
     const account = wallet.account;
     if (!account) throw new Error("wallet has no account");
     const { request } = await pub.simulateContract({ address: router, abi: ROUTER_ABI, functionName, args, account } as never);
-    // The Router wraps `sendMessage` in try/catch, so eth_estimateGas converges on a limit where the inner call
-    // runs out of gas and the hop is recorded as failed instead of reverting. Give the inner call real headroom.
+    // The Router now reverts with InsufficientGas when less than MIN_SEND_GAS is left for `sendMessage`, so an
+    // under-funded forward can no longer fail a hop; extra headroom just avoids a wasted reverted transaction.
     const estimate = await pub.estimateContractGas({ address: router, abi: ROUTER_ABI, functionName, args, account } as never);
     const gas = estimate * 3n + 300_000n < GAS_CAP ? estimate * 3n + 300_000n : GAS_CAP;
     const hash = await wallet.writeContract({ ...(request as object), gas } as never);
@@ -93,8 +93,8 @@ export class ForwardTrigger {
     for (const j of this.o.store.jobs({ status: ["submitted"] })) {
       this.o.store.updateJob(j.ledger, j.kind, j.key, { status: "pending" });
     }
-    // Jobs from events indexed before a restart.
-    for (const name of ["ForwardPending", "OutboxQueued", "ForwardRejected"]) {
+    // Jobs from events indexed before a restart (RouteForwarded first: it holds envelopes rejections refer to).
+    for (const name of ["RouteForwarded", "ForwardPending", "OutboxQueued", "ForwardRejected"]) {
       for (const e of this.o.store.eventsByName(name)) this.ingest(e);
     }
     void this.process();
@@ -107,12 +107,46 @@ export class ForwardTrigger {
     await this.current;
   }
 
+  /** Envelopes seen in `RouteForwarded` / `ForwardPending`, by ledger and keccak256, for later rejections. */
+  private readonly envelopes = new Map<string, Hex>();
+
+  private remember(ledger: string, envelope: unknown): void {
+    if (typeof envelope === "string" && envelope.length > 2) this.envelopes.set(`${ledger}:${keccak256(envelope as Hex).toLowerCase()}`, envelope as Hex);
+  }
+
+  /**
+   * The envelope a `ForwardRejected` refers to. A rejection from a local `sendMessage` failure carries it; a NACK in a
+   * CLPR Response does not, and names it by `envelopeHash`: the envelope of this route's earlier `RouteForwarded`
+   * (or `ForwardPending`) on the same Router.
+   */
+  private rejectedEnvelope(e: IndexedEvent): Hex | undefined {
+    const inline = e.args.envelope as Hex | undefined;
+    if (inline && inline !== "0x") return inline;
+    const hash = String(e.args.envelopeHash ?? "").toLowerCase();
+    if (!/^0x[0-9a-f]{64}$/.test(hash)) return undefined;
+    const known = this.envelopes.get(`${e.ledger}:${hash}`);
+    if (known) return known;
+    if (!e.routeId) return undefined;
+    for (const x of this.o.store.eventsByRouteIds([e.routeId])) {
+      if (x.ledger !== e.ledger || x.contract !== "router") continue;
+      if (x.name !== "RouteForwarded" && x.name !== "ForwardPending") continue;
+      const env = x.args.envelope;
+      if (typeof env === "string" && env.length > 2 && keccak256(env as Hex).toLowerCase() === hash) return env as Hex;
+    }
+    return undefined;
+  }
+
   /** Turn one indexed event into a job. Returns true if a new job was added. */
   ingest(e: IndexedEvent): boolean {
     if (e.contract !== "router") return false;
     const a = e.args;
+    if (e.name === "RouteForwarded") {
+      this.remember(e.ledger, a.envelope);
+      return false;
+    }
     if (e.name === "ForwardPending") {
       const envelope = a.envelope as Hex;
+      this.remember(e.ledger, envelope);
       return this.o.store.addJob({
         ledger: e.ledger,
         kind: "forward",
@@ -132,15 +166,18 @@ export class ForwardTrigger {
       });
     }
     if (e.name === "ForwardRejected" && this.o.completeRejected) {
-      const envelope = a.envelope as Hex;
-      if (!envelope || envelope === "0x") return false; // NACK from a CLPR Response: the envelope is not in the event
+      const envelope = this.rejectedEnvelope(e);
+      if (!envelope) {
+        this.o.log?.(`trigger: ForwardRejected on ${e.ledger} for ${e.routeId}: envelope ${String(a.envelopeHash)} not indexed`);
+        return false;
+      }
       return this.o.store.addJob({
         ledger: e.ledger,
         kind: "reject",
         key: keccak256(envelope),
         routeId: e.routeId,
         blockNumber: e.blockNumber,
-        payload: { envelope },
+        payload: { envelope, hopIndex: Number(a.hopIndex), reason: String(a.reasonName ?? a.reason) },
       });
     }
     return false;

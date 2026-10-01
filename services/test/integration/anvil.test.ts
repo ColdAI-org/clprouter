@@ -27,6 +27,8 @@ const hasAnvil = (() => {
     return false;
   }
 })();
+/** ClprRouter MIN_SEND_GAS: gas a hop must keep for `sendMessage` (the Solidity fixtures use the same figure). */
+const MIN_SEND_GAS = 1_500_000n;
 const ARTEFACTS = ["ClprRouter", "MockRouteService", "ProviderRegistry", "QuarantineVault", "RouteApp"];
 const hasArtefacts = ARTEFACTS.every((n) => existsSync(`${OUT}${n}.sol/${n}.json`));
 
@@ -227,7 +229,7 @@ describe.skipIf(!hasAnvil || !hasArtefacts)("services against a local anvil", ()
       const service = await deploy(mock, [id]);
       const reg = await deploy(registry, [COMMITTEE.map((m) => m.address), K, CONTACT, [3600n, 3600n, 3600n, 7n * 86400n, 30n * 86400n]]);
       const v = await deploy(vault, [reg, 3n * 86400n, 7n * 86400n]);
-      const r = await deploy(router, [service, reg, v, id, 3600n, 300_000n]);
+      const r = await deploy(router, [service, reg, v, id, 3600n, 300_000n, MIN_SEND_GAS]);
       const a = await deploy(app, []);
       await write(a, app.abi, "setRouter", [r]);
       await write(service, mock.abi, "setGuard", [true]); // reference ClprService behaviour: no send inside delivery

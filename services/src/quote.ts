@@ -129,7 +129,11 @@ export type QuoteResponse =
       fallback?: unknown;
       warnings: string[];
       candidates: number;
-      filterRegistryVersions: Partial<Record<FilterLabel, number>>;
+      /**
+       * `ProviderRegistry.version()` on the origin ledger at the quoted block: pass it to `buildEnvelope` as
+       * `registryVersion` (required when a filter is on). Absent when the origin's registry was not read.
+       */
+      registryVersion?: number;
       inputs: QuoteInputs;
       graph?: RouteGraphData;
     })
@@ -268,7 +272,7 @@ export class QuoteService {
       ...(result.fallback ? { fallback: result.fallback } : {}),
       warnings: result.warnings,
       candidates: result.candidates,
-      filterRegistryVersions: result.filterRegistryVersions,
+      ...(inputs.registryVersions[request.origin] !== undefined ? { registryVersion: inputs.registryVersions[request.origin] } : {}),
       inputs,
       ...extra,
     };

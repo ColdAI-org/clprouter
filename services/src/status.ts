@@ -31,6 +31,8 @@ export interface HopView {
   /** CLPR acknowledgement of the message this hop sent, if seen. */
   ack?: string;
   stop?: { status: string; reason: string };
+  /** `ForwardRejected` reason (NEXT_HOP_ERROR or SEND_FAILED). */
+  rejectReason?: string;
   firstSeen?: number;
   lastUpdate?: number;
   events: EventRef[];
@@ -155,7 +157,7 @@ export function buildRouteStatus(
 
   // Planned route, if any envelope was seen.
   for (const e of evs) {
-    if (e.name === "ForwardPending" || e.name === "ForwardRejected") {
+    if (e.name === "ForwardPending" || e.name === "ForwardRejected" || e.name === "RouteForwarded") {
       view.plannedHops ??= tryPlannedHops(e.args.envelope);
     }
   }
@@ -219,11 +221,12 @@ export function buildRouteStatus(
         touch(hop(e.ledger, Number(a.hopIndex)), e, "forward-pending");
         break;
       case "ForwardRejected": {
-        const h = hop(e.ledger);
+        const h = hop(e.ledger, a.hopIndex !== undefined ? Number(a.hopIndex) : undefined);
         touch(h, e);
         // A rejection after a forward downgrades the hop: the next ledger never processed the envelope.
         h.status = "rejected";
         h.ack = String(a.statusName);
+        if (a.reasonName !== undefined) h.rejectReason = String(a.reasonName);
         break;
       }
       case "HopResponse": {

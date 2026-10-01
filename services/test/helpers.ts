@@ -142,20 +142,22 @@ export const R = {
       messageId: o.messageId ?? 1n,
     },
   }),
-  forwarded: (routeId: Hex, hopIndex: number, channelId: Hex = h32("BC"), messageId = 7n): LogSpec => ({
+  forwarded: (routeId: Hex, hopIndex: number, channelId: Hex = h32("BC"), messageId = 7n, envelope: Hex = "0x"): LogSpec => ({
     contract: "router",
     event: "RouteForwarded",
-    args: { routeId, hopIndex, channelId, messageId },
+    args: { routeId, hopIndex, channelId, messageId, envelopeHash: keccak256(envelope), envelope },
   }),
   pending: (routeId: Hex, hopIndex: number, envelope: Hex): LogSpec => ({
     contract: "router",
     event: "ForwardPending",
     args: { routeId, hopIndex, envelope },
   }),
-  rejected: (routeId: Hex, clprStatus: number, envelope: Hex = "0x"): LogSpec => ({
+  /** `envelopeHash` defaults to keccak256(envelope); pass it for a NACK that carries no envelope. */
+  rejected: (routeId: Hex, clprStatus: number, envelope: Hex = "0x", hopIndex = 1, envelopeHash: Hex = keccak256(envelope)): LogSpec => ({
     contract: "router",
     event: "ForwardRejected",
-    args: { routeId, clprStatus, envelope },
+    // reason: SEND_FAILED (11) when the local send failed, else NEXT_HOP_ERROR (10)
+    args: { routeId, hopIndex, envelopeHash, clprStatus, reason: clprStatus === 0 ? 11 : 10, envelope },
   }),
   outbox: (key: Hex, data: Hex = "0x1234"): LogSpec => ({
     contract: "router",

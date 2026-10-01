@@ -38,6 +38,9 @@ describe("event decoding", () => {
 
     const rej = ev(LEDGER, R.rejected(rid(1), 0, "0xabcd"), { block: 1 });
     expect(rej.args.statusName).toBe("SEND_FAILED");
+    expect(rej.args.reasonName).toBe("SEND_FAILED");
+    expect(rej.args.hopIndex).toBe(1);
+    expect(ev(LEDGER, R.rejected(rid(1), 3, "0x"), { block: 1 }).args.reasonName).toBe("NEXT_HOP_ERROR");
     expect(ev(LEDGER, R.hopResponse(rid(1), 3), { block: 1 }).args.statusName).toBe("CONNECTOR_UNDERFUNDED");
 
     const dis = ev(LEDGER, G.disabled(1, h32("edge"), 100), { block: 1 });

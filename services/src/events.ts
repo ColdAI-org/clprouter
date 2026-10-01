@@ -45,6 +45,7 @@ export const REASON = [
   "NEXT_HOP_ERROR",
   "SEND_FAILED",
   "BAD_ROUTE",
+  "TRUST_FLOOR",
 ] as const;
 export const ACTION = [
   "NONE",
@@ -58,6 +59,7 @@ export const ACTION = [
   "CONTACT",
   "VAULT_RELEASE",
   "VAULT_NAME_RECOVERY",
+  "TRUST_TIER",
 ] as const;
 export const LABEL: Record<number, "ISO20022" | "MICA" | "ENERGY"> = { 1: "ISO20022", 2: "MICA", 3: "ENERGY" };
 export const TARGET: Record<number, "EDGE" | "LEDGER" | "ROUTER" | "ROUTER_VERSION"> = {
@@ -170,6 +172,7 @@ export function decodeLog(
     case "ForwardRejected":
       // 0 here means the local `sendMessage` failed (no CLPR Response was involved).
       args.statusName = Number(raw.clprStatus) === 0 ? "SEND_FAILED" : enumName(CLPR_REPLY, raw.clprStatus);
+      args.reasonName = enumName(REASON, raw.reason);
       break;
     case "Released":
       args.kindName = enumName(BENEFICIARY, raw.kind);

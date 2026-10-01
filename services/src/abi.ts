@@ -301,10 +301,28 @@ export const ROUTER_ABI = [
         "internalType": "bytes16"
       },
       {
+        "name": "hopIndex",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
+      },
+      {
+        "name": "envelopeHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
         "name": "clprStatus",
         "type": "uint8",
         "indexed": false,
         "internalType": "uint8"
+      },
+      {
+        "name": "reason",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum RouteTypes.Reason"
       },
       {
         "name": "envelope",
@@ -535,6 +553,18 @@ export const ROUTER_ABI = [
         "type": "uint64",
         "indexed": false,
         "internalType": "uint64"
+      },
+      {
+        "name": "envelopeHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "envelope",
+        "type": "bytes",
+        "indexed": false,
+        "internalType": "bytes"
       }
     ],
     "anonymous": false
@@ -675,6 +705,11 @@ export const ROUTER_ABI = [
   },
   {
     "type": "error",
+    "name": "InsufficientGas",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InsufficientValue",
     "inputs": []
   },
@@ -753,6 +788,11 @@ export const ROUTER_ABI = [
   {
     "type": "error",
     "name": "ValueRoutesMustBeStrict",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "WithdrawFailed",
     "inputs": []
   },
   {
@@ -1328,6 +1368,55 @@ export const REGISTRY_ABI = [
     "anonymous": false
   },
   {
+    "type": "event",
+    "name": "TrustTierScheduled",
+    "inputs": [
+      {
+        "name": "edgeKey",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "channelId",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "toLedgerId",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      },
+      {
+        "name": "tier",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "effectiveFrom",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      },
+      {
+        "name": "evidenceHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "digest",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
     "type": "error",
     "name": "BadSignature",
     "inputs": []
@@ -1376,6 +1465,11 @@ export const REGISTRY_ABI = [
   {
     "type": "error",
     "name": "InvalidTarget",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidTier",
     "inputs": []
   },
   {
