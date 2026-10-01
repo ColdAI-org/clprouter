@@ -211,6 +211,61 @@ app reverts, edge B → C disabled mid-route, recipient blacklisted on B, and de
 Every transaction fits well inside Hedera's 15M gas limit. The main costs are CLPR storing each outbound payload
 in its queue (about 20k gas per 32-byte word) and the Solidity protobuf codec; they have not been profiled yet.
 
+## End-to-end through Hiero
+
+`script/e2e-hiero/run.sh` routes through a local Hiero network. The path is A (anvil, `eip155:31001`) → H (the
+EVM of a Solo network, `eip155:1338`) → B (anvil, `eip155:31002`), and the `DELIVERED` receipt returns
+B → H → A. Each ledger runs the unchanged reference `ClprService`. Each one also gets the CLPR repo's `E2EVerifier`,
+which decodes the bundle but checks no proof, the same setup as that repo's `anvil:solo` roundtrip spec. The H hop
+uses the pending-hop pattern: the bundle is submitted with delivery, the Router records the hop as
+`ForwardPending` behind the Service's reentrancy lock, and `forward()` completes it in the next transaction.
+
+```sh
+# needs the CLPR repo (CLPR_REPO, default ~/clpr/clpr-smart-contracts) with npm install done,
+# and its Solo side B deployed: node --experimental-strip-types test/e2e/backend/solo/cli.ts up b
+# (in the CLPR repo; CLPR_SOLO_CONSENSUS_NODES=1 is enough)
+script/e2e-hiero/run.sh     # starts anvil A/B, re-checks Solo through the CLPR harness, runs the route
+```
+
+`test/e2e-hiero/solo.ts` reuses the CLPR harness's Solo code. It starts the port-forwards, runs the readiness
+checks (relay, transfers, Mirror Node contract simulation) and funds the anvil deployer key on Solo from the
+deployment's test account. On H, transactions are legacy, with the gas price floored at `eth_gasPrice`, and the
+gas limit is forge's estimate × 1.3. Hedera-specific settings on H:
+
+- Inside the EVM, values are in tinybars.
+- The relay does not pass `tx.value` into the Service's delegatecall modules, so the Connector on H posts no
+  locked stake and is funded with a plain transfer.
+- H never holds route funds, so the Router needs no change.
+
+Gas on H, as consumed by the EVM (mirror node `gas_consumed`), against Hedera's 15M per-transaction limit:
+
+| Router step on H | Gas consumed | Gas limit sent | Share of 15M |
+| --- | --- | --- | --- |
+| Envelope A → H: `submitBundle` with delivery (hop recorded pending) | 1,293,137 | 1,758,547 | 8.6% |
+| `forward` to B | 1,535,860 | 2,121,406 | 10.2% |
+| Receipt B → H: `submitBundle` with delivery | 1,146,101 | 1,555,452 | 7.6% |
+| `forward` of the receipt to A | 1,654,737 | 2,420,052 | 11.0% |
+| Acknowledgement bundles A → H, B → H | 303,155 / 157,587 | — | 2.0% / 1.1% |
+| Largest deployments (Router; CLPR `BundleLogic`) | 5,127,331 / 4,688,170 | 6,665,530 | 34% / 31% |
+
+Every step fits in one Hedera transaction. The Router itself needed no change for Hiero.
+
+**Where real Hiero verification stops.** The run checks no proof on the Hiero → anvil legs (H → B, and the
+receipt H → A). `run.sh` ends with a probe that builds the real proof the way the CLPR harness's
+`buildHieroProof` does:
+
+1. The probe maps the ClprService on H to its contract id through the mirror node. This works.
+2. It reads the latest TSS-signed block proof from the block node with `BlockAccessService.getBlock`. This works:
+   about 2.9 KB of `signed_block_proof`.
+3. It requests `ProofService.getStateProof` (HIP-1081) for the Channel's queue slots and message slots. This
+   fails. Block node v0.38.0, the version Solo deploys, ships no proof-service plugin, and the call returns no
+   gRPC status.
+
+The real path needs a block node that serves `getStateProof` for EVM storage `SlotKey`s. With that, the CLPR repo's
+`HieroVerifier` can be deployed on A and B in place of `E2EVerifier` for the Channels to H. Nothing changes in the
+Router. The A → H direction needs an anvil-side proof source (the CLPR repo uses Besu/QBFT for real EVM → Hiero
+proofs), so the anvil legs keep the `E2EVerifier`.
+
 ## Open issues
 
 - **Forwarding inside delivery** needs a CLPR Service that permits `sendMessage` during application delivery. On
