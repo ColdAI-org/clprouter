@@ -5,9 +5,42 @@ CLPRouter delivers a message, and optionally an escrowed payment, between two le
 **application**: it uses `sendMessage` and application delivery, and the CLPR Service on each ledger stays
 unchanged.
 
-This repository holds the on-chain core (phase 1 of the plan): the Router, the provider registry, the
-quarantine vault, the route envelope (Solidity codec and protobuf schema), and the tests. The planner SDK
-lives in `sdk/`.
+This repository holds phase 1 of the plan: the on-chain core (the Router, the provider registry, the
+quarantine vault, the route envelope as Solidity codec and protobuf schema) and its tests, the planner SDK in
+`sdk/`, and the optional off-chain services (indexer, status API, quote service, forward trigger) in `services/`.
+Release `0.1.0` targets local networks and testnets; see the [threat model](docs/threat-model.md) before using it
+with value.
+
+## Quick start
+
+Requires Foundry (forge 1.5.1), Node 22.13+ and pnpm.
+
+```sh
+git submodule update --init --recursive
+forge build --sizes --skip 'test/**' --skip 'script/**'   # every contract under EIP-170 (24,576 B)
+forge test                                                # contracts: unit and three-ledger integration
+(cd sdk && pnpm install --frozen-lockfile && pnpm test)   # planner SDK
+(cd services && pnpm install --frozen-lockfile && pnpm run test:unit)
+script/e2e/run.sh                                         # three anvil chains, five routes (about 9 minutes)
+```
+
+Then plan and send a route with the SDK and `ClprRouter.send` ([integrator guide](docs/integrator-guide.md)), and
+receive it with `IClprRouteApplication` (`src/interfaces/IClprRouteApplication.sol`).
+
+## Documentation
+
+| Document | For |
+| --- | --- |
+| [Integrator guide](docs/integrator-guide.md) | Sending and receiving routes, receipts, `QUARANTINED`, ISO 20022 |
+| [Operator guide](docs/operator-guide.md) | Services, pumpers, Connectors and endpoints, regulated operators |
+| [Provider committee runbook](docs/provider-committee-runbook.md) | Key ceremony, k-of-n decisions, rotation, emergency disable, blacklist and vault |
+| [Deployment guide](docs/deployment.md) | Parameters, networks and addresses, upgrades by new deployment |
+| [Threat model](docs/threat-model.md) | Assets, actors, trust tiers, attack surfaces, residual risks |
+| [Audit-readiness pack](docs/audit-readiness.md) | Scope, invariants, known issues, coverage |
+| [SDK](sdk/README.md), [certification evidence](registry-data/README.md) | Planner details; filter evidence and draft decisions |
+| [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md) | Reporting, DCO sign-off, releases |
+
+Licensed under the [Apache License 2.0](LICENSE), like the CLPR reference contracts.
 
 ## Contents
 
@@ -25,6 +58,9 @@ lives in `sdk/`.
 | `lib/clpr-smart-contracts` | The CLPR reference contracts (submodule, branch `pr/eth-live-proofs`), unchanged. |
 
 ## Architecture
+
+The diagrams below show one route and the contracts on each ledger. What each part trusts, and what remains
+open, is in the [threat model](docs/threat-model.md).
 
 ```mermaid
 sequenceDiagram
