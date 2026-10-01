@@ -5,7 +5,15 @@ import type { Hex, PublicClient } from "viem";
 import { concatHex, encodeAbiParameters, keccak256, pad, parseEther, toFunctionSelector, toHex } from "viem";
 import { describe, expect, it } from "vitest";
 import type { Edge, OnChainReader, RegistryState } from "../src/index.js";
-import { OnChainGraphSource, StaticJsonSource, ViemOnChainReader, edgeId, plan, registryKeys } from "../src/index.js";
+import {
+  OnChainGraphSource,
+  StaticJsonSource,
+  ViemOnChainReader,
+  checkRegistryHeads,
+  edgeId,
+  plan,
+  registryKeys,
+} from "../src/index.js";
 import { A, B, H, NOW, X, cert, fixtureGraph } from "./fixtures.js";
 
 describe("StaticJsonSource", () => {
@@ -202,5 +210,30 @@ describe("ViemOnChainReader", () => {
     expect(registryKeys.cert("hedera:mainnet", "ENERGY")).toBe(keccak256(concatHex([toHex("cert"), "0x03", toHex("hedera:mainnet")])));
     expect(registryKeys.routerVersion(1)).toBe(keccak256(concatHex([toHex("router-version"), "0x00000001"])));
     expect(registryKeys.edge(CH, "hedera:mainnet")).toBe(keccak256(concatHex([toHex("edge"), CH, toHex("hedera:mainnet")])));
+  });
+});
+
+describe("checkRegistryHeads (package entry point)", () => {
+  const head = (n: number): Hex => pad(toHex(n), { size: 32 });
+  const client = (h: Hex | Error) =>
+    ({
+      readContract: async () => {
+        if (h instanceof Error) throw h;
+        return h;
+      },
+    }) as unknown as PublicClient;
+  const reg = "0x00000000000000000000000000000000000000aa" as const;
+
+  it("is consistent when every registry reports the same head at the pinned version", async () => {
+    const r = await checkRegistryHeads({ [A]: { client: client(head(7)), address: reg }, [B]: { client: client(head(7)), address: reg } }, 3n);
+    expect(r.consistent).toBe(true);
+    expect(r.heads[A]).toBe(head(7));
+  });
+
+  it("flags a forked or lagging registry", async () => {
+    const forked = await checkRegistryHeads({ [A]: { client: client(head(7)), address: reg }, [B]: { client: client(head(8)), address: reg } }, 3n);
+    expect(forked.consistent).toBe(false);
+    const lagging = await checkRegistryHeads({ [A]: { client: client(head(7)), address: reg }, [B]: { client: client(new Error("no headAt")), address: reg } }, 3n);
+    expect(lagging.consistent).toBe(false);
   });
 });

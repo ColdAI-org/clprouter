@@ -58,11 +58,19 @@ export type {
 } from "./envelope.js";
 export { StaticJsonSource } from "./sources/static.js";
 export type { GraphSource } from "./sources/static.js";
-export { OnChainGraphSource, REGISTRY_ABI, REGISTRY_LABEL, ViemOnChainReader, registryKeys } from "./sources/onchain.js";
+export {
+  OnChainGraphSource,
+  REGISTRY_ABI,
+  REGISTRY_LABEL,
+  ViemOnChainReader,
+  checkRegistryHeads,
+  registryKeys,
+} from "./sources/onchain.js";
 export type {
   ChannelState,
   ConnectorState,
   OnChainReader,
+  RegistryHeadCheck,
   RegistryState,
   ViemLedgerConfig,
   ViemOnChainReaderConfig,
