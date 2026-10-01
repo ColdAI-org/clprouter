@@ -1,0 +1,1774 @@
+{
+  "version": "sample-2026-10-01",
+  "asOf": "2026-10-01",
+  "disabledRouterVersions": [],
+  "ledgers": [
+    {
+      "id": "hedera:mainnet",
+      "name": "Hedera (Hiero)",
+      "routerVersion": 1,
+      "nativeUsd": 0.2,
+      "gasPriceNative": 9.604559612705251e-07,
+      "enqueueGas": 120000,
+      "execGasPerMessage": 150000,
+      "consensus": "hashgraph",
+      "avgTxGas": 100000,
+      "certifications": {
+        "ISO20022": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "source": {
+            "kind": "synthetic",
+            "ref": "launch list (provisional) in clprouter-spec.md; provider certification not yet issued",
+            "date": "2026-10-01"
+          }
+        },
+        "MICA": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "source": {
+            "kind": "mica-whitepaper",
+            "ref": "ESMA interim MiCA register (entries to 2026-09-29), via clprouter-spec.md 'Network compliance status'; provider certification not yet issued",
+            "date": "2026-10-01"
+          },
+          "kgCO2ePerTx": 2.4e-06
+        },
+        "ENERGY": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "kgCO2ePerTx": 2.4e-06,
+          "source": {
+            "kind": "synthetic",
+            "ref": "placeholder until the figure is imported from the MiCA white paper",
+            "date": "2026-10-01"
+          }
+        }
+      },
+      "operatedRouter": {
+        "operator": "Example Hedera Router operator",
+        "jurisdiction": "CH",
+        "identified": true,
+        "caspAuthorised": true,
+        "synthetic": true
+      },
+      "synthetic": [
+        "nativeUsd",
+        "avgTxGas",
+        "enqueueGas",
+        "execGasPerMessage",
+        "kgCO2ePerTx",
+        "operatedRouter"
+      ],
+      "sources": {
+        "gasPriceNative": {
+          "kind": "measured",
+          "ref": "clprouter-spec.md: Ethereum bundle 1,645,052 gas = 1.58 HBAR on Hedera testnet",
+          "date": "2026-09-30"
+        }
+      }
+    },
+    {
+      "id": "eip155:1",
+      "name": "Ethereum",
+      "routerVersion": 1,
+      "nativeUsd": 3000,
+      "gasPriceNative": 1e-08,
+      "enqueueGas": 120000,
+      "execGasPerMessage": 150000,
+      "consensus": "pos",
+      "avgTxGas": 90000,
+      "certifications": {
+        "MICA": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "source": {
+            "kind": "mica-whitepaper",
+            "ref": "ESMA interim MiCA register (entries to 2026-09-29), via clprouter-spec.md 'Network compliance status'; provider certification not yet issued",
+            "date": "2026-10-01"
+          },
+          "kgCO2ePerTx": 0.012
+        },
+        "ENERGY": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "kgCO2ePerTx": 0.012,
+          "source": {
+            "kind": "synthetic",
+            "ref": "placeholder until the figure is imported from the MiCA white paper",
+            "date": "2026-10-01"
+          }
+        }
+      },
+      "synthetic": [
+        "nativeUsd",
+        "gasPriceNative",
+        "avgTxGas",
+        "enqueueGas",
+        "execGasPerMessage",
+        "kgCO2ePerTx"
+      ]
+    },
+    {
+      "id": "eip155:56",
+      "name": "BNB Smart Chain",
+      "routerVersion": 1,
+      "nativeUsd": 600,
+      "gasPriceNative": 1e-09,
+      "enqueueGas": 120000,
+      "execGasPerMessage": 150000,
+      "consensus": "pos",
+      "avgTxGas": 90000,
+      "certifications": {
+        "MICA": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "source": {
+            "kind": "mica-whitepaper",
+            "ref": "ESMA interim MiCA register (entries to 2026-09-29), via clprouter-spec.md 'Network compliance status'; provider certification not yet issued",
+            "date": "2026-10-01"
+          },
+          "kgCO2ePerTx": 0.004
+        },
+        "ENERGY": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "kgCO2ePerTx": 0.004,
+          "source": {
+            "kind": "synthetic",
+            "ref": "placeholder until the figure is imported from the MiCA white paper",
+            "date": "2026-10-01"
+          }
+        }
+      },
+      "synthetic": [
+        "nativeUsd",
+        "gasPriceNative",
+        "avgTxGas",
+        "enqueueGas",
+        "execGasPerMessage",
+        "kgCO2ePerTx"
+      ]
+    },
+    {
+      "id": "eip155:43114",
+      "name": "Avalanche C-Chain",
+      "routerVersion": 1,
+      "nativeUsd": 25,
+      "gasPriceNative": 2.5e-08,
+      "enqueueGas": 120000,
+      "execGasPerMessage": 150000,
+      "consensus": "pos",
+      "avgTxGas": 90000,
+      "certifications": {
+        "MICA": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "source": {
+            "kind": "mica-whitepaper",
+            "ref": "ESMA interim MiCA register (entries to 2026-09-29), via clprouter-spec.md 'Network compliance status'; provider certification not yet issued",
+            "date": "2026-10-01"
+          },
+          "kgCO2ePerTx": 0.0005
+        },
+        "ENERGY": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "kgCO2ePerTx": 0.0005,
+          "source": {
+            "kind": "synthetic",
+            "ref": "placeholder until the figure is imported from the MiCA white paper",
+            "date": "2026-10-01"
+          }
+        }
+      },
+      "synthetic": [
+        "nativeUsd",
+        "gasPriceNative",
+        "avgTxGas",
+        "enqueueGas",
+        "execGasPerMessage",
+        "kgCO2ePerTx"
+      ]
+    },
+    {
+      "id": "eip155:25",
+      "name": "Cronos",
+      "routerVersion": 1,
+      "nativeUsd": 0.1,
+      "gasPriceNative": 5e-06,
+      "enqueueGas": 120000,
+      "execGasPerMessage": 150000,
+      "consensus": "bft",
+      "avgTxGas": 90000,
+      "certifications": {
+        "MICA": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "source": {
+            "kind": "mica-whitepaper",
+            "ref": "ESMA interim MiCA register (entries to 2026-09-29), via clprouter-spec.md 'Network compliance status'; provider certification not yet issued",
+            "date": "2026-10-01"
+          },
+          "kgCO2ePerTx": 0.001
+        }
+      },
+      "synthetic": [
+        "nativeUsd",
+        "gasPriceNative",
+        "avgTxGas",
+        "enqueueGas",
+        "execGasPerMessage",
+        "kgCO2ePerTx"
+      ]
+    },
+    {
+      "id": "eip155:9745",
+      "name": "Plasma",
+      "routerVersion": 1,
+      "nativeUsd": 0.5,
+      "gasPriceNative": 1e-09,
+      "enqueueGas": 120000,
+      "execGasPerMessage": 150000,
+      "consensus": "bft",
+      "avgTxGas": 90000,
+      "synthetic": [
+        "nativeUsd",
+        "gasPriceNative",
+        "avgTxGas",
+        "enqueueGas",
+        "execGasPerMessage"
+      ]
+    },
+    {
+      "id": "canton:global",
+      "name": "Canton",
+      "routerVersion": 1,
+      "nativeUsd": 0.15,
+      "gasPriceNative": 0,
+      "enqueueGas": 1,
+      "execGasPerMessage": 1,
+      "consensus": "bft",
+      "certifications": {
+        "MICA": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "source": {
+            "kind": "mica-whitepaper",
+            "ref": "ESMA interim MiCA register (entries to 2026-09-29), via clprouter-spec.md 'Network compliance status'; provider certification not yet issued",
+            "date": "2026-10-01"
+          },
+          "kgCO2ePerTx": 0.0002
+        }
+      },
+      "synthetic": [
+        "nativeUsd",
+        "gasPriceNative",
+        "kgCO2ePerTx"
+      ]
+    },
+    {
+      "id": "stellar:pubnet",
+      "name": "Stellar",
+      "routerVersion": 1,
+      "nativeUsd": 0.3,
+      "gasPriceNative": 1e-05,
+      "enqueueGas": 1,
+      "execGasPerMessage": 1,
+      "consensus": "scp",
+      "certifications": {
+        "ISO20022": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "source": {
+            "kind": "synthetic",
+            "ref": "launch list (provisional) in clprouter-spec.md; provider certification not yet issued",
+            "date": "2026-10-01"
+          }
+        },
+        "MICA": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "source": {
+            "kind": "mica-whitepaper",
+            "ref": "ESMA interim MiCA register (entries to 2026-09-29), via clprouter-spec.md 'Network compliance status'; provider certification not yet issued",
+            "date": "2026-10-01"
+          },
+          "kgCO2ePerTx": 2e-05
+        },
+        "ENERGY": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "kgCO2ePerTx": 2e-05,
+          "source": {
+            "kind": "synthetic",
+            "ref": "placeholder until the figure is imported from the MiCA white paper",
+            "date": "2026-10-01"
+          }
+        }
+      },
+      "operatedRouter": {
+        "operator": "Example Stellar Router operator",
+        "jurisdiction": "DE",
+        "identified": true,
+        "caspAuthorised": true,
+        "synthetic": true
+      },
+      "synthetic": [
+        "nativeUsd",
+        "gasPriceNative",
+        "kgCO2ePerTx",
+        "operatedRouter"
+      ]
+    },
+    {
+      "id": "bip122:000000000019d6689c085ae165831e93",
+      "name": "Bitcoin",
+      "routerVersion": 1,
+      "nativeUsd": 100000,
+      "gasPriceNative": 2e-07,
+      "enqueueGas": 1,
+      "execGasPerMessage": 1,
+      "consensus": "pow",
+      "certifications": {
+        "MICA": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "source": {
+            "kind": "mica-whitepaper",
+            "ref": "ESMA interim MiCA register (entries to 2026-09-29), via clprouter-spec.md 'Network compliance status'; provider certification not yet issued",
+            "date": "2026-10-01"
+          },
+          "kgCO2ePerTx": 400
+        },
+        "ENERGY": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "kgCO2ePerTx": 400,
+          "source": {
+            "kind": "synthetic",
+            "ref": "placeholder until the figure is imported from the MiCA white paper",
+            "date": "2026-10-01"
+          }
+        }
+      },
+      "synthetic": [
+        "nativeUsd",
+        "gasPriceNative",
+        "kgCO2ePerTx"
+      ]
+    },
+    {
+      "id": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+      "name": "Solana",
+      "routerVersion": 1,
+      "nativeUsd": 150,
+      "gasPriceNative": 5e-06,
+      "enqueueGas": 1,
+      "execGasPerMessage": 1,
+      "consensus": "pos",
+      "certifications": {
+        "MICA": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "source": {
+            "kind": "mica-whitepaper",
+            "ref": "ESMA interim MiCA register (entries to 2026-09-29), via clprouter-spec.md 'Network compliance status'; provider certification not yet issued",
+            "date": "2026-10-01"
+          },
+          "kgCO2ePerTx": 0.0003
+        }
+      },
+      "synthetic": [
+        "nativeUsd",
+        "gasPriceNative",
+        "kgCO2ePerTx"
+      ]
+    },
+    {
+      "id": "xrpl:0",
+      "name": "XRP Ledger",
+      "routerVersion": 1,
+      "nativeUsd": 0.6,
+      "gasPriceNative": 1e-05,
+      "enqueueGas": 1,
+      "execGasPerMessage": 1,
+      "consensus": "bft",
+      "certifications": {
+        "ISO20022": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "source": {
+            "kind": "synthetic",
+            "ref": "launch list (provisional) in clprouter-spec.md; provider certification not yet issued",
+            "date": "2026-10-01"
+          }
+        },
+        "MICA": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "source": {
+            "kind": "mica-whitepaper",
+            "ref": "ESMA interim MiCA register (entries to 2026-09-29), via clprouter-spec.md 'Network compliance status'; provider certification not yet issued",
+            "date": "2026-10-01"
+          },
+          "kgCO2ePerTx": 5e-05
+        },
+        "ENERGY": {
+          "status": "provisional",
+          "expiresAt": "2027-10-01T00:00:00Z",
+          "kgCO2ePerTx": 5e-05,
+          "source": {
+            "kind": "synthetic",
+            "ref": "placeholder until the figure is imported from the MiCA white paper",
+            "date": "2026-10-01"
+          }
+        }
+      },
+      "operatedRouter": {
+        "operator": "Example XRPL Router operator",
+        "jurisdiction": "IE",
+        "identified": true,
+        "caspAuthorised": true,
+        "synthetic": true
+      },
+      "synthetic": [
+        "nativeUsd",
+        "gasPriceNative",
+        "kgCO2ePerTx",
+        "operatedRouter"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "eip155:1",
+      "to": "hedera:mainnet",
+      "channelId": "ch-eip155-1-hedera",
+      "verifierFamily": "ethereum-sync-committee",
+      "trustTier": "committee",
+      "finalized": false,
+      "timing": {
+        "sourceFinalityS": 25,
+        "bundleCadenceS": 60,
+        "proofGenS": 5,
+        "verifyS": 6,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 1645052,
+        "calldataBytes": 19140,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "measured",
+          "ref": "clpr-smart-contracts-eth src/verifiers/evm/ethereum/README.md (Sepolia, executed on Hedera testnet)",
+          "date": "2026-09-30"
+        },
+        "costNative": 1.58
+      },
+      "status": "active",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain"
+      ],
+      "notes": "Verifier checks the attested beacon header, not the finalized one."
+    },
+    {
+      "from": "eip155:56",
+      "to": "hedera:mainnet",
+      "channelId": "ch-eip155-56-hedera",
+      "verifierFamily": "bsc-parlia-fast-finality",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 3,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 6,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 1953408,
+        "calldataBytes": 23684,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "measured",
+          "ref": "clpr-smart-contracts-bsc src/verifiers/evm/bsc/README.md (mainnet, eth_estimateGas)",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "active",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain"
+      ]
+    },
+    {
+      "from": "eip155:43114",
+      "to": "hedera:mainnet",
+      "channelId": "ch-eip155-43114-hedera",
+      "verifierFamily": "avalanche-warp",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 2,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 6,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 1740000,
+        "calldataBytes": 23757,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "measured",
+          "ref": "clpr-smart-contracts-avalanche src/verifiers/evm/avalanche/README.md (Fuji live, eth_estimateGas)",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "active",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain"
+      ],
+      "notes": "Validator set and weights are trusted at bootstrap (P-Chain has no state proof)."
+    },
+    {
+      "from": "eip155:25",
+      "to": "hedera:mainnet",
+      "channelId": "ch-eip155-25-hedera",
+      "verifierFamily": "cometbft-light-client",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 6,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 6,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 7840000,
+        "calldataBytes": 40000,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "measured",
+          "ref": "clpr-smart-contracts-cometbft src/verifiers/evm/cometbft/README.md (Cronos live verifyBundle)",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "active",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain",
+        "bundle.calldataBytes"
+      ]
+    },
+    {
+      "from": "eip155:9745",
+      "to": "hedera:mainnet",
+      "channelId": "ch-eip155-9745-hedera",
+      "verifierFamily": "plasmabft-committee",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 2,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 6,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 3320812,
+        "calldataBytes": 9316,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "measured",
+          "ref": "clpr-smart-contracts-arcplasma src/verifiers/evm/plasma/README.md",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "active",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain"
+      ],
+      "notes": "A committee change halts the channel."
+    },
+    {
+      "from": "canton:global",
+      "to": "hedera:mainnet",
+      "channelId": "ch-canton-global-hedera",
+      "verifierFamily": "canton-attested-operators",
+      "trustTier": "attested",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 5,
+        "bundleCadenceS": 30,
+        "proofGenS": 1,
+        "verifyS": 6,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 66260,
+        "calldataBytes": 4544,
+        "messagesPerBundle": 3,
+        "source": {
+          "kind": "measured",
+          "ref": "clpr-smart-contracts-canton src/verifiers/canton/README.md (E2E 2-of-3, 3 messages, eth_estimateGas)",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "active",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0001,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain",
+        "bundle.calldataBytes"
+      ],
+      "notes": "t-of-n CLPR operators; nothing about Canton is proven yet."
+    },
+    {
+      "from": "stellar:pubnet",
+      "to": "hedera:mainnet",
+      "channelId": "ch-stellar-pubnet-hedera",
+      "verifierFamily": "stellar-scp",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 6,
+        "bundleCadenceS": 30,
+        "proofGenS": 3,
+        "verifyS": 6,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 2210000,
+        "calldataBytes": 32973,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "measured",
+          "ref": "clpr-smart-contracts-stellar src/verifiers/evm/stellar/README.md (testnet, harness)",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "active",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain"
+      ],
+      "notes": "Pubnet needs two transactions (13.38M + 1.92M gas); testnet figure used."
+    },
+    {
+      "from": "bip122:000000000019d6689c085ae165831e93",
+      "to": "hedera:mainnet",
+      "channelId": "ch-bip122-00000000-hedera",
+      "verifierFamily": "bitcoin-spv",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 3600,
+        "bundleCadenceS": 600,
+        "proofGenS": 1,
+        "verifyS": 6,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 192050,
+        "calldataBytes": 3972,
+        "messagesPerBundle": 3,
+        "source": {
+          "kind": "measured",
+          "ref": "clpr-smart-contracts-sweep51b-bitcoin src/verifiers/bitcoin/README.md (6 headers + 3 segwit messages, regtest)",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "active",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0001,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain"
+      ],
+      "notes": "Finality is k = 6 confirmations."
+    },
+    {
+      "from": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+      "to": "hedera:mainnet",
+      "channelId": "ch-solana-5eykt4Us-hedera",
+      "verifierFamily": "solana-alpenglow",
+      "trustTier": "committee",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 2,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 6,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 429023,
+        "calldataBytes": 7812,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "measured",
+          "ref": "clpr-smart-contracts-solana src/verifiers/solana/README.md (Alpenglow, live devnet certificate)",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "active",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain"
+      ]
+    },
+    {
+      "from": "xrpl:0",
+      "to": "hedera:mainnet",
+      "channelId": "ch-xrpl-0-hedera",
+      "verifierFamily": "xrpl-validators",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 4,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 6,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 1500000,
+        "calldataBytes": 20000,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "paused",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain"
+      ],
+      "notes": "XRPL verifier work is paused."
+    },
+    {
+      "from": "hedera:mainnet",
+      "to": "eip155:1",
+      "channelId": "ch-eip155-1-hedera",
+      "verifierFamily": "hiero-tss",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 4,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 12,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 450000,
+        "calldataBytes": 3000,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "projected",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain",
+        "bundle"
+      ],
+      "notes": "Hiero -> chain is blocked until a Hiero state-proof source exists; projected figures."
+    },
+    {
+      "from": "hedera:mainnet",
+      "to": "eip155:56",
+      "channelId": "ch-eip155-56-hedera",
+      "verifierFamily": "hiero-tss",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 4,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 12,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 450000,
+        "calldataBytes": 3000,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "projected",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain",
+        "bundle"
+      ],
+      "notes": "Hiero -> chain is blocked until a Hiero state-proof source exists; projected figures."
+    },
+    {
+      "from": "hedera:mainnet",
+      "to": "eip155:43114",
+      "channelId": "ch-eip155-43114-hedera",
+      "verifierFamily": "hiero-tss",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 4,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 12,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 450000,
+        "calldataBytes": 3000,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "projected",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain",
+        "bundle"
+      ],
+      "notes": "Hiero -> chain is blocked until a Hiero state-proof source exists; projected figures."
+    },
+    {
+      "from": "hedera:mainnet",
+      "to": "eip155:25",
+      "channelId": "ch-eip155-25-hedera",
+      "verifierFamily": "hiero-tss",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 4,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 12,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 450000,
+        "calldataBytes": 3000,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "projected",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain",
+        "bundle"
+      ],
+      "notes": "Hiero -> chain is blocked until a Hiero state-proof source exists; projected figures."
+    },
+    {
+      "from": "hedera:mainnet",
+      "to": "eip155:9745",
+      "channelId": "ch-eip155-9745-hedera",
+      "verifierFamily": "hiero-tss",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 4,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 12,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 450000,
+        "calldataBytes": 3000,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "projected",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain",
+        "bundle"
+      ],
+      "notes": "Hiero -> chain is blocked until a Hiero state-proof source exists; projected figures."
+    },
+    {
+      "from": "hedera:mainnet",
+      "to": "canton:global",
+      "channelId": "ch-canton-global-hedera",
+      "verifierFamily": "hiero-tss",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 4,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 12,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 450000,
+        "calldataBytes": 3000,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "projected",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain",
+        "bundle"
+      ],
+      "notes": "Hiero -> chain is blocked until a Hiero state-proof source exists; projected figures."
+    },
+    {
+      "from": "hedera:mainnet",
+      "to": "stellar:pubnet",
+      "channelId": "ch-stellar-pubnet-hedera",
+      "verifierFamily": "hiero-tss",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 4,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 12,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 450000,
+        "calldataBytes": 3000,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "projected",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain",
+        "bundle"
+      ],
+      "notes": "Hiero -> chain is blocked until a Hiero state-proof source exists; projected figures."
+    },
+    {
+      "from": "hedera:mainnet",
+      "to": "bip122:000000000019d6689c085ae165831e93",
+      "channelId": "ch-bip122-00000000-hedera",
+      "verifierFamily": "hiero-tss",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 4,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 12,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 450000,
+        "calldataBytes": 3000,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "projected",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain",
+        "bundle"
+      ],
+      "notes": "Hiero -> chain is blocked until a Hiero state-proof source exists; projected figures."
+    },
+    {
+      "from": "hedera:mainnet",
+      "to": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+      "channelId": "ch-solana-5eykt4Us-hedera",
+      "verifierFamily": "hiero-tss",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 4,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 12,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 450000,
+        "calldataBytes": 3000,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "projected",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain",
+        "bundle"
+      ],
+      "notes": "Hiero -> chain is blocked until a Hiero state-proof source exists; projected figures."
+    },
+    {
+      "from": "hedera:mainnet",
+      "to": "xrpl:0",
+      "channelId": "ch-xrpl-0-hedera",
+      "verifierFamily": "hiero-tss",
+      "trustTier": "light-client",
+      "finalized": true,
+      "timing": {
+        "sourceFinalityS": 4,
+        "bundleCadenceS": 30,
+        "proofGenS": 2,
+        "verifyS": 12,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "bundle": {
+        "gas": 450000,
+        "calldataBytes": 3000,
+        "messagesPerBundle": 1,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "status": "projected",
+      "connectors": [
+        {
+          "id": "conn-a",
+          "marginUsd": 0.02,
+          "balanceUsd": 500,
+          "successRate": 0.999
+        },
+        {
+          "id": "conn-b",
+          "marginUsd": 0.035,
+          "balanceUsd": 5000,
+          "successRate": 0.9995
+        }
+      ],
+      "history": {
+        "attempts": 200,
+        "successes": 199,
+        "pauses30d": 0
+      },
+      "maxPayloadBytes": 65536,
+      "offChain": {
+        "kWhPerBundle": 0.0002,
+        "gridKgPerKWh": 0.475,
+        "source": {
+          "kind": "synthetic",
+          "ref": "placeholder, not measured",
+          "date": "2026-10-01"
+        }
+      },
+      "synthetic": [
+        "timing",
+        "connectors",
+        "history",
+        "offChain",
+        "bundle"
+      ],
+      "notes": "Hiero -> chain is blocked until a Hiero state-proof source exists; projected figures."
+    }
+  ]
+}
