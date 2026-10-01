@@ -39,8 +39,11 @@ Compiler: solc 0.8.30, `via_ir = true`, `evm_version = "osaka"`, optimizer 2,000
 
 ## 2. Invariants
 
-Each invariant lists the tests that exercise it today. "Unit" means example-based tests; a stateful invariant test
-does not exist yet for any of them (section 5).
+Each invariant lists the example-based tests in `test/unit/` that exercise it. The auditors' stateful invariant
+suites in `test/security/` (`RouterInvariants.t.sol`: escrow conservation, Router solvency, settle at most once,
+receipts only from the stored commitment; `RegistryVaultInvariants.t.sol`: version counts decisions, quorum, vault
+balance conservation, release rules, committee shape) cover RT-2, RT-3, RT-4, RT-15, PR-1, PR-3, PR-7, QV-3 and QV-4
+as fuzzed properties.
 
 ### 2.1 ClprRouter
 
@@ -49,7 +52,7 @@ does not exist yet for any of them (section 5).
 | RT-1 | A route id is accepted at most once per Router, as origin or as hop (`DuplicateRouteId`, `RouteReplayed`) | `test_replay_reverts`, `test_send_revertsOnDuplicateRouteId` |
 | RT-2 | An origin route settles at most once; status moves `PENDING` → one terminal status and never back | `test_reclaim_onlyAfterDeadlinePlusGrace_thenLateReceiptIgnored`, forged-receipt tests |
 | RT-3 | Value conservation at settlement: fees paid + payee + refund + vault deposit = escrow + fee budget (pushes that fail go to `owed`) | `test_delivers_A_B_C_andSettlesEscrowAndFees`, `test_receiptFromIntermediateHop_rebuildsPrefixAndPaysItsFee` |
-| RT-4 | The Router's balance covers escrow and budget of every `PENDING` route plus all `owed` | none directly (invariant candidate) |
+| RT-4 | The Router's balance covers escrow and budget of every `PENDING` route plus all `owed` | `invariant_routerSolvent` (`test/security/`) |
 | RT-5 | Fees paid ≤ fee budget, and only to hops before the reporting hop | `test_feeBudgetExhausted_failureReceipt`, `test_send_revertsWhenFeesExceedBudget`, `test_send_revertsWhenFeesExceedMaxFee` |
 | RT-6 | Loose routes carry no value (`msg.value == 0`, no fee budget in the envelope) | `test_send_looseRoutesCarryNoValue`, `test_looseEnvelopeWithFeeBudget_reverts`, `test_send_valueRoutesMustBeStrict` |
 | RT-7 | No ledger twice; at most `min(max_hops, 8)` edges | `test_send_revertsOnLoop`, `test_loopInEnvelope_reverts`, `test_send_revertsOnTooManyHops`, `test_tooManyHopsInEnvelope_reverts` |
@@ -87,7 +90,7 @@ does not exist yet for any of them (section 5).
 | QV-1 | Every deposit has a case id and value | `test_deposit_requiresCaseAndFunds` |
 | QV-2 | A deposit is released at most once, in full | `test_release_onlyOnce` |
 | QV-3 | The beneficiary is the deposit's sender, its recipient, or the case's unchallenged recovery address after `releasableAt`; never zero, the vault, the registry or a provider account | `test_release_toOriginalSender`, `test_release_toOriginalRecipient_falsePositive`, `test_recovery_*` (5 tests), `test_release_neverToProviderEvenIfOriginalParty` |
-| QV-4 | The vault balance equals the sum of unreleased deposits (absent forced ether) | none directly (invariant candidate) |
+| QV-4 | The vault balance equals the sum of unreleased deposits (absent forced ether) | `invariant_vaultBalanceConservation` (`test/security/`) |
 
 ### 2.4 Codec
 
@@ -171,15 +174,16 @@ mv foundry.toml.bak foundry.toml
 
 `.github/workflows/ci.yml` runs on every push and pull request: `forge fmt --check`, `forge build --sizes` (fails
 over EIP-170), `forge test`, a fuzz profile (all tests, `FOUNDRY_FUZZ_RUNS=10000`), an invariant profile
-(`invariant_*` tests, 512 runs × depth 64, skipped while none exist), coverage, slither (non-blocking, SARIF to code
+(`invariant_*` tests, 512 runs × depth 64), coverage, slither (non-blocking, SARIF to code
 scanning), SDK and services typecheck, lint and tests, and the services integration test. The three-anvil e2e runs
 nightly (`nightly-e2e.yml`). Dependencies are audited weekly (`dependency-audit.yml`), TypeScript is scanned by CodeQL
 (`codeql.yml`).
 
 ## 5. Gaps an audit should know about
 
-1. **No stateful invariant tests.** RT-3, RT-4, QV-4, PR-1 and PR-4 are good candidates for Foundry invariant
-   handlers (random sends, deliveries, receipts, reclaims, decisions, time warps).
+1. **Invariant coverage is new.** The stateful suites in `test/security/` arrived with the review; PR-4 (version
+   pinning) and RT-12 (blacklist reaches every exit) have no invariant handler yet. The coverage figures in section 4
+   predate those suites.
 2. **No differential fuzzing** of the SDK codec against `RouteCodec` beyond the committed vectors.
 3. **The reentrancy-lock dependency** (R1) is tested against the reference Service and a mock that allows sends during
    delivery; no other CLPR Service implementation exists to test against.
