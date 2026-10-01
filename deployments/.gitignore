@@ -1,0 +1,4 @@
+# Throwaway TESTNET keys (committee, Channel, Connector). Never commit.
+.local/
+*.secret.json
+.route-id

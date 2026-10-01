@@ -1,0 +1,31 @@
+{
+  "_note": "Constructor inputs shared by every network. Kept in one file so the CREATE2 init code (and therefore every address that does not depend on a per-network value) is identical on all EVM ledgers. DeployRouter.s.sol refuses a network config that tries to override these.",
+  "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+  "clprService": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+  "salt": "clprouter/testnet/v1",
+  "deploymentIdSeed": "clprouter/testnet/v1",
+  "registry": {
+    "k": 3,
+    "contact": "testnet-only: no incident contact (TEST committee)",
+    "certNotice": 604800,
+    "removalNotice": 259200,
+    "reenableNotice": 604800,
+    "disableLapse": 604800,
+    "blacklistLapse": 2592000,
+    "committeeNotice": 604800
+  },
+  "vault": {
+    "recoveryNotice": 259200,
+    "challengeWindow": 604800
+  },
+  "router": {
+    "reclaimGrace": 3600,
+    "appGas": 300000,
+    "minSendGas": 1500000
+  },
+  "routerDeployerOwner": "0xf1e92b0a9B0cEF7Af197C98a2Bf3E9A20b532Dfd",
+  "ledgers": [
+    "eip155:11155111",
+    "eip155:296"
+  ]
+}

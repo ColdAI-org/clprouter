@@ -1,0 +1,64 @@
+{
+  "_note": "Sepolia -> Hedera testnet CLPR Channel and the one-hop CLPRouter route run over it. Used by script/deploy/route.sh and SetupRoute.s.sol.",
+  "sepolia": {
+    "ledgerId": "11155111",
+    "service": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+    "rpcEnv": "SEPOLIA_RPC_URL",
+    "routerLedgerId": "eip155:11155111"
+  },
+  "hedera": {
+    "ledgerId": "296",
+    "service": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+    "rpcEnv": "HEDERA_TESTNET_RPC_URL",
+    "routerLedgerId": "eip155:296"
+  },
+  "channelSalt": "clprouter/testnet/sepolia-hedera/channel/v1",
+  "fixtureSalt": "clprouter/testnet/fixtures/v1",
+  "ethVerifier": {
+    "salt": "clprouter/testnet/eth-verifier/v1",
+    "reuse": "0x92646d66a66e93411d6f679f4b4befebdb3371bd"
+  },
+  "throttles": {
+    "maxMessagesPerBundle": 100,
+    "maxMessagePayloadBytes": 16384,
+    "maxGasPerMessage": 3000000,
+    "maxQueueDepth": 1000,
+    "maxSyncBytes": 1048576,
+    "maxLocalEndpoints": 0,
+    "maxPeerEndpoints": 0
+  },
+  "econ": {
+    "sepolia": {
+      "messageExecutionCost": 10000000000000,
+      "endpointMarginPercent": 10,
+      "minLockedStake": 500000000000000,
+      "minEndpointBond": 0,
+      "basePenalty": 100000000000000,
+      "penaltyMultiplier": 2,
+      "slashBanThreshold": 5,
+      "connectorQueueQuotaPct": 50,
+      "connectorInboundGasStipend": 500000,
+      "maxChannels": 0,
+      "maxConnectors": 0
+    },
+    "hedera": {
+      "messageExecutionCost": 0,
+      "endpointMarginPercent": 10,
+      "minLockedStake": 0,
+      "minEndpointBond": 0,
+      "basePenalty": 0,
+      "penaltyMultiplier": 2,
+      "slashBanThreshold": 5,
+      "connectorQueueQuotaPct": 50,
+      "connectorInboundGasStipend": 500000,
+      "maxChannels": 0,
+      "maxConnectors": 0
+    }
+  },
+  "route": {
+    "count": 1,
+    "payload": "CLPRouter testnet route 1: Sepolia -> Hedera testnet, verified on Hedera by EthMainnetVerifier",
+    "deadlineSeconds": 7200,
+    "feeBudgetWei": 0
+  }
+}

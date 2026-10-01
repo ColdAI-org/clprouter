@@ -1,0 +1,25 @@
+{
+  "name": "@clprouter/testnet-deploy",
+  "private": true,
+  "type": "module",
+  "description": "CLPRouter testnet route relay: EthMainnetVerifier bootstrap config and Sepolia bundle proofs for Hedera testnet",
+  "scripts": {
+    "eth-config": "tsx relay/eth-config.ts",
+    "eth-bundle": "tsx relay/eth-bundle.ts",
+    "record": "node record.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@ethereumjs/rlp": "10.1.2",
+    "@hashgraph/sdk": "^2.81.0",
+    "@noble/curves": "1.9.1",
+    "viem": "2.51.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "tsx": "^4.19.0"
+  },
+  "license": "MIT"
+}

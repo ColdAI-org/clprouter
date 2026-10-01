@@ -1,0 +1,13 @@
+{
+  "network": "hedera-testnet",
+  "chainId": 296,
+  "rpcEnv": "HEDERA_TESTNET_RPC_URL",
+  "explorer": "https://hashscan.io/testnet",
+  "ledgerId": "eip155:296",
+  "tx": {
+    "legacy": true,
+    "gasPriceFloorFromRpc": true,
+    "gasEstimateMultiplier": 130
+  },
+  "clprChainId": "296"
+}

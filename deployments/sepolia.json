@@ -1,0 +1,477 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "ledgerId": "11155111",
+  "explorer": "https://sepolia.etherscan.io",
+  "clprService": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+  "contracts": {
+    "ProviderRegistry": {
+      "address": "0x6D8a65a9E85C423ACe3E0C4074508a9AcD63958c",
+      "runtimeCodeHash": "0x805c0f114a736adfce9ae7a265410d19b5418a7f5e921d4594cfb5aabeeea8de",
+      "runtimeCodeSize": 13342,
+      "constructorArgs": {
+        "deploymentId": "0xdf6da137810aa7d046c74d408bd42bd5e9e5407469a5e36530ce5d250fa1a0a7",
+        "initialMembers": [
+          "0x97DBc3E34E3D2e23fBB6ef98b7B016a822C6ff95",
+          "0xB66b5add819d55Df822D0f2e00518243D7433e5a",
+          "0xD3C49a934356f917B2e104f10b31504b81c0484e",
+          "0xEeaD9B2354Df781974c9a25DD3237A1Dae4CDAc1",
+          "0xf7E5c8C254957a6a2252D6769774EF963F1DDb4c"
+        ],
+        "k": 3,
+        "contact": "testnet-only: no incident contact (TEST committee)",
+        "notices": {
+          "certNotice": 604800,
+          "removalNotice": 259200,
+          "reenableNotice": 604800,
+          "disableLapse": 604800,
+          "blacklistLapse": 2592000,
+          "committeeNotice": 604800
+        }
+      }
+    },
+    "QuarantineVault": {
+      "address": "0x6f7756640C2cf1db14d2789F33966D0eB0960b4a",
+      "runtimeCodeHash": "0x3221cbd7011d85ae125019c242d3fb4e900fcec753d2795b773daf0bfb0cd207",
+      "runtimeCodeSize": 6779,
+      "constructorArgs": {
+        "registry": "0x6D8a65a9E85C423ACe3E0C4074508a9AcD63958c",
+        "recoveryNotice": 259200,
+        "challengeWindow": 604800
+      }
+    },
+    "ClprRouterDeployer": {
+      "address": "0xAb349c0D13f1d46ca5e16C3c1bf7211abBf9b29E",
+      "runtimeCodeHash": "0x41640fa4649ea78236c5bc0a9412a23a49bf44de302138ff7298858ea020e6c0",
+      "runtimeCodeSize": 2436,
+      "constructorArgs": {
+        "owner": "0xf1e92b0a9B0cEF7Af197C98a2Bf3E9A20b532Dfd",
+        "deploymentSalt": "keccak256(abi.encodePacked(keccak256(salt), \"ClprRouter\", deploymentId))",
+        "initCodeHash": "0x4999057976d9a9a644ccd2820d40383bb3e46fdfec7a5d71197a4010ee699459"
+      }
+    },
+    "ClprRouter": {
+      "address": "0x3Ec8a28f6AD20FE1070819f56B29be120700A653",
+      "runtimeCodeHash": "0x203c7ed43aa126d90a0d091f12b087437e29688084f3432636bb3b62cb2ff929",
+      "runtimeCodeSize": 22417,
+      "deployParams": {
+        "note": "no constructor arguments; read from ClprRouterDeployer.parameters() during deploy()",
+        "service": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+        "registry": "0x6D8a65a9E85C423ACe3E0C4074508a9AcD63958c",
+        "vault": "0x6f7756640C2cf1db14d2789F33966D0eB0960b4a",
+        "ledgerId": "eip155:11155111",
+        "reclaimGrace": 3600,
+        "appGas": 300000,
+        "minSendGas": 1500000
+      }
+    }
+  },
+  "libraries": {
+    "RouteCodec": {
+      "address": "0xF51eD266068C956D7fCDB2a21B89a1ECd68d7b62",
+      "source": "src/libraries/RouteCodec.sol",
+      "deployment": "CREATE2 (forge, salt 0)"
+    },
+    "RouteLogic": {
+      "address": "0x2Ca8e2aFeAAea07b9FD5Df60d44D0606169a8d50",
+      "source": "src/libraries/RouteLogic.sol",
+      "deployment": "CREATE2 (forge, salt 0)"
+    },
+    "RouteOrigin": {
+      "address": "0x295C624f75D1DA951e3aDF6d6580160810f17e17",
+      "source": "src/libraries/RouteOrigin.sol",
+      "deployment": "CREATE2 (forge, salt 0)"
+    },
+    "RouteReceipts": {
+      "address": "0xd7A3F6FB49d171f755043EcCb01bcd4e69B02a38",
+      "source": "src/libraries/RouteReceipts.sol",
+      "deployment": "CREATE2 (forge, salt 0)"
+    },
+    "RouteSettlement": {
+      "address": "0xc6ab1ED6A833Df9fBfe213f6e52aecA6734632A4",
+      "source": "src/libraries/RouteSettlement.sol",
+      "deployment": "CREATE2 (forge, salt 0)"
+    }
+  },
+  "fixtures": {
+    "TestnetConnector": {
+      "address": "0xe8cb0088BBDf16F256F854485B34117412992816"
+    },
+    "TestOnlyStubVerifier": {
+      "address": "0xad0216795c8d30E510c6B7Cc61621A52bA36aE7A"
+    }
+  },
+  "transactions": [
+    {
+      "step": "init-sepolia",
+      "hash": "0xd28ab8705c4555cb341443484fd79d9bd41133f22c986cfafedda6f11f92d637",
+      "block": 11821057,
+      "status": "success",
+      "contract": "ClprService",
+      "function": "initialize(bytes,(uint32,uint64,uint64,uint32,uint64,uint32,uint32),bytes,bytes,(uint256,uint256,uint256,uint256,uint256,uint256,uint32,uint32,uint64,uint32,uint32))",
+      "to": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "createdAddress": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "gasUsed": "267304",
+      "gasLimit": "369213",
+      "effectiveGasPriceWei": "1002617798",
+      "feeWei": "268003747876592",
+      "valueWei": "0",
+      "costEth": "0.000268004",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0xd28ab8705c4555cb341443484fd79d9bd41133f22c986cfafedda6f11f92d637"
+    },
+    {
+      "step": "init-sepolia",
+      "hash": "0x17b1436337eff5ac75b1e108f99624838640b8938fec328bb8c05db7dcb67af7",
+      "block": 11821059,
+      "status": "success",
+      "contract": "ClprService",
+      "function": "setClprEnabled(bool)",
+      "to": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "createdAddress": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "gasUsed": "35049",
+      "gasLimit": "51259",
+      "effectiveGasPriceWei": "1087434762",
+      "feeWei": "38113500973338",
+      "valueWei": "0",
+      "costEth": "0.000038114",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x17b1436337eff5ac75b1e108f99624838640b8938fec328bb8c05db7dcb67af7"
+    },
+    {
+      "step": "fixtures-sepolia",
+      "hash": "0xef6fc56ca6fe5c4dc1071be5b418662e5da607e4f256e0c619edc033c186a1c4",
+      "block": 11821101,
+      "status": "success",
+      "contract": "TestnetConnector",
+      "function": "CREATE2 deploy",
+      "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "createdAddress": "0xe8cb0088bbdf16f256f854485b34117412992816",
+      "gasUsed": "400767",
+      "gasLimit": "553558",
+      "effectiveGasPriceWei": "1107568344",
+      "feeWei": "443876842519848",
+      "valueWei": "0",
+      "costEth": "0.000443877",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0xef6fc56ca6fe5c4dc1071be5b418662e5da607e4f256e0c619edc033c186a1c4"
+    },
+    {
+      "step": "fixtures-sepolia",
+      "hash": "0xbbcdb95dac143352481b460b2339ae5eba28bee91300c7ad9a90e320b4f7d80a",
+      "block": 11821103,
+      "status": "success",
+      "contract": "TestOnlyStubVerifier",
+      "function": "CREATE2 deploy",
+      "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "createdAddress": "0xad0216795c8d30e510c6b7cc61621a52ba36ae7a",
+      "gasUsed": "665017",
+      "gasLimit": "972587",
+      "effectiveGasPriceWei": "1064689759",
+      "feeWei": "708036789460903",
+      "valueWei": "0",
+      "costEth": "0.000708037",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0xbbcdb95dac143352481b460b2339ae5eba28bee91300c7ad9a90e320b4f7d80a"
+    },
+    {
+      "step": "channel-sepolia",
+      "hash": "0x200d45d0bcc3282d4cd9e0f5fabb57cecdfef58680cc77e22635c6d112debdaf",
+      "block": 11821304,
+      "status": "success",
+      "contract": "ClprService",
+      "function": "registerChannel(bytes32,bytes32)",
+      "to": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "createdAddress": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "gasUsed": "75502",
+      "gasLimit": "104286",
+      "effectiveGasPriceWei": "1082376409",
+      "feeWei": "81721583632318",
+      "valueWei": "0",
+      "costEth": "0.000081722",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x200d45d0bcc3282d4cd9e0f5fabb57cecdfef58680cc77e22635c6d112debdaf"
+    },
+    {
+      "step": "channel-sepolia",
+      "hash": "0x381a6fc937d6eeae1d57818aeebc404358674d970c6d3abdf453c51d8d0734b6",
+      "block": 11821305,
+      "status": "success",
+      "contract": "ClprService",
+      "function": "completeChannel(bytes32,bytes,bytes,bytes32,address,bytes,bytes)",
+      "to": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "createdAddress": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "gasUsed": "418526",
+      "gasLimit": "578087",
+      "effectiveGasPriceWei": "1088222866",
+      "feeWei": "455449563215516",
+      "valueWei": "0",
+      "costEth": "0.000455450",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x381a6fc937d6eeae1d57818aeebc404358674d970c6d3abdf453c51d8d0734b6"
+    },
+    {
+      "step": "connector-sepolia",
+      "hash": "0xbbb0c1d05224daf219b11f61b1943b0f4a354dcfe84481ddd53b9a823101f4b1",
+      "block": 11821330,
+      "status": "success",
+      "contract": "ClprService",
+      "function": "registerConnector(bytes32)",
+      "to": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "createdAddress": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "gasUsed": "51920",
+      "gasLimit": "71714",
+      "effectiveGasPriceWei": "1091378079",
+      "feeWei": "56664349861680",
+      "valueWei": "0",
+      "costEth": "0.000056664",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0xbbb0c1d05224daf219b11f61b1943b0f4a354dcfe84481ddd53b9a823101f4b1"
+    },
+    {
+      "step": "connector-sepolia",
+      "hash": "0x81af640ad2669d3449cb0bab1f7bfd40c8264f5ca13212660024e11d26974150",
+      "block": 11821331,
+      "status": "success",
+      "contract": "ClprService",
+      "function": "completeConnector(bytes32,bytes,bytes,bytes32,bytes32,address,address)",
+      "to": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "createdAddress": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "gasUsed": "197646",
+      "gasLimit": "272997",
+      "effectiveGasPriceWei": "1082211344",
+      "feeWei": "213894743296224",
+      "valueWei": "500000000000000",
+      "costEth": "0.000713895",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x81af640ad2669d3449cb0bab1f7bfd40c8264f5ca13212660024e11d26974150"
+    },
+    {
+      "step": "deploy-router",
+      "hash": "0xef7916bcf8eadd2303b859ba4ed71ae63a00d67e860b6499a53ba6b7337f16ce",
+      "block": 11821335,
+      "status": "success",
+      "contract": "RouteCodec",
+      "function": "CREATE2 deploy",
+      "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "createdAddress": "0xf51ed266068c956d7fcdb2a21b89a1ecd68d7b62",
+      "gasUsed": "2283175",
+      "gasLimit": "3153634",
+      "effectiveGasPriceWei": "1010478855",
+      "feeWei": "2307100059764625",
+      "valueWei": "0",
+      "costEth": "0.002307100",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0xef7916bcf8eadd2303b859ba4ed71ae63a00d67e860b6499a53ba6b7337f16ce"
+    },
+    {
+      "step": "deploy-router",
+      "hash": "0x89514d4f5fcf84105bc243d86fd446a257b713d724ccd939a0d1aceee48478a2",
+      "block": 11821337,
+      "status": "success",
+      "contract": "RouteLogic",
+      "function": "CREATE2 deploy",
+      "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "createdAddress": "0x2ca8e2afeaaea07b9fd5df60d44d0606169a8d50",
+      "gasUsed": "3381070",
+      "gasLimit": "4670101",
+      "effectiveGasPriceWei": "1066879053",
+      "feeWei": "3607192759726710",
+      "valueWei": "0",
+      "costEth": "0.003607193",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x89514d4f5fcf84105bc243d86fd446a257b713d724ccd939a0d1aceee48478a2"
+    },
+    {
+      "step": "deploy-router",
+      "hash": "0x5bc0544d60481125bd3bdca3534c22bc3669ff65ade4e1a16d383ab5cc81e1fd",
+      "block": 11821338,
+      "status": "success",
+      "contract": "RouteSettlement",
+      "function": "CREATE2 deploy",
+      "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "createdAddress": "0xc6ab1ed6a833df9fbfe213f6e52aeca6734632a4",
+      "gasUsed": "1706137",
+      "gasLimit": "2495225",
+      "effectiveGasPriceWei": "1051950927",
+      "feeWei": "1794772398738999",
+      "valueWei": "0",
+      "costEth": "0.001794772",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x5bc0544d60481125bd3bdca3534c22bc3669ff65ade4e1a16d383ab5cc81e1fd"
+    },
+    {
+      "step": "deploy-router",
+      "hash": "0x1f7ad3bfae453a7632ad553ed8021ab0f72c492823bb8c196f0bac27ebcb7ef8",
+      "block": 11821340,
+      "status": "success",
+      "contract": "RouteOrigin",
+      "function": "CREATE2 deploy",
+      "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "createdAddress": "0x295c624f75d1da951e3adf6d6580160810f17e17",
+      "gasUsed": "1444227",
+      "gasLimit": "2112181",
+      "effectiveGasPriceWei": "1101539743",
+      "feeWei": "1590873438413661",
+      "valueWei": "0",
+      "costEth": "0.001590873",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x1f7ad3bfae453a7632ad553ed8021ab0f72c492823bb8c196f0bac27ebcb7ef8"
+    },
+    {
+      "step": "deploy-router",
+      "hash": "0x995630de5e56402fd4790d81572db44ac59b54f94ec6abcf1e3a41557d7b1da8",
+      "block": 11821341,
+      "status": "success",
+      "contract": "RouteReceipts",
+      "function": "CREATE2 deploy",
+      "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "createdAddress": "0xd7a3f6fb49d171f755043eccb01bcd4e69b02a38",
+      "gasUsed": "1225078",
+      "gasLimit": "1692138",
+      "effectiveGasPriceWei": "1116981700",
+      "feeWei": "1368389707072600",
+      "valueWei": "0",
+      "costEth": "0.001368390",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x995630de5e56402fd4790d81572db44ac59b54f94ec6abcf1e3a41557d7b1da8"
+    },
+    {
+      "step": "deploy-router",
+      "hash": "0x153db661daa6891dcb1d1030eb3a5ab3605192dab847c6592041f1b50c2cdeee",
+      "block": 11821342,
+      "status": "success",
+      "contract": "ProviderRegistry",
+      "function": "CREATE2 deploy",
+      "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "createdAddress": "0x6d8a65a9e85c423ace3e0c4074508a9acd63958c",
+      "gasUsed": "3456786",
+      "gasLimit": "5055549",
+      "effectiveGasPriceWei": "1050880463",
+      "feeWei": "3632668872171918",
+      "valueWei": "0",
+      "costEth": "0.003632669",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x153db661daa6891dcb1d1030eb3a5ab3605192dab847c6592041f1b50c2cdeee"
+    },
+    {
+      "step": "deploy-router",
+      "hash": "0x7820f24984697fa40f4f21e820b30a90268506305edd1757cfffad2bb91b1970",
+      "block": 11821343,
+      "status": "success",
+      "contract": "QuarantineVault",
+      "function": "CREATE2 deploy",
+      "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "createdAddress": "0x6f7756640c2cf1db14d2789f33966d0eb0960b4a",
+      "gasUsed": "1524548",
+      "gasLimit": "2105781",
+      "effectiveGasPriceWei": "1024420081",
+      "feeWei": "1561777585648388",
+      "valueWei": "0",
+      "costEth": "0.001561778",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x7820f24984697fa40f4f21e820b30a90268506305edd1757cfffad2bb91b1970"
+    },
+    {
+      "step": "deploy-router",
+      "hash": "0x884e3eb48574f75f567b2afb0cd884ee8ce5324ec8e19f20ff1d83cff00a772c",
+      "block": 11821345,
+      "status": "success",
+      "contract": "ClprRouterDeployer",
+      "function": "CREATE2 deploy",
+      "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "createdAddress": "0xab349c0d13f1d46ca5e16c3c1bf7211abbf9b29e",
+      "gasUsed": "583066",
+      "gasLimit": "852733",
+      "effectiveGasPriceWei": "1073998942",
+      "feeWei": "626212267116172",
+      "valueWei": "0",
+      "costEth": "0.000626212",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x884e3eb48574f75f567b2afb0cd884ee8ce5324ec8e19f20ff1d83cff00a772c"
+    },
+    {
+      "step": "deploy-router",
+      "hash": "0x9bb34fe0a1a782c6c1eb4035cc8e388c340aa3fea615016746a5c7e51324adaa",
+      "block": 11821389,
+      "status": "success",
+      "contract": "ClprRouterDeployer",
+      "function": "deploy(bytes,(address,address,address,string,uint64,uint64,uint64))",
+      "to": "0xab349c0d13f1d46ca5e16c3c1bf7211abbf9b29e",
+      "createdAddress": "0xab349c0d13f1d46ca5e16c3c1bf7211abbf9b29e",
+      "gasUsed": "5021426",
+      "gasLimit": "7343835",
+      "effectiveGasPriceWei": "1040914498",
+      "feeWei": "5226875124034148",
+      "valueWei": "0",
+      "costEth": "0.005226875",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x9bb34fe0a1a782c6c1eb4035cc8e388c340aa3fea615016746a5c7e51324adaa"
+    },
+    {
+      "step": "route-fixtures-sepolia",
+      "hash": "0x97987f6ee65d4ab02fa35cdd1944919b275077c1ba5407a41e4d8c33ef957724",
+      "block": 11821530,
+      "status": "success",
+      "contract": "TestnetConnector",
+      "function": "setAllowedSender(address)",
+      "to": "0xe8cb0088bbdf16f256f854485b34117412992816",
+      "createdAddress": "0xe8cb0088bbdf16f256f854485b34117412992816",
+      "gasUsed": "44865",
+      "gasLimit": "65614",
+      "effectiveGasPriceWei": "1037711972",
+      "feeWei": "46556947623780",
+      "valueWei": "0",
+      "costEth": "0.000046557",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x97987f6ee65d4ab02fa35cdd1944919b275077c1ba5407a41e4d8c33ef957724"
+    }
+  ],
+  "totals": {
+    "transactions": 18,
+    "gasUsed": "22782109",
+    "costEth": "0.024528182"
+  },
+  "updatedAt": "2026-10-01T11:29:14.788Z",
+  "channel": {
+    "channelId": "0x8a15fe9f8ea6a20841a9983e2e6176b4bcf1e01530348632d9488be92a4145e0",
+    "peer": "296 (Hedera testnet)",
+    "verifier": "TestOnlyStubVerifier 0xad0216795c8d30E510c6B7Cc61621A52bA36aE7A (TEST ONLY, INSECURE config source, accepts no bundles)",
+    "connectorId": "0xed6c8cc0435a52b5c29628f1d0751f619dfa44d212a7829d10e3b6f98df151d3",
+    "state": "ACTIVE"
+  },
+  "status": "pre-audit (re-audit in progress)",
+  "deploymentId": "0xdf6da137810aa7d046c74d408bd42bd5e9e5407469a5e36530ce5d250fa1a0a7",
+  "postDeployChecks": {
+    "passed": true,
+    "at": "2026-10-01T11:01:29.293Z",
+    "against": "live chain (verification run)"
+  },
+  "canonicalRouters": {
+    "eip155:11155111": "0x3Ec8a28f6AD20FE1070819f56B29be120700A653",
+    "eip155:296": "0xF398F961088af7aF74bff8fc409a535023913E5F"
+  },
+  "routerInitCodeHash": "0x4999057976d9a9a644ccd2820d40383bb3e46fdfec7a5d71197a4010ee699459",
+  "salt": "clprouter/testnet/v1",
+  "deploymentIdSeed": "clprouter/testnet/v1",
+  "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+  "compiler": {
+    "solc": "0.8.30",
+    "viaIR": true,
+    "evmVersion": "osaka",
+    "optimizerRuns": 200,
+    "bytecodeHash": "none",
+    "cborMetadata": false,
+    "note": "Registry, vault and Router come from one forge script compile unit that includes ClprRouter, so all three use the 'small' profile (optimizer runs 200, see foundry.toml compilation_restrictions)."
+  },
+  "sourceVerification": {
+    "ProviderRegistry": "verified (sourcify, profile small)",
+    "QuarantineVault": "verified (sourcify, profile small)",
+    "ClprRouterDeployer": "verified (sourcify, profile small)",
+    "ClprRouter": "verified (sourcify, profile small)",
+    "RouteCodec": "verified (sourcify, profile small)",
+    "RouteLogic": "verified (sourcify, profile small)",
+    "RouteOrigin": "verified (sourcify, profile small)",
+    "RouteReceipts": "verified (sourcify, profile small)",
+    "RouteSettlement": "verified (sourcify, profile small)",
+    "TestnetConnector": "verified (sourcify, profile small)",
+    "TestOnlyStubVerifier": "verified (sourcify, profile small)"
+  },
+  "clprServiceBringUp": {
+    "initialized": true,
+    "enabled": true,
+    "note": "initialize + setClprEnabled sent by the Service owner (CLPR testnet key) in step init-sepolia"
+  },
+  "route": {
+    "status": "NOT RUN",
+    "reason": "the Hedera side of the Sepolia <-> Hedera Channel could not be opened (completeChannel with the 67,365-byte EthMainnetVerifier bootstrap config ends INSUFFICIENT_GAS on Hedera testnet at any gas limit), so Router.send on Sepolia was not sent: its message could never be delivered."
+  },
+  "spend": {
+    "balanceBefore": "0.032948720871596586 ETH",
+    "balanceAfter": "0.008420540590449166 ETH",
+    "spentEth": "0.024528180281146720",
+    "budgetEth": "0.5 (balance-limited: keep >= 0.003)"
+  }
+}

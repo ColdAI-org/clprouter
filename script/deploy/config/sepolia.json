@@ -1,0 +1,13 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "rpcEnv": "SEPOLIA_RPC_URL",
+  "explorer": "https://sepolia.etherscan.io",
+  "ledgerId": "eip155:11155111",
+  "tx": {
+    "legacy": false,
+    "gasPriceFloorFromRpc": false,
+    "gasEstimateMultiplier": 130
+  },
+  "clprChainId": "11155111"
+}

@@ -1,0 +1,13 @@
+{
+  "_note": "TEST provider committee for the public testnet deployment. Throwaway keys generated for testnet only; private keys are kept outside git (deployments/.local/, git-excluded). Not a production committee.",
+  "threshold_k": 3,
+  "members": [
+    "0x97DBc3E34E3D2e23fBB6ef98b7B016a822C6ff95",
+    "0xB66b5add819d55Df822D0f2e00518243D7433e5a",
+    "0xD3C49a934356f917B2e104f10b31504b81c0484e",
+    "0xEeaD9B2354Df781974c9a25DD3237A1Dae4CDAc1",
+    "0xf7E5c8C254957a6a2252D6769774EF963F1DDb4c"
+  ],
+  "channel_key_address": "0x1AA909Fda6C76d747d353165fec96c4ffFD3c495",
+  "connector_key_address": "0x0D7231b4c847E298Ecf84DA01f0Eb2786F18aF31"
+}
