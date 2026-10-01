@@ -119,10 +119,20 @@ flowchart LR
   a fee budget (`msg.value - escrow`) and an optional escrow with a payee. Before any value moves it checks the
   structure (at least one edge, at most `max_hops` edges, no ledger twice), the deadline, the fee totals against
   the budget and `max_fee`, route safety on every edge, ledger and Router, and every active filter on every
-  ledger. It stamps the sender's CAIP-10 id, pins the registry version for each filter, and sends the envelope.
+  ledger. It stamps the sender's CAIP-10 id, pins the registry version for each filter, derives the route id
+  (`keccak256("clprouter.v1.route", origin ledger, origin Router, sender, per-sender nonce)`, never chosen by the
+  sender; an ISO 20022 UETR travels separately in `iso_uetr`), and sends the envelope. It also screens the
+  destination application against the blacklist. Loose routes and routes with an explicit `receipt_path` carry no
+  value.
+- **Canonical Routers.** Every Router is deployed by `ClprRouterDeployer` at the CREATE2 address
+  `CREATE2(deployer, keccak256(abi.encode(salt, keccak256(ledgerId))), initCodeHash)` and knows the canonical
+  address of every EVM ledger. Every hop, receipt-path hop and loose re-routing tail must name canonical Routers, so
+  every envelope on the wire was built by Router code. Non-EVM ledgers fail closed until the registry can certify
+  their Router.
 - **Intermediate hops** run inside CLPR application delivery. The Router checks that the envelope is addressed to
   it, that it came over the named Channel from the Router named for the previous hop, and that the Channel's peer
-  is the ledger the envelope claims; it rejects replays (every route id it has seen) and route-version mismatches.
+  is the ledger the envelope claims; it rejects replays (keyed by the envelope's origin `hops[0]` and its id) and
+  route-version mismatches.
   It then re-checks route safety, the deadline, the blacklist, the filters at the pinned version and the fee
   budget, takes its hop's fee from the budget and calls `sendMessage` on the next Channel. Its CLPR Response to
   the previous hop says only accepted or rejected with a reason.
@@ -130,13 +140,19 @@ flowchart LR
 - **Receipts** are new routed messages back to the origin: `DELIVERED`, `FAILED`, `EXPIRED` or `QUARANTINED`, with
   the reporting hop, a reason, and for quarantine the case id and the provider's contact. A hop that stops a route
   sends the receipt itself. Receipts travel the reverse of the route (or an explicit `receipt_path` for delivery
-  receipts of data routes).
+  receipts of data routes). Receipts are never dropped: one that cannot be sent now, or that CLPR rejects, waits
+  in the outbox for `flush`; one that arrives over a disabled edge, ledger or Router is held for `forward` until
+  the disable lapses. Only a definite `sendMessage` rejection (unknown Channel or Connector, payload too large)
+  fails a hop; transient failures defer it inside delivery and revert a permissionless `forward`.
 - **The origin** authenticates a receipt against what it stored at send time: it must arrive from the first-hop
   Router over the first Channel, carry the route's hops unchanged (strict routes), and have travelled the exact
   reverse path from the reporting hop (strict routes without an explicit receipt path). It then pays the fees of
   the hops that forwarded, releases the escrow to the payee on `DELIVERED`, refunds it on `FAILED` or `EXPIRED`,
-  or moves everything into the vault on `QUARANTINED`. If no receipt comes, anyone can `reclaim` after the deadline
-  plus a grace period, which refunds the sender.
+  or moves everything into the vault on `QUARANTINED`. Payments use a bounded call that copies no return data; a
+  failed payment is credited for `withdraw`. If no receipt comes, `reclaim` is two-phase: after the deadline plus
+  `RECLAIM_GRACE` per edge of the way back anyone may request it, and `RECLAIM_GRACE` later finalise the refund. A
+  receipt arriving in between settles the route normally; one arriving after the refund is recorded
+  (`routes(id).late`, `LateReceipt`) but moves nothing.
 - **Strict and loose routing.** Strict routes cannot change. Under loose routing, a hop whose forward was rejected
   at the CLPR level (or whose `sendMessage` failed) can be re-routed over a new tail by anyone calling
   `forward(envelope, newTail)`; the tail is checked like a new route. Routes that carry value must be strict.
