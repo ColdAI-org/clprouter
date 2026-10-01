@@ -14,7 +14,7 @@ Checked 1 October 2026. Nothing here is signed, and nothing has been submitted t
 | `build.py` | Rebuilds every output from `config/` and `sources/`. Python 3.10+ (stdlib only), `pdftotext` (poppler), Foundry `cast`. |
 | `config/networks.json` | Networks (Hedera first, then the spec's compliance table), CAIP-2 ids, register search patterns, and every accept/reject rule with its reason. |
 | `config/iso20022.json` | Curated ISO 20022 evidence for the provisional launch list, with sources. |
-| `config/policy.json` | Proposed decision parameters (epoch, nonce start, `validUntil`, `expiry`, energy thresholds). |
+| `config/policy.json` | Proposed decision parameters (epoch, nonce start, `validUntil`, `expiry`, energy thresholds) and the digest inputs: deployment id seed and genesis registry configuration. |
 | `sources/esma/*.csv` | Snapshot of ESMA's interim MiCA register, with `MANIFEST.json` (URL, sha256, size). |
 | `sources/iso20022/rmg-members.json` | ISO 20022 Registration Management Group member list, parsed from a Wayback Machine snapshot. |
 | `mica.json` | Per network: the native token's register entries (filer, authority, date, URL, DTI check against the register and against the paper), rejected false positives; EMT/ART issuers and their white papers. |
@@ -32,6 +32,7 @@ White papers are not committed (third-party documents). `build.py` downloads the
 python3 build.py                 # uses sources/esma as committed, fetches papers into .cache/
 python3 build.py --refresh-esma  # re-download the five CSVs from https://www.esma.europa.eu/sites/default/files/2024-12/
 python3 build.py --offline       # only .cache/ and sources/
+python3 build.py --deployment-id 0x<bytes32>   # digests for another deployment id
 ```
 
 The build stops with `REVIEW NEEDED` if a refreshed register contains a candidate row that no accept or
@@ -113,10 +114,31 @@ are market-cited only.
   - `payload` = `abi.encode(string ledgerId, uint8 label, uint64 expiry, uint64 emissionsUg, string emissionsSource)`;
   - `evidenceHash`, `nonce`, `effectiveAt`, `validUntil`, `epoch`.
 - **Evidence hash.** `evidenceHash` = sha256 of the evidence file's bytes without the trailing newline.
-- **Digest.** `digest` = `decisionDigest(d)`; `eip191_hash_to_sign` is what committee members sign.
-- **Checked on a local chain.** The digests were checked against `ProviderRegistry.decisionDigest` on a
-  local anvil deployment. All 43 drafts were then relayed there in nonce order with throwaway test keys
-  (notice periods set to 0). `certificationAt` returned `true` and the drafted `emissionsUg` for each.
+- **Digest.** `digest` = `ProviderRegistry.decisionDigest(d)`, an EIP-712 hash:
+  `keccak256(0x1901 ‖ domainSeparator ‖ structHash)`, where
+  - `domainSeparator` = `keccak256(abi.encode(keccak256("EIP712Domain(string name,string version,bytes32 salt)"),
+    keccak256("CLPRouter.ProviderRegistry"), keccak256("2"), deploymentId))`. There is no chain id or contract
+    address, so one signed decision relays to the registry on every ledger of the deployment.
+  - `structHash` = `keccak256(abi.encode(DECISION_TYPEHASH, action, keccak256(payload), evidenceHash, nonce,
+    prevHead, effectiveAt, validUntil, epoch))`.
+  - `prevHead` is the registry head the decision extends. For nonce 1 it is the genesis head,
+    `keccak256(abi.encode(domainSeparator, members, k, contact, notices))`. For nonce n > 1 it is the digest
+    of draft n − 1, because applying a decision makes its digest the new head.
+
+  `eip191_hash_to_sign` is what committee members sign. Each draft lists its inputs under `digest_inputs`.
+- **Deployment id and genesis used.** `deploymentId` = `keccak256("clprouter/mainnet/v1")` =
+  `0xbe26581cbee21aaeccc2429e883b2416d5793d7954dc3653d902c5f74f11175d`, from `registry.deployment_id_seed` in
+  `config/policy.json` (`--deployment-id` overrides it). The genesis is a placeholder registry:
+  - the five public test keys used by the repository's tests, k = 3;
+  - contact `mailto:incident@provider.example`;
+  - notices 7 d / 72 h / 7 d / 7 d / 30 d / 7 d.
+
+  No production committee exists yet, so these digests are for review only. Before signing, recompute them
+  against the live registry.
+- **Checked on a local chain.** A `ProviderRegistry` was deployed on anvil with these inputs. Its
+  `decisionDigest` matched all 43 drafts. All 43 were then relayed in nonce order, signed by the placeholder
+  test keys. After `CERT_NOTICE`, `certificationAt` returned `true` and the drafted `emissionsUg` for each,
+  and the registry head was the digest of draft 043.
 - **When a network gets a draft.** MiCA: criteria 1 and 2 are met. Energy: a certifiable S.14 figure
   exists.
 - **No ISO 20022 drafts.** No network meets all four ISO registry criteria (no conformance-tested Router
@@ -124,7 +146,9 @@ are market-cited only.
 
 Before signing:
 
-- renumber nonces against the live registry `version` (this changes the digest);
+- renumber nonces against the live registry `version` and recompute each digest with `decisionDigest` on the
+  live registry (or rebuild with its deployment id and genesis inputs while it is still at version 0).
+  Renumbering, or any other head, changes every digest from that nonce on;
 - confirm the CAIP-2 ids flagged "confirm before signing" (Polkadot, Cosmos Hub, Sui, Aptos, Canton);
 - keep `effectiveFrom < expiry ≤ effectiveFrom + 366 days`.
 

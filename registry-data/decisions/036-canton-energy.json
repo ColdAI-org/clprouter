@@ -22,11 +22,18 @@
   "payload_abi": "(string ledgerId, uint8 label, uint64 expiry, uint64 emissionsUg, string emissionsSource)",
   "evidence_record": "evidence/canton.energy.json",
   "evidence_hash_rule": "sha256 over the exact bytes of the evidence file minus its trailing newline (canonical JSON: sorted keys, no spaces, UTF-8)",
-  "digest": "0x55127f5a843980e6dec1ce6938fd06b0a0231e4741b620ea4a21076782d21348",
-  "eip191_hash_to_sign": "0xab34c360ffc93f1884740733ecdf96cc7445e864a6ad65d32a591088b73e15a0",
+  "digest_inputs": {
+    "deploymentId": "0xbe26581cbee21aaeccc2429e883b2416d5793d7954dc3653d902c5f74f11175d",
+    "domainSeparator": "0x018b80f74cfafe2b0fdb24885cdf8c8ed86f8010d772fb60c2e8ff43b0b56367",
+    "prevHead": "0x61e1e6b264ca1dfdc8c5554655b304db6ae8247bbe28b899946cd8c46d11f622",
+    "genesisHead": "0xc9e9e2e846d17f982efeac0dd34b8b03785fe49bc7f6cb360291d0ce9fca3ad0"
+  },
+  "digest": "0xc8e0cc03e548a1bfb709e004abf2bd4a6f768895dda77849d08bcdee9cdf8c43",
+  "eip191_hash_to_sign": "0x1127aa4c6f28aecfd374f645c8fd6d65b8d4a5fae03ca695a75b33e5f69ad084",
   "signatures": [],
   "notes": [
     "Provisional. The registry only accepts nonce == version + 1, so nonces must be renumbered against the live registry version at signing time; renumbering changes the digest.",
+    "Inputs of the EIP-712 digest. The digest binds the deployment id (domain salt) and the registry head the decision extends (prevHead): nonce 1 extends the genesis head, which commits to the initial committee, threshold, contact and notice periods given here; nonce n > 1 extends the digest of draft n - 1. These are placeholders for drafting: before signing, recompute every digest against the live registry (decisionDigest on the target registry, or build.py with that registry's deployment id and genesis inputs while it is still at version 0).",
     "Must satisfy effectiveFrom < expiry <= effectiveFrom + 366 days. Relaying before 2026-12-31 with a 7-day notice keeps this valid.",
     "0 = as soon as the registry's CERT_NOTICE has passed after relay (effectiveFrom = max(effectiveAt, block.timestamp + CERT_NOTICE)).",
     "caip2: provisional (no CAIP-2 namespace yet; sdk/data/chains.json pins canton:sandbox for e2e) - confirm before signing",

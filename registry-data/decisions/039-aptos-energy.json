@@ -22,11 +22,18 @@
   "payload_abi": "(string ledgerId, uint8 label, uint64 expiry, uint64 emissionsUg, string emissionsSource)",
   "evidence_record": "evidence/aptos.energy.json",
   "evidence_hash_rule": "sha256 over the exact bytes of the evidence file minus its trailing newline (canonical JSON: sorted keys, no spaces, UTF-8)",
-  "digest": "0xd6992ac9e39276a0c04dd82bff5ebb24f9414da5bfea5fc99d846a8c4f6c514e",
-  "eip191_hash_to_sign": "0xdc8d02fbbffeccc07a44ecb7fb4d40f36b3455e0d75dfecf5376469f81f5d152",
+  "digest_inputs": {
+    "deploymentId": "0xbe26581cbee21aaeccc2429e883b2416d5793d7954dc3653d902c5f74f11175d",
+    "domainSeparator": "0x018b80f74cfafe2b0fdb24885cdf8c8ed86f8010d772fb60c2e8ff43b0b56367",
+    "prevHead": "0xbd89b8228e7bfeded330102a7f4f0a8da9aa511e6d80fd521fd29ce2111bd1f2",
+    "genesisHead": "0xc9e9e2e846d17f982efeac0dd34b8b03785fe49bc7f6cb360291d0ce9fca3ad0"
+  },
+  "digest": "0xe920c0fbb2a49474677aa274a4ef78407a0dcae1a5feacda2eae5f746efb8b80",
+  "eip191_hash_to_sign": "0x83c2759d36e14858e979e8cb5c26151ae83d90e5cc3b9f36f85ef7e568ff5061",
   "signatures": [],
   "notes": [
     "Provisional. The registry only accepts nonce == version + 1, so nonces must be renumbered against the live registry version at signing time; renumbering changes the digest.",
+    "Inputs of the EIP-712 digest. The digest binds the deployment id (domain salt) and the registry head the decision extends (prevHead): nonce 1 extends the genesis head, which commits to the initial committee, threshold, contact and notice periods given here; nonce n > 1 extends the digest of draft n - 1. These are placeholders for drafting: before signing, recompute every digest against the live registry (decisionDigest on the target registry, or build.py with that registry's deployment id and genesis inputs while it is still at version 0).",
     "Must satisfy effectiveFrom < expiry <= effectiveFrom + 366 days. Relaying before 2026-12-31 with a 7-day notice keeps this valid.",
     "0 = as soon as the registry's CERT_NOTICE has passed after relay (effectiveFrom = max(effectiveAt, block.timestamp + CERT_NOTICE)).",
     "caip2: CAIP-2 aptos namespace; not in sdk/data/chains.json - confirm before signing",

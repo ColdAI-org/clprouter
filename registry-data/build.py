@@ -5,6 +5,7 @@ Usage:
     python3 build.py                 # rebuild everything from sources/ (fetches white papers into .cache/)
     python3 build.py --refresh-esma  # re-download ESMA's interim MiCA register CSVs first
     python3 build.py --offline       # use only .cache/ and sources/; fail if something is missing
+    python3 build.py --deployment-id 0x...  # decision digests for another deployment id (bytes32)
 
 Requires: Python >= 3.10 (stdlib only), `pdftotext` (poppler) and Foundry's `cast` (ABI encoding, keccak256).
 
@@ -48,6 +49,7 @@ ESMA_FILES = {
 }
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"
 OFFLINE = False
+DEPLOYMENT_ID: str | None = None  # --deployment-id; else keccak256(policy registry.deployment_id_seed)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -980,7 +982,21 @@ def stage_decisions(networks, mica_rows, energy, policy, manifest) -> list[dict]
         p.unlink()
     for p in (ROOT / "evidence").glob("*.json"):
         p.unlink()
-    domain = cast("keccak", policy["registry_domain"])
+    reg = policy["registry"]
+    deployment_id = DEPLOYMENT_ID or cast("keccak", reg["deployment_id_seed"])
+    # EIP-712 domain of ProviderRegistry: (name, version, salt = deployment id); no chain id or address, so one
+    # decision relays to every ledger of the deployment.
+    domain_typehash = cast("keccak", "EIP712Domain(string name,string version,bytes32 salt)")
+    domain_separator = cast("keccak", cast("abi-encode", "f(bytes32,bytes32,bytes32,bytes32)", domain_typehash,
+                                           cast("keccak", reg["name"]), cast("keccak", reg["version"]), deployment_id))
+    decision_typehash = cast("keccak", "Decision(uint8 action,bytes payload,bytes32 evidenceHash,uint64 nonce,"
+                                       "bytes32 prevHead,uint64 effectiveAt,uint64 validUntil,uint64 epoch)")
+    g = reg["genesis"]
+    # headAt[0]: keccak256(abi.encode(DOMAIN_SEPARATOR, members, k, contact, notices)).
+    head = cast("keccak", cast("abi-encode", "f(bytes32,address[],uint8,string,uint64[6])", domain_separator,
+                               "[" + ",".join(g["members"]) + "]", str(g["k"]), g["contact"],
+                               "[" + ",".join(str(x) for x in g["notices"]) + "]"))
+    genesis_head = head
     en_by = {e["network"]: e for e in energy["networks"]}
     nonce = policy["first_nonce"]
     made = []
@@ -1031,10 +1047,13 @@ def stage_decisions(networks, mica_rows, energy, policy, manifest) -> list[dict]
             lab = policy["labels"][label]
             payload = cast("abi-encode", "f(string,uint8,uint64,uint64,string)", n["caip2"], str(lab), str(policy["expiry"]), str(ug), src)
             payload_hash = cast("keccak", payload)
-            enc = cast("abi-encode", "f(bytes32,uint8,bytes32,bytes32,uint64,uint64,uint64,uint64)", domain,
-                       str(policy["action_certify"]), payload_hash, ev_hash, str(nonce), str(policy["effective_at"]),
-                       str(policy["valid_until"]), str(policy["epoch"]))
-            digest = cast("keccak", enc)
+            prev_head = head
+            struct_hash = cast("keccak", cast(
+                "abi-encode", "f(bytes32,uint8,bytes32,bytes32,uint64,bytes32,uint64,uint64,uint64)", decision_typehash,
+                str(policy["action_certify"]), payload_hash, ev_hash, str(nonce), prev_head, str(policy["effective_at"]),
+                str(policy["valid_until"]), str(policy["epoch"])))
+            digest = cast("keccak", "0x1901" + domain_separator[2:] + struct_hash[2:])
+            head = digest  # the registry's head after this decision: the next draft extends it
             to_sign = cast("keccak", "0x" + b"\x19Ethereum Signed Message:\n32".hex() + digest[2:])
             dec = {
                 "status": "DRAFT - unsigned; for provider-committee review",
@@ -1046,10 +1065,12 @@ def stage_decisions(networks, mica_rows, energy, policy, manifest) -> list[dict]
                 "payload_abi": "(string ledgerId, uint8 label, uint64 expiry, uint64 emissionsUg, string emissionsSource)",
                 "evidence_record": f"evidence/{ev_name}",
                 "evidence_hash_rule": "sha256 over the exact bytes of the evidence file minus its trailing newline (canonical JSON: sorted keys, no spaces, UTF-8)",
+                "digest_inputs": {"deploymentId": deployment_id, "domainSeparator": domain_separator,
+                                  "prevHead": prev_head, "genesisHead": genesis_head},
                 "digest": digest,
                 "eip191_hash_to_sign": to_sign,
                 "signatures": [],
-                "notes": [policy["nonce_note"], policy["expiry_note"], policy["effective_at_note"]]
+                "notes": [policy["nonce_note"], reg["_note"], policy["expiry_note"], policy["effective_at_note"]]
                          + ([f"caip2: {n['caip2_source']}"] if "confirm" in n["caip2_source"] else [])
                          + ([sel["precision_warning"]] if label == "ENERGY" and sel.get("precision_warning") else [])
                          + (sel["document_warnings"] if label == "ENERGY" else [])
@@ -1064,12 +1085,18 @@ def stage_decisions(networks, mica_rows, energy, policy, manifest) -> list[dict]
 
 
 def main() -> None:
-    global OFFLINE
+    global OFFLINE, DEPLOYMENT_ID
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--refresh-esma", action="store_true")
     ap.add_argument("--offline", action="store_true")
+    ap.add_argument("--deployment-id", help="bytes32 deployment id for the decision digests "
+                    "(default: keccak256 of config/policy.json registry.deployment_id_seed)")
     a = ap.parse_args()
     OFFLINE = a.offline
+    if a.deployment_id:
+        if not re.fullmatch(r"0x[0-9a-fA-F]{64}", a.deployment_id):
+            sys.exit("--deployment-id must be a 0x-prefixed bytes32")
+        DEPLOYMENT_ID = a.deployment_id.lower()
     cfg = load_json(ROOT / "config" / "networks.json")
     policy = load_json(ROOT / "config" / "policy.json")
     iso_cfg = load_json(ROOT / "config" / "iso20022.json")

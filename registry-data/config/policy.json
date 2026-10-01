@@ -1,6 +1,25 @@
 {
   "_comment": "Parameters for the draft committee decisions. Every value here is a proposal for the committee; nothing is signed. Times are unix seconds (UTC).",
-  "registry_domain": "CLPRouter.ProviderRegistry.v1",
+  "registry": {
+    "_note": "Inputs of the EIP-712 digest. The digest binds the deployment id (domain salt) and the registry head the decision extends (prevHead): nonce 1 extends the genesis head, which commits to the initial committee, threshold, contact and notice periods given here; nonce n > 1 extends the digest of draft n - 1. These are placeholders for drafting: before signing, recompute every digest against the live registry (decisionDigest on the target registry, or build.py with that registry's deployment id and genesis inputs while it is still at version 0).",
+    "name": "CLPRouter.ProviderRegistry",
+    "version": "2",
+    "deployment_id_seed": "clprouter/mainnet/v1",
+    "deployment_id_note": "deployment_id = keccak256(utf8(deployment_id_seed)); override with build.py --deployment-id 0x... (bytes32).",
+    "genesis": {
+      "_note": "Placeholder committee: the five public test keys used by the repository's tests (private keys 0xA11CE, 0xB0B, 0xCA401, 0xD00D, 0xE7E), ascending by address. Not a real committee.",
+      "members": [
+        "0x0376AAc07Ad725E01357B1725B5ceC61aE10473c",
+        "0x0F89F1868aF3b14a5eca86ed9a5404A742a11454",
+        "0x103dcde81d22bB1F2eC434Ca68B9b9452A7ba430",
+        "0x813e03853Bd563bD6136c1a2362f2Cb50AB9005b",
+        "0xe05fcC23807536bEe418f142D19fa0d21BB0cfF7"
+      ],
+      "k": 3,
+      "contact": "mailto:incident@provider.example",
+      "notices": [604800, 259200, 604800, 604800, 2592000, 604800]
+    }
+  },
   "action_certify": 1,
   "labels": {"ISO20022": 1, "MICA": 2, "ENERGY": 3},
   "epoch": 0,

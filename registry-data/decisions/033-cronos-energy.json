@@ -22,11 +22,18 @@
   "payload_abi": "(string ledgerId, uint8 label, uint64 expiry, uint64 emissionsUg, string emissionsSource)",
   "evidence_record": "evidence/cronos.energy.json",
   "evidence_hash_rule": "sha256 over the exact bytes of the evidence file minus its trailing newline (canonical JSON: sorted keys, no spaces, UTF-8)",
-  "digest": "0x973b3fc0efe810890b5288270a91bcf1b5d80094518dbad7d42f691326956559",
-  "eip191_hash_to_sign": "0x81a689c867547d05cdc301fd4f09e29396d7da8ecfa0ca43a46f43d7a1caaf22",
+  "digest_inputs": {
+    "deploymentId": "0xbe26581cbee21aaeccc2429e883b2416d5793d7954dc3653d902c5f74f11175d",
+    "domainSeparator": "0x018b80f74cfafe2b0fdb24885cdf8c8ed86f8010d772fb60c2e8ff43b0b56367",
+    "prevHead": "0x3c18b5f2b4b40486775c9bb8780df056e718ce4a4753e30f5ccf750bb74d818f",
+    "genesisHead": "0xc9e9e2e846d17f982efeac0dd34b8b03785fe49bc7f6cb360291d0ce9fca3ad0"
+  },
+  "digest": "0x0c52519ed7436eaffcdc94a1226308c0ced8c92021ad32e9412d1cb2086459d0",
+  "eip191_hash_to_sign": "0xba1e432b08f2bb7232148a24afbd3698c6a1b4e027eec5cde23e1780b01c0822",
   "signatures": [],
   "notes": [
     "Provisional. The registry only accepts nonce == version + 1, so nonces must be renumbered against the live registry version at signing time; renumbering changes the digest.",
+    "Inputs of the EIP-712 digest. The digest binds the deployment id (domain salt) and the registry head the decision extends (prevHead): nonce 1 extends the genesis head, which commits to the initial committee, threshold, contact and notice periods given here; nonce n > 1 extends the digest of draft n - 1. These are placeholders for drafting: before signing, recompute every digest against the live registry (decisionDigest on the target registry, or build.py with that registry's deployment id and genesis inputs while it is still at version 0).",
     "Must satisfy effectiveFrom < expiry <= effectiveFrom + 366 days. Relaying before 2026-12-31 with a 7-day notice keeps this valid.",
     "0 = as soon as the registry's CERT_NOTICE has passed after relay (effectiveFrom = max(effectiveAt, block.timestamp + CERT_NOTICE)).",
     "Intensity basis - marginal: S.16 says the intensity is the marginal emission of one additional transaction; the spec's Greenest mode assumes an allocation (total / transactions)"
