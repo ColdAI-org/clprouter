@@ -116,7 +116,9 @@ library RouteCodec {
             _bytesField(6, _b32(r.caseId)),
             _bytesField(7, bytes(r.contact)),
             _bytesField(8, _b32(r.responseHash)),
-            _encodeHops(9, r.routeHops)
+            _encodeHops(9, r.routePrefix),
+            _bytesField(10, _b32(r.routeEdge)),
+            _bytesField(11, _b32(r.routeRest))
         );
     }
 
@@ -133,7 +135,7 @@ library RouteCodec {
                 p = _skip(b, p, b.length, wt);
             }
         }
-        r.routeHops = new RouteTypes.Hop[](n);
+        r.routePrefix = new RouteTypes.Hop[](n);
         n = 0;
         uint256 q = 0;
         while (q < b.length) {
@@ -155,16 +157,13 @@ library RouteCodec {
                 else if (field == 6) r.caseId = _bytes32(b, s, end);
                 else if (field == 7) r.contact = string(_copy(b, s, end));
                 else if (field == 8) r.responseHash = _bytes32(b, s, end);
-                else if (field == 9) r.routeHops[n++] = _decodeHop(b, s, end);
+                else if (field == 9) r.routePrefix[n++] = _decodeHop(b, s, end);
+                else if (field == 10) r.routeEdge = _bytes32(b, s, end);
+                else if (field == 11) r.routeRest = _bytes32(b, s, end);
             } else {
                 q = _skip(b, q, b.length, wt);
             }
         }
-    }
-
-    /// @notice keccak256 over the protobuf encoding of a hop list (the commitment the origin stores).
-    function hashHops(RouteTypes.Hop[] memory hops) public pure returns (bytes32) {
-        return keccak256(_encodeHops(1, hops));
     }
 
     // ═════════════════════════════════════════════════════════════════════

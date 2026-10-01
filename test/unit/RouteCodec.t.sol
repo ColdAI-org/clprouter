@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {RouteTypes} from "@clprouter/libraries/RouteTypes.sol";
 import {RouteCodec} from "@clprouter/libraries/RouteCodec.sol";
 import {Caip} from "@clprouter/libraries/Caip.sol";
+import {RouteLogic} from "@clprouter/libraries/RouteLogic.sol";
 
 contract RouteCodecTest is Test {
     function _sample() internal pure returns (RouteTypes.Envelope memory e) {
@@ -112,16 +113,45 @@ contract RouteCodecTest is Test {
         r.caseId = keccak256("case");
         r.contact = "mailto:x@y";
         r.responseHash = keccak256("resp");
-        r.routeHops = _sample().hops;
+        r.routePrefix = _sample().hops;
+        r.routeEdge = keccak256("edge");
+        r.routeRest = keccak256("rest");
         RouteTypes.Receipt memory d = RouteCodec.decodeReceipt(RouteCodec.encodeReceipt(r));
         assertEq(keccak256(abi.encode(d)), keccak256(abi.encode(r)));
     }
 
-    function test_hashHops_changesWithAnyField() public pure {
+    /// @dev Fields 10 and 11 (route_edge, route_rest) are fixed 32-byte ids; field 9 is absent in the common case
+    ///      and route_rest is absent at the destination.
+    function test_receipt_commitmentFields_knownAnswer() public pure {
+        RouteTypes.Receipt memory r;
+        r.status = RouteTypes.ReceiptStatus.DELIVERED;
+        r.hopIndex = 2;
+        r.routeEdge = bytes32(uint256(1));
+        assertEq(RouteCodec.encodeReceipt(r), bytes.concat(hex"100118025220", bytes32(uint256(1))));
+        r.routeRest = bytes32(uint256(2));
+        RouteTypes.Receipt memory d = RouteCodec.decodeReceipt(RouteCodec.encodeReceipt(r));
+        assertEq(d.routeEdge, bytes32(uint256(1)));
+        assertEq(d.routeRest, bytes32(uint256(2)));
+    }
+
+    function test_hopsCommitment_changesWithAnyField() public pure {
         RouteTypes.Hop[] memory h = _sample().hops;
-        bytes32 base = RouteCodec.hashHops(h);
+        bytes32 base = RouteLogic.hopsCommitment(h, 0);
         h[0].feePayee = hex"bc";
-        assertTrue(RouteCodec.hashHops(h) != base);
+        assertTrue(RouteLogic.hopsCommitment(h, 0) != base);
+        h = _sample().hops;
+        h[1].router = hex"cd";
+        assertTrue(RouteLogic.hopsCommitment(h, 0) != base);
+        h = _sample().hops;
+        h[1].ledgerId = "hedera:testnet";
+        assertTrue(RouteLogic.hopsCommitment(h, 0) != base);
+        h = _sample().hops;
+        h[0].fee = 301;
+        assertTrue(RouteLogic.hopsCommitment(h, 0) != base);
+        h = _sample().hops;
+        h[0].connectorId = bytes32(0);
+        assertTrue(RouteLogic.hopsCommitment(h, 0) != base);
+        assertEq(RouteLogic.hopsCommitment(h, h.length), bytes32(0), "nothing after the destination");
     }
 
     function testFuzz_envelope_roundTrip(

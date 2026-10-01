@@ -122,6 +122,11 @@ library RouteTypes {
         bytes32 caseId;
         string contact;
         bytes32 responseHash;
-        Hop[] routeHops;
+        /// @dev hops[0..hopIndex) of the route; only when the receipt does not travel the reverse route.
+        Hop[] routePrefix;
+        /// @dev RouteLogic.edgeDigest of the reporting hop's own entry (its outgoing edge).
+        bytes32 routeEdge;
+        /// @dev RouteLogic.hopsCommitment of the hops after the reporting one (zero at the destination).
+        bytes32 routeRest;
     }
 }

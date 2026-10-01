@@ -79,7 +79,7 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         address payee;
         uint64 feeBudget;
         uint256 escrow;
-        bytes32 hopsHash;
+        bytes32 hopsHash; // RouteLogic.hopsCommitment(hops, 0); checked for strict routes only
         bytes32 firstHop; // keccak256(channelId of hop 0, router of hop 1)
     }
 
@@ -258,7 +258,7 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         o.payee = req.payee;
         o.feeBudget = uint64(budget);
         o.escrow = req.escrow;
-        o.hopsHash = RouteCodec.hashHops(e.hops);
+        o.hopsHash = RouteLogic.hopsCommitment(e.hops, 0);
         o.firstHop = keccak256(abi.encodePacked(e.hops[0].channelId, e.hops[1].router));
         hopState[routeId] = HopState.DONE;
 
@@ -269,7 +269,7 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         if (listed) {
             emit RouteSent(routeId, msg.sender, e.destination.ledgerId, req.escrow, uint64(budget), o.deadline, 0);
             emit QuarantineNotice(Caip.accountKey(e.recipient), routeId, e.recipient, caseId, REGISTRY.contact());
-            _finish(routeId, RouteStatus.QUARANTINED, RouteTypes.Reason.BLACKLIST, 0, caseId, bytes32(0), e.hops);
+            _finish(routeId, RouteStatus.QUARANTINED, RouteTypes.Reason.BLACKLIST, 0, caseId, bytes32(0), _noHops());
             return routeId;
         }
 
@@ -487,10 +487,14 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         if (r != RouteTypes.Reason.NONE) return r;
         if (_peerLedgerHash(h.channelId) != keccak256(bytes(next.ledgerId))) return RouteTypes.Reason.BAD_ROUTE;
         if (isReceipt) return RouteTypes.Reason.NONE;
-        if (!RouteLogic.filtersPass(REGISTRY, next.ledgerId, e.constraints, e.filterRegistryVersions)) {
-            return RouteTypes.Reason.FILTER;
+        // Unfiltered routes and routes without a floor skip the library calls altogether.
+        if (
+            e.constraints.filters != 0
+                && !RouteLogic.filtersPass(REGISTRY, next.ledgerId, e.constraints, e.filterRegistryVersions)
+        ) return RouteTypes.Reason.FILTER;
+        if (e.constraints.trustFloor != 0 && !RouteLogic.edgeTrusted(REGISTRY, h, next, e.constraints.trustFloor)) {
+            return RouteTypes.Reason.TRUST_FLOOR;
         }
-        if (!RouteLogic.edgeTrusted(REGISTRY, h, next, e.constraints.trustFloor)) return RouteTypes.Reason.TRUST_FLOOR;
         if (e.constraints.remainingFeeBudget < h.fee) return RouteTypes.Reason.FEE_BUDGET;
         return RouteTypes.Reason.NONE;
     }
@@ -580,8 +584,11 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
     function _settle(RouteTypes.Envelope memory re) private {
         RouteTypes.Receipt memory r = RouteCodec.decodeReceipt(re.payload);
         OriginRoute storage o = routes[r.routeId];
-        bool ok = o.status == RouteStatus.PENDING
-            && RouteLogic.receiptValid(re, r, o.firstHop, o.strict ? o.hopsHash : bytes32(0), o.verifyPath);
+        bool ok;
+        RouteTypes.Hop[] memory prefix;
+        if (o.status == RouteStatus.PENDING) {
+            (ok, prefix) = RouteLogic.checkReceipt(re, r, o.firstHop, o.strict ? o.hopsHash : bytes32(0), o.verifyPath);
+        }
         if (!ok) {
             emit ReceiptIgnored(r.routeId);
             return;
@@ -591,10 +598,11 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
             : r.status == RouteTypes.ReceiptStatus.EXPIRED
                 ? RouteStatus.EXPIRED
                 : r.status == RouteTypes.ReceiptStatus.QUARANTINED ? RouteStatus.QUARANTINED : RouteStatus.FAILED;
-        _finish(r.routeId, s, r.reason, r.hopIndex, r.caseId, r.responseHash, r.routeHops);
+        _finish(r.routeId, s, r.reason, r.hopIndex, r.caseId, r.responseHash, prefix);
     }
 
-    /// @dev Pay hop fees for the hops that forwarded, then release, refund or quarantine the rest.
+    /// @dev Pay the fees of `forwarded` (the hops before the reporting one), then release, refund or quarantine
+    ///      the rest.
     function _finish(
         bytes16 routeId,
         RouteStatus status,
@@ -602,7 +610,7 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         uint32 reachedHop,
         bytes32 caseId,
         bytes32 responseHash,
-        RouteTypes.Hop[] memory hops
+        RouteTypes.Hop[] memory forwarded
     ) private {
         OriginRoute storage o = routes[routeId];
         uint256 budget = o.feeBudget;
@@ -623,11 +631,11 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         o.status = status;
 
         uint256 paid;
-        for (uint256 i = 0; i < reachedHop && i + 1 < hops.length; i++) {
-            uint256 fee = hops[i].fee;
-            if (fee == 0 || hops[i].feePayee.length != 20 || paid + fee > budget) continue;
+        for (uint256 i = 0; i < forwarded.length; i++) {
+            uint256 fee = forwarded[i].fee;
+            if (fee == 0 || forwarded[i].feePayee.length != 20 || paid + fee > budget) continue;
             paid += fee;
-            _pay(_toAddress(hops[i].feePayee), fee);
+            _pay(_toAddress(forwarded[i].feePayee), fee);
         }
         uint256 rest = budget - paid;
         string memory contact_;

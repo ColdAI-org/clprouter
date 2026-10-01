@@ -141,5 +141,13 @@ message ClprRouteReceipt {
   bytes case_id = 6;               // 32 bytes; set when QUARANTINED
   string contact = 7;              // provider contact address; set when QUARANTINED
   bytes response_hash = 8;         // 32 bytes; keccak256 of the destination application's response
-  repeated ClprRouteHop route_hops = 9; // the route's hops as the reporter held them (origin re-checks them)
+  // hops[0..hop_index) of the route as the reporter held them. Only set when the receipt does not travel the
+  // reverse of the route (a delivery receipt over an explicit receipt_path); otherwise the origin rebuilds them
+  // from the receipt envelope's own hops, which carry each edge's channel, connector, fee and fee payee.
+  repeated ClprRouteHop route_prefix = 9;
+  // With the rebuilt prefix and the reporter's identity (the receipt envelope's origin), these two recompute the
+  // hop-list commitment the origin stored at send (RouteLogic.hopsCommitment):
+  bytes route_edge = 10;           // 32 bytes: RouteLogic.edgeDigest of the reporting hop (its outgoing edge)
+  bytes route_rest = 11;           // 32 bytes: commitment to the hops after the reporting one; absent (zero) at
+                                   // the destination, which a DELIVERED receipt requires
 }

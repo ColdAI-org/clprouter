@@ -156,25 +156,22 @@ library RouteLogic {
         return e;
     }
 
-    /// @notice The hops a receipt from hop `idx` travels: the explicit receipt path for a delivery receipt when
-    ///         it is well-formed (from this hop to the origin), otherwise the reverse of hops[0..idx].
-    function receiptHops(RouteTypes.Envelope memory e, bool delivered) public pure returns (RouteTypes.Hop[] memory) {
-        uint256 idx = e.hopIndex;
+    /// @notice Whether the delivery receipt of `e` (reported by hop `e.hopIndex`) takes the explicit receipt path:
+    ///         only for a delivery receipt, and only when the path is well-formed (from this hop to the origin).
+    function usesReceiptPath(RouteTypes.Envelope memory e, bool delivered) public pure returns (bool) {
         RouteTypes.Hop[] memory p = e.receiptPath;
-        if (delivered && p.length >= 2 && p.length - 1 <= RouteTypes.ABSOLUTE_MAX_HOPS) {
-            RouteTypes.Hop memory here = e.hops[idx];
-            RouteTypes.Hop memory origin = e.hops[0];
-            if (
-                keccak256(bytes(p[0].ledgerId)) == keccak256(bytes(here.ledgerId))
-                    && keccak256(p[0].router) == keccak256(here.router)
-                    && keccak256(bytes(p[p.length - 1].ledgerId)) == keccak256(bytes(origin.ledgerId))
-                    && keccak256(p[p.length - 1].router) == keccak256(origin.router)
-            ) return p;
-        }
-        return reversePrefix(e.hops, idx);
+        if (!delivered || p.length < 2 || p.length - 1 > RouteTypes.ABSOLUTE_MAX_HOPS) return false;
+        RouteTypes.Hop memory here = e.hops[e.hopIndex];
+        RouteTypes.Hop memory origin = e.hops[0];
+        return keccak256(bytes(p[0].ledgerId)) == keccak256(bytes(here.ledgerId))
+            && keccak256(p[0].router) == keccak256(here.router)
+            && keccak256(bytes(p[p.length - 1].ledgerId)) == keccak256(bytes(origin.ledgerId))
+            && keccak256(p[p.length - 1].router) == keccak256(origin.router);
     }
 
-    /// @notice hops[k], hops[k-1], ..., hops[0], each leaving over the Channel it was reached by.
+    /// @notice hops[k], hops[k-1], ..., hops[0], each leaving over the edge it was reached by: p[j] carries the
+    ///         ledger and Router of hops[k-j] and the Channel, Connector, fee and fee payee of hops[k-j-1].
+    /// @dev Carrying the fee fields lets the origin rebuild hops[0..k) from a receipt that travelled this path.
     function reversePrefix(RouteTypes.Hop[] memory hops, uint256 k) public pure returns (RouteTypes.Hop[] memory p) {
         p = new RouteTypes.Hop[](k + 1);
         for (uint256 j = 0; j <= k; j++) {
@@ -182,33 +179,44 @@ library RouteLogic {
             p[j].ledgerId = src.ledgerId;
             p[j].router = src.router;
             if (j < k) {
-                p[j].channelId = hops[k - j - 1].channelId;
-                p[j].connectorId = hops[k - j - 1].connectorId;
+                RouteTypes.Hop memory edge = hops[k - j - 1];
+                p[j].channelId = edge.channelId;
+                p[j].connectorId = edge.connectorId;
+                p[j].fee = edge.fee;
+                p[j].feePayee = edge.feePayee;
             }
         }
     }
 
-    /// @notice The receipt envelope `re` travelled exactly the reverse of the route up to the reporting hop,
-    ///         and was issued by the Router the route names for that hop.
-    function isReversePrefix(RouteTypes.Envelope memory re, RouteTypes.Receipt memory r) public pure returns (bool) {
-        RouteTypes.Hop[] memory expect = reversePrefix(r.routeHops, r.hopIndex);
-        if (expect.length != re.hops.length) return false;
-        for (uint256 i = 0; i < expect.length; i++) {
-            if (
-                keccak256(bytes(expect[i].ledgerId)) != keccak256(bytes(re.hops[i].ledgerId))
-                    || keccak256(expect[i].router) != keccak256(re.hops[i].router)
-                    || expect[i].channelId != re.hops[i].channelId || expect[i].connectorId != re.hops[i].connectorId
-            ) return false;
-        }
-        return keccak256(re.origin.application) == keccak256(r.routeHops[r.hopIndex].router);
+    // ── Hop-list commitment ─────────────────────────────────────────────────
+    //
+    // The origin stores one commitment to the route's hops instead of receiving them back in every receipt:
+    //   C_n = 0;   C_i = keccak256(abi.encode(nodeDigest_i, keccak256(abi.encode(edgeDigest_i, C_{i+1}))))
+    // with nodeDigest_i over (ledgerId, router) and edgeDigest_i over (channel, connector, fee, fee payee). The
+    // commitment is C_0. A receipt from hop k carries edgeDigest_k and C_{k+1} (zero at the destination, so a
+    // DELIVERED receipt proves it came from the last hop). The origin rebuilds hops[0..k) from the receipt's own
+    // reverse path (or an explicit prefix), takes node k from the receipt's origin (the reporting Router) and
+    // recomputes C_0: a match proves the hop list, the reporter, and that the receipt came back the exact
+    // reverse way.
+
+    function _node(string memory ledgerId, bytes memory router) private pure returns (bytes32) {
+        return keccak256(abi.encode(keccak256(bytes(ledgerId)), keccak256(router)));
     }
 
-    /// @notice keccak256 of the CAIP-2 id of the peer ledger of `channelId` on `service` (zero if unknown).
-    function peerLedgerHash(IClprService service, bytes32 channelId) public returns (bytes32) {
-        try service.getChannel(channelId) returns (ClprTypes.Channel memory c) {
-            return keccak256(bytes(c.chainId));
-        } catch {
-            return bytes32(0);
+    /// @notice Digest of a hop's outgoing edge: Channel, Connector, fee and fee payee.
+    function edgeDigest(RouteTypes.Hop memory h) public pure returns (bytes32) {
+        return keccak256(abi.encode(h.channelId, h.connectorId, h.fee, keccak256(h.feePayee)));
+    }
+
+    function _link(bytes32 node, bytes32 edge, bytes32 next) private pure returns (bytes32) {
+        return keccak256(abi.encode(node, keccak256(abi.encode(edge, next))));
+    }
+
+    /// @notice C_k: the commitment to hops[k..] (zero for k >= hops.length); C_0 is what the origin stores.
+    function hopsCommitment(RouteTypes.Hop[] memory hops, uint256 k) public pure returns (bytes32 c) {
+        for (uint256 i = hops.length; i > k; i--) {
+            RouteTypes.Hop memory h = hops[i - 1];
+            c = _link(_node(h.ledgerId, h.router), edgeDigest(h), c);
         }
     }
 
@@ -225,22 +233,42 @@ library RouteLogic {
         uint32 version
     ) public pure returns (bytes16 receiptId, RouteTypes.Hop[] memory hops, bytes memory data) {
         RouteTypes.Envelope memory re;
+        uint256 k = e.hopIndex;
         receiptId = bytes16(keccak256(abi.encodePacked(e.routeId, "receipt", e.hopIndex)));
         re.routeId = receiptId;
         re.origin = RouteTypes.Endpoint({ledgerId: here, application: abi.encodePacked(self)});
         re.destination = e.origin;
-        re.hops = receiptHops(e, r.status == RouteTypes.ReceiptStatus.DELIVERED);
+        if (usesReceiptPath(e, r.status == RouteTypes.ReceiptStatus.DELIVERED)) {
+            re.hops = e.receiptPath;
+            // The way back does not follow the route, so the origin needs the hops before this one explicitly.
+            r.routePrefix = new RouteTypes.Hop[](k);
+            for (uint256 i = 0; i < k; i++) {
+                r.routePrefix[i] = e.hops[i];
+            }
+        } else {
+            re.hops = reversePrefix(e.hops, k);
+        }
         re.hopIndex = 1;
         re.mode = e.mode;
         re.payloadType = RouteTypes.PayloadType.RECEIPT;
         re.routerVersion = version;
-        r.routeHops = e.hops;
-        r.hopIndex = e.hopIndex;
+        r.routeEdge = edgeDigest(e.hops[k]);
+        r.routeRest = hopsCommitment(e.hops, k + 1);
+        r.hopIndex = uint32(k);
         r.ledgerId = here;
         r.routeId = e.routeId;
         re.payload = RouteCodec.encodeReceipt(r);
         hops = re.hops;
         data = RouteCodec.encodeEnvelope(re);
+    }
+
+    /// @notice keccak256 of the CAIP-2 id of the peer ledger of `channelId` on `service` (zero if unknown).
+    function peerLedgerHash(IClprService service, bytes32 channelId) public returns (bytes32) {
+        try service.getChannel(channelId) returns (ClprTypes.Channel memory c) {
+            return keccak256(bytes(c.chainId));
+        } catch {
+            return bytes32(0);
+        }
     }
 
     /// @notice Send-time checks on a freshly built envelope (structure, origin and destination hops, deadline,
@@ -284,23 +312,51 @@ library RouteLogic {
     /// @notice Origin-side authentication of a receipt envelope `re` carrying receipt `r`.
     /// @param firstHop keccak256(channel of hop 0, router of hop 1) stored at send: the receipt must arrive
     ///        from the route's first-hop Router over the route's first Channel.
-    /// @param hopsHash Strict routes: hash of the route's hops, which the receipt must carry unchanged (zero = loose).
-    /// @param verifyPath Strict routes without an explicit receipt path: the receipt must have travelled the
-    ///        exact reverse of the route and been issued by the Router the route names for the reporting hop.
-    function receiptValid(
+    /// @param commitment Strict routes: hopsCommitment(hops, 0) (zero = loose: nothing to check and, since loose
+    ///        routes carry no value, no fees to pay).
+    /// @param verifyPath Strict routes without an explicit receipt path: the receipt must have travelled the exact
+    ///        reverse of the route (no explicit prefix accepted).
+    /// @return ok Whether the receipt is authentic.
+    /// @return prefix hops[0..r.hopIndex) of the route, whose fees are due (empty for loose routes).
+    function checkReceipt(
         RouteTypes.Envelope memory re,
         RouteTypes.Receipt memory r,
         bytes32 firstHop,
-        bytes32 hopsHash,
+        bytes32 commitment,
         bool verifyPath
-    ) public pure returns (bool) {
+    ) public pure returns (bool ok, RouteTypes.Hop[] memory prefix) {
         RouteTypes.Hop memory prev = re.hops[re.hopIndex - 1];
-        if (keccak256(abi.encodePacked(prev.channelId, prev.router)) != firstHop) return false;
-        if (r.status == RouteTypes.ReceiptStatus.UNSPECIFIED || r.routeHops.length < 2) return false;
-        if (r.hopIndex == 0 || r.hopIndex >= r.routeHops.length) return false;
-        if (hopsHash != bytes32(0) && RouteCodec.hashHops(r.routeHops) != hopsHash) return false;
-        if (r.status == RouteTypes.ReceiptStatus.DELIVERED && r.hopIndex != r.routeHops.length - 1) return false;
-        if (r.status == RouteTypes.ReceiptStatus.QUARANTINED && r.caseId == bytes32(0)) return false;
-        return !verifyPath || isReversePrefix(re, r);
+        uint256 k = r.hopIndex;
+        if (
+            keccak256(abi.encodePacked(prev.channelId, prev.router)) != firstHop
+                || r.status == RouteTypes.ReceiptStatus.UNSPECIFIED || k == 0
+                || (r.status == RouteTypes.ReceiptStatus.DELIVERED && r.routeRest != bytes32(0))
+                || (r.status == RouteTypes.ReceiptStatus.QUARANTINED && r.caseId == bytes32(0))
+        ) return (false, prefix);
+        if (commitment == bytes32(0)) return (true, prefix);
+
+        bytes32 node = _node(re.origin.ledgerId, re.origin.application);
+        if (r.routePrefix.length > 0) {
+            if (verifyPath || r.routePrefix.length != k) return (false, prefix);
+            prefix = r.routePrefix;
+        } else {
+            // Rebuild hops[0..k) from the reverse path the receipt travelled; its first hop is the reporter.
+            RouteTypes.Hop[] memory p = re.hops;
+            if (p.length != k + 1 || _node(p[0].ledgerId, p[0].router) != node) return (false, prefix);
+            prefix = new RouteTypes.Hop[](k);
+            for (uint256 i = 0; i < k; i++) {
+                RouteTypes.Hop memory n = p[k - i];
+                RouteTypes.Hop memory edge = p[k - i - 1];
+                prefix[i] =
+                    RouteTypes.Hop(n.ledgerId, n.router, edge.channelId, edge.connectorId, edge.fee, edge.feePayee);
+            }
+        }
+        bytes32 c = _link(node, r.routeEdge, r.routeRest);
+        for (uint256 i = k; i > 0; i--) {
+            RouteTypes.Hop memory h = prefix[i - 1];
+            c = _link(_node(h.ledgerId, h.router), edgeDigest(h), c);
+        }
+        if (c != commitment) return (false, new RouteTypes.Hop[](0));
+        ok = true;
     }
 }

@@ -128,6 +128,9 @@ contract RouterFlowTest is ThreeLedgerFixture {
         bytes16 id = _sendAs(alice, req, 0.03 ether);
         _settle();
         assertEq(uint8(_routeStatus(id)), uint8(ClprRouter.RouteStatus.DELIVERED));
+        // The delivery receipt carried the route prefix explicitly; both forwarding fees were paid from it.
+        assertEq(feeA.balance, 0.01 ether);
+        assertEq(feeB.balance, 0.02 ether);
     }
 
     function test_iso20022Payload_withUetrRouteId() public {
@@ -724,11 +727,24 @@ contract RouterFlowTest is ThreeLedgerFixture {
     // Forged receipts and inbound authentication
     // ═════════════════════════════════════════════════════════════════════
 
+    /// @dev Positive control for the forged-receipt tests: B's own FAILED receipt, built as B builds it, settles.
+    function test_receiptFromIntermediateHop_rebuildsPrefixAndPaysItsFee() public {
+        uint256 before = alice.balance;
+        bytes16 id = _sendAs(alice, _request(1 ether), 1.1 ether);
+        bytes memory genuine = _receiptEnvelope(id, _hopsABC(), RouteTypes.ReceiptStatus.FAILED, _hopsABC());
+        vm.prank(address(A.service));
+        A.router.onClprMessage(chAB, abi.encodePacked(address(B.router)), genuine);
+        assertEq(uint8(_routeStatus(id)), uint8(ClprRouter.RouteStatus.FAILED));
+        assertEq(feeA.balance, 0.01 ether, "hop 0 forwarded and is paid from the rebuilt prefix");
+        assertEq(feeB.balance, 0);
+        assertEq(alice.balance, before - 0.01 ether);
+    }
+
     function test_forgedReceipt_withAlteredRouteHops_isIgnored() public {
         bytes16 id = _sendAs(alice, _request(1 ether), 1.1 ether);
         RouteTypes.Hop[] memory hops = _hopsABC();
-        hops[1].feePayee = abi.encodePacked(makeAddr("thief"));
-        bytes memory forged = _receiptEnvelope(id, hops, RouteTypes.ReceiptStatus.DELIVERED, 2);
+        hops[0].feePayee = abi.encodePacked(makeAddr("thief"));
+        bytes memory forged = _receiptEnvelope(id, hops, RouteTypes.ReceiptStatus.FAILED, _hopsABC());
 
         vm.expectEmit(true, false, false, false, address(A.router));
         emit ClprRouter.ReceiptIgnored(id);
@@ -737,10 +753,41 @@ contract RouterFlowTest is ThreeLedgerFixture {
         assertEq(uint8(_routeStatus(id)), uint8(ClprRouter.RouteStatus.PENDING));
     }
 
+    function test_forgedReceipt_withAlteredTail_isIgnored() public {
+        bytes16 id = _sendAs(alice, _request(1 ether), 1.1 ether);
+        RouteTypes.Hop[] memory hops = _hopsABC();
+        hops[1].feePayee = abi.encodePacked(makeAddr("thief")); // B's own fee payee, inside the tail
+        bytes memory forged = _receiptEnvelope(id, _hopsABC(), RouteTypes.ReceiptStatus.FAILED, hops);
+        vm.prank(address(A.service));
+        A.router.onClprMessage(chAB, abi.encodePacked(address(B.router)), forged);
+        assertEq(uint8(_routeStatus(id)), uint8(ClprRouter.RouteStatus.PENDING));
+    }
+
+    /// @dev A strict route without an explicit receipt path accepts no explicit prefix: its receipts must come
+    ///      back the exact reverse way.
+    function test_forgedReceipt_withExplicitPrefixOnReversePathRoute_isIgnored() public {
+        bytes16 id = _sendAs(alice, _request(1 ether), 1.1 ether);
+        RouteTypes.Receipt memory r;
+        r.routeId = id;
+        r.status = RouteTypes.ReceiptStatus.FAILED;
+        r.hopIndex = 1;
+        r.routeEdge = RouteLogic.edgeDigest(_hopsABC()[1]);
+        r.routeRest = RouteLogic.hopsCommitment(_hopsABC(), 2);
+        r.routePrefix = new RouteTypes.Hop[](1);
+        r.routePrefix[0] = _hopsABC()[0];
+        RouteTypes.Envelope memory re =
+            RouteCodec.decodeEnvelope(_receiptEnvelope(id, _hopsABC(), RouteTypes.ReceiptStatus.FAILED, _hopsABC()));
+        re.payload = RouteCodec.encodeReceipt(r);
+        bytes memory forged = RouteCodec.encodeEnvelope(re);
+        vm.prank(address(A.service));
+        A.router.onClprMessage(chAB, abi.encodePacked(address(B.router)), forged);
+        assertEq(uint8(_routeStatus(id)), uint8(ClprRouter.RouteStatus.PENDING));
+    }
+
     function test_forgedReceipt_claimingDeliveryFromIntermediateHop_isIgnored() public {
         bytes16 id = _sendAs(alice, _request(1 ether), 1.1 ether);
         // B (honest-looking) claims DELIVERED although it is hop 1 of 2.
-        bytes memory forged = _receiptEnvelope(id, _hopsABC(), RouteTypes.ReceiptStatus.DELIVERED, 1);
+        bytes memory forged = _receiptEnvelope(id, _hopsABC(), RouteTypes.ReceiptStatus.DELIVERED, _hopsABC());
         vm.prank(address(A.service));
         A.router.onClprMessage(chAB, abi.encodePacked(address(B.router)), forged);
         assertEq(uint8(_routeStatus(id)), uint8(ClprRouter.RouteStatus.PENDING));
@@ -748,7 +795,7 @@ contract RouterFlowTest is ThreeLedgerFixture {
 
     function test_inbound_fromUnexpectedSender_reverts() public {
         bytes16 id = _sendAs(alice, _request(0), 0.03 ether);
-        bytes memory forged = _receiptEnvelope(id, _hopsABC(), RouteTypes.ReceiptStatus.FAILED, 1);
+        bytes memory forged = _receiptEnvelope(id, _hopsABC(), RouteTypes.ReceiptStatus.FAILED, _hopsABC());
         vm.prank(address(A.service));
         vm.expectRevert(ClprRouter.UnexpectedSender.selector);
         A.router.onClprMessage(chAB, abi.encodePacked(makeAddr("fake-router")), forged);
@@ -763,24 +810,26 @@ contract RouterFlowTest is ThreeLedgerFixture {
 
     // ── helpers ────────────────────────────────────────────────────────────
 
-    /// @dev Receipt envelope from B to A (as B's Router would build it) with arbitrary receipt fields.
+    /// @dev Receipt envelope from B (hop 1) to A, as B's Router builds it: it travels reversePrefix(`pathHops`, 1)
+    ///      and commits to hops[1..] of `tailHops` (route_edge of hop 1, route_rest of the hops after it).
     function _receiptEnvelope(
         bytes16 id,
-        RouteTypes.Hop[] memory routeHops,
+        RouteTypes.Hop[] memory pathHops,
         RouteTypes.ReceiptStatus status,
-        uint32 reportedHop
+        RouteTypes.Hop[] memory tailHops
     ) internal view returns (bytes memory) {
         RouteTypes.Receipt memory r;
         r.routeId = id;
         r.status = status;
-        r.hopIndex = reportedHop;
+        r.hopIndex = 1;
         r.ledgerId = ID_B;
-        r.routeHops = routeHops;
+        r.routeEdge = RouteLogic.edgeDigest(tailHops[1]);
+        r.routeRest = RouteLogic.hopsCommitment(tailHops, 2);
         RouteTypes.Envelope memory re;
         re.routeId = bytes16(keccak256(abi.encodePacked(id, "forged")));
         re.origin = RouteTypes.Endpoint(ID_B, abi.encodePacked(address(B.router)));
         re.destination = RouteTypes.Endpoint(ID_A, abi.encodePacked(alice));
-        re.hops = RouteLogic.reversePrefix(_hopsABC(), 1);
+        re.hops = RouteLogic.reversePrefix(pathHops, 1);
         re.hopIndex = 1;
         re.payloadType = RouteTypes.PayloadType.RECEIPT;
         re.payload = RouteCodec.encodeReceipt(r);

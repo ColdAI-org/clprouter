@@ -291,7 +291,7 @@ contract RouterHopTest is Committee {
         r.status = RouteTypes.ReceiptStatus.DELIVERED;
         r.hopIndex = 2;
         r.ledgerId = ID_C;
-        r.routeHops = _hops();
+        r.routeEdge = RouteLogic.edgeDigest(_hops()[2]);
         re.routeId = bytes16(keccak256("receipt-1"));
         re.origin = RouteTypes.Endpoint(ID_C, abi.encodePacked(routerC));
         re.destination = RouteTypes.Endpoint(ID_A, abi.encodePacked(routerA));
