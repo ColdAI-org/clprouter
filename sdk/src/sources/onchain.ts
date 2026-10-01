@@ -33,6 +33,12 @@ export interface RegistryState {
    * `registryVersion`; Routers read certifications as of this version.
    */
   version?: bigint;
+  /**
+   * `ProviderRegistry.headAt(version)`: head of the decision hash chain at `version`. Two ledgers whose registries
+   * report the same head at a version hold the same registry state up to it, so a pinned version means the same
+   * thing on every hop (see `checkRegistryHeads`). Undefined for registries without a decision chain.
+   */
+  headHash?: Hex;
   certifications: Record<Caip2, Partial<Record<FilterLabel, Certification>>>;
   disabledLedgers: Caip2[];
   /** Edge ids (see `edgeId`). */
@@ -181,6 +187,13 @@ export const REGISTRY_ABI = [
   },
   {
     type: "function",
+    name: "headAt",
+    stateMutability: "view",
+    inputs: [{ name: "version", type: "uint64" }],
+    outputs: [{ name: "", type: "bytes32" }],
+  },
+  {
+    type: "function",
     name: "certificationAt",
     stateMutability: "view",
     inputs: [
@@ -294,6 +307,7 @@ export class ViemOnChainReader implements OnChainReader {
     // Read the version first: every entry read below was appended at or before it, so the snapshot is
     // consistent with the version a route sent now would pin (entries appended later are ignored).
     const version = await client.readContract({ address: r.address, abi: REGISTRY_ABI, functionName: "version" });
+    const headHash = await readHead(client, r.address, version);
     const disabled = (key: Hex) =>
       client.readContract({ address: r.address, abi: REGISTRY_ABI, functionName: "isDisabled", args: [key] });
 
@@ -342,6 +356,42 @@ export class ViemOnChainReader implements OnChainReader {
     for (const v of this.cfg.routerVersions ?? []) {
       if (await disabled(registryKeys.routerVersion(v))) disabledRouterVersions.push(v);
     }
-    return { version, certifications, disabledLedgers, disabledEdges, disabledRouterVersions, edgeTrustTiers };
+    return { version, headHash, certifications, disabledLedgers, disabledEdges, disabledRouterVersions, edgeTrustTiers };
   }
+}
+
+async function readHead(client: PublicClient, address: Address, version: bigint): Promise<Hex | undefined> {
+  try {
+    return await client.readContract({ address, abi: REGISTRY_ABI, functionName: "headAt", args: [version] });
+  } catch {
+    return undefined; // a registry without a decision chain
+  }
+}
+
+/** Result of {@link checkRegistryHeads}. */
+export interface RegistryHeadCheck {
+  /** True if every registry has reached `version` and reports the same head there. */
+  consistent: boolean;
+  /** Head per ledger (zero hash = that registry has not reached `version` yet). */
+  heads: Record<Caip2, Hex>;
+}
+
+const ZERO_HEAD: Hex = `0x${"0".repeat(64)}`;
+
+/**
+ * Checks that the registries of every ledger a route touches agree on the registry history up to the version the
+ * route pins. Routers compare certifications by version only; this makes sure that version names one state on all
+ * hops (a ledger whose registry has not reached the version, or forked from the others, fails the check).
+ */
+export async function checkRegistryHeads(
+  registries: Record<Caip2, { client: PublicClient; address: Address }>,
+  version: bigint,
+): Promise<RegistryHeadCheck> {
+  const entries = await Promise.all(
+    Object.entries(registries).map(async ([id, r]) => [id, (await readHead(r.client, r.address, version)) ?? ZERO_HEAD] as const),
+  );
+  const heads = Object.fromEntries(entries) as Record<Caip2, Hex>;
+  const values = entries.map(([, h]) => h.toLowerCase());
+  const consistent = values.length > 0 && values[0] !== ZERO_HEAD && values.every((h) => h === values[0]);
+  return { consistent, heads };
 }
