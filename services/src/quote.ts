@@ -18,6 +18,7 @@ import {
 } from "@clprouter/sdk";
 import type { Address, Hex, PublicClient } from "viem";
 import { keccak256, toHex } from "viem";
+import { z } from "zod";
 import type { LedgerConfig } from "./config.js";
 import type { LedgerRegistryState } from "./registry.js";
 import { certificationsInEffect, keys, loadRegistry, switchActive } from "./registry.js";
@@ -156,6 +157,8 @@ export interface QuoteServiceOptions {
   routerVersions?: number[];
   /** Snapshots kept for `/graphs/:hash`. Default 32. */
   keepGraphs?: number;
+  /** Live graphs memoised by their inputs (confirmed blocks and evaluation time). Default 16; 0 disables. */
+  liveGraphCache?: number;
   clock?: () => number;
 }
 
@@ -176,9 +179,29 @@ export class QuoteService {
     return this.graphs.get(hash.toLowerCase());
   }
 
-  /** Build the live graph and the inputs it was built from. */
+  private readonly liveCache = new Map<string, Promise<{ graph: RouteGraph; inputs: Omit<QuoteInputs, "request"> }>>();
+
+  /**
+   * Build the live graph and the inputs it was built from. The result is a pure function of the confirmed blocks
+   * (number and hash per ledger: live reads are pinned to them) and the evaluation time, so it is memoised on those:
+   * concurrent quotes at the same blocks and second share one build.
+   */
   async liveGraph(now = this.now()): Promise<{ graph: RouteGraph; inputs: Omit<QuoteInputs, "request"> }> {
     const blocks = this.o.cursors();
+    const size = this.o.liveGraphCache ?? 16;
+    if (size <= 0) return this.buildLiveGraph(blocks, now);
+    const key = JSON.stringify([blocks, now]);
+    let p = this.liveCache.get(key);
+    if (!p) {
+      p = this.buildLiveGraph(blocks, now);
+      this.liveCache.set(key, p);
+      p.catch(() => this.liveCache.delete(key));
+      while (this.liveCache.size > size) this.liveCache.delete(this.liveCache.keys().next().value!);
+    }
+    return p;
+  }
+
+  private async buildLiveGraph(blocks: Record<string, Cursor | null>, now: number): Promise<{ graph: RouteGraph; inputs: Omit<QuoteInputs, "request"> }> {
     const states = this.o.ledgers.map((l) => loadRegistry(this.o.store, l.id));
     const regLedger = this.o.registryLedger ?? this.o.ledgers[0]?.id ?? null;
     const certSource = states.find((s) => s.ledger === regLedger);
@@ -285,16 +308,66 @@ function runPlan(graph: RouteGraph | RouteGraphData, request: QuoteInputs["reque
 }
 
 const MODES = new Set(["cheapest", "fastest", "reliable", "greenest", "balanced"]);
+const CAIP2_RE = /^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$/;
+const caip2 = z.string().regex(CAIP2_RE, "must be a CAIP-2 id");
+const nonNeg = z.number().finite().min(0);
+
+/** Strict schema of a quote request: unknown keys, wrong types and out-of-range values are 400s. */
+export const quoteBodySchema = z
+  .object({
+    origin: caip2,
+    destination: caip2,
+    mode: z.enum(["cheapest", "fastest", "reliable", "greenest", "balanced"]).optional(),
+    filters: z
+      .object({
+        iso20022: z.boolean().optional(),
+        mica: z.boolean().optional(),
+        energy: z.union([z.boolean(), z.object({ capKgPerTx: nonNeg.max(1e9).optional() }).strict()]).optional(),
+      })
+      .strict()
+      .optional(),
+    constraints: z
+      .object({
+        maxHops: z.number().int().min(1).max(8).optional(),
+        deadlineS: z.number().finite().positive().max(10 * 365 * 86_400).optional(),
+        maxFeeUsd: nonNeg.max(1e12).optional(),
+        trustFloor: z.enum(["attested", "committee", "light-client", "validity-proof"]).optional(),
+        excludedLedgers: z.array(caip2).max(256).optional(),
+        excludedJurisdictions: z.array(z.string().regex(/^[A-Z]{2}$/, "must be ISO 3166-1 alpha-2")).max(250).optional(),
+        finalizedOnly: z.boolean().optional(),
+        allowProjected: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    payloadBytes: z.number().int().min(0).max(16 * 1024 * 1024).optional(),
+    k: z.number().int().min(1).max(32).optional(),
+    balancedWeights: z
+      .object({ cost: nonNeg.max(1e6).optional(), time: nonNeg.max(1e6).optional(), reliability: nonNeg.max(1e6).optional(), carbon: nonNeg.max(1e6).optional() })
+      .strict()
+      .optional(),
+    now: z.number().int().min(0).max(2 ** 40).optional(),
+    includeGraph: z.boolean().optional(),
+  })
+  .strict();
 
 export class BadRequest extends Error {}
 
 export function validateQuoteBody(b: QuoteRequestBody): void {
-  if (!b || typeof b !== "object") throw new BadRequest("body must be a JSON object");
+  if (!b || typeof b !== "object" || Array.isArray(b)) throw new BadRequest("body must be a JSON object");
   if (typeof b.origin !== "string" || typeof b.destination !== "string") {
     throw new BadRequest("origin and destination (CAIP-2) are required");
   }
   if (b.mode !== undefined && !MODES.has(b.mode)) throw new BadRequest(`unknown mode ${String(b.mode)}`);
   if (b.now !== undefined && !Number.isFinite(b.now)) throw new BadRequest("now must be unix seconds");
+  const r = quoteBodySchema.safeParse(b);
+  if (!r.success) {
+    throw new BadRequest(
+      r.error.issues
+        .slice(0, 5)
+        .map((i) => `${i.path.length ? i.path.join(".") : "body"}: ${i.message}`)
+        .join("; "),
+    );
+  }
 }
 
 /**

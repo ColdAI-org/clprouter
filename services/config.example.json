@@ -1,12 +1,24 @@
 {
   "database": "clprouter-services.sqlite",
-  "http": { "host": "127.0.0.1", "port": 8787 },
+  "http": {
+    "host": "127.0.0.1",
+    "port": 8787,
+    "bodyLimitBytes": 65536,
+    "cors": { "origins": ["*"] },
+    "rateLimit": { "requestsPerMinute": 600, "burst": 120, "quoteCost": 5 },
+    "maxConcurrentQuotes": 32,
+    "pagination": { "defaultLimit": 50, "maxLimit": 500 }
+  },
+  "metrics": { "enabled": true },
+  "log": { "level": "info" },
+  "rpc": { "timeoutMs": 10000, "retries": 3, "backoffMs": 250, "maxBackoffMs": 8000, "cooldownMs": 30000 },
   "registryLedger": "eip155:31001",
   "routerVersions": [1],
   "ledgers": [
     {
       "id": "eip155:31001",
-      "rpcUrl": "http://127.0.0.1:8545",
+      "chainId": 31337,
+      "rpcUrls": ["http://127.0.0.1:8545"],
       "confirmations": 0,
       "startBlock": 0,
       "contracts": {
@@ -17,7 +29,8 @@
     },
     {
       "id": "eip155:31002",
-      "rpcUrl": "http://127.0.0.1:8546",
+      "chainId": 31338,
+      "rpcUrls": ["http://127.0.0.1:8546", "http://127.0.0.1:8547"],
       "confirmations": 2,
       "contracts": {
         "router": "0x0000000000000000000000000000000000000004",
@@ -27,5 +40,9 @@
       }
     }
   ],
-  "trigger": { "enabled": true, "keyEnv": "CLPROUTER_TRIGGER_KEY", "completeRejected": false }
+  "trigger": {
+    "enabled": true,
+    "signer": { "kind": "local-test-key", "keyEnv": "CLPROUTER_TRIGGER_KEY" },
+    "completeRejected": false
+  }
 }

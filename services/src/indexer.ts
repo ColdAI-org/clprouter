@@ -56,6 +56,12 @@ export class LedgerWatcher {
   private loopDone: Promise<void> | undefined;
   private readonly kinds = new Map<string, ContractKind>();
   readonly batchSize: number;
+  /** Latest head seen (metrics: lag). */
+  head: number | undefined;
+  /** Time (ms) of the last poll that completed without error (readiness). */
+  lastSuccessAt: number | undefined;
+  /** Message of the last poll error, cleared by a successful poll. */
+  lastError: string | undefined;
 
   constructor(
     readonly cfg: LedgerConfig,
@@ -112,27 +118,39 @@ export class LedgerWatcher {
     if (this.running) return 0;
     this.running = true;
     try {
-      let total = 0;
-      for (;;) {
-        // No client-side caching: viem caches the head per client, which would hold the indexer back.
-        const head = Number(await this.client.getBlockNumber({ cacheTime: 0 }));
-        const safe = head - this.cfg.confirmations;
-        const start = this.cfg.startBlock ?? 0;
-        if (safe < start) return total;
-
-        let cursor = this.cursor();
-        if (cursor && !(await this.isCanonical(cursor))) cursor = await this.handleReorg(cursor);
-
-        const from = cursor ? cursor.blockNumber + 1 : start;
-        if (from > safe) return total;
-        const to = Math.min(safe, from + this.batchSize - 1);
-        const n = await this.indexRange(from, to);
-        if (n < 0) return total; // the chain moved under us; retry on the next poll
-        total += n;
-        if (to >= safe) return total;
-      }
+      const n = await this.pollOnce();
+      this.lastSuccessAt = Date.now();
+      this.lastError = undefined;
+      return n;
+    } catch (err) {
+      this.lastError = (err as Error).message;
+      this.bus.emit("pollError", { ledger: this.cfg.id, error: err });
+      throw err;
     } finally {
       this.running = false;
+    }
+  }
+
+  private async pollOnce(): Promise<number> {
+    let total = 0;
+    for (;;) {
+      // No client-side caching: viem caches the head per client, which would hold the indexer back.
+      const head = Number(await this.client.getBlockNumber({ cacheTime: 0 }));
+      this.head = head;
+      const safe = head - this.cfg.confirmations;
+      const start = this.cfg.startBlock ?? 0;
+      if (safe < start) return total;
+
+      let cursor = this.cursor();
+      if (cursor && !(await this.isCanonical(cursor))) cursor = await this.handleReorg(cursor);
+
+      const from = cursor ? cursor.blockNumber + 1 : start;
+      if (from > safe) return total;
+      const to = Math.min(safe, from + this.batchSize - 1);
+      const n = await this.indexRange(from, to);
+      if (n < 0) return total; // the chain moved under us; retry on the next poll
+      total += n;
+      if (to >= safe) return total;
     }
   }
 
@@ -190,6 +208,8 @@ export class LedgerWatcher {
     const end = await blockOf(to);
     const checkpoints = [...blocks.entries()].map(([n, b]) => ({ blockNumber: n, blockHash: b.hash }));
     this.store.applyRange(this.cfg.id, events, { blockNumber: to, blockHash: end.hash }, checkpoints);
+    // Durable before announced: the trigger and SSE clients only see events the store has persisted.
+    await this.store.flush();
     for (const e of events) this.bus.emitEvent(e);
     this.bus.emit("cursor", { ledger: this.cfg.id, blockNumber: to, blockHash: end.hash });
     return events.length;
@@ -201,7 +221,7 @@ export class LedgerWatcher {
       try {
         await this.poll();
       } catch (err) {
-        this.log(`indexer ${this.cfg.id}: ${(err as Error).message}`);
+        this.log(`indexer ${this.cfg.id}: ${(err as Error).message.split("\n")[0]}`);
       }
       if (!this.stopped) this.timer = setTimeout(() => (this.loopDone = loop()), this.cfg.pollIntervalMs ?? 2000);
     };

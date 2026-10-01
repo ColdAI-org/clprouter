@@ -1,0 +1,1319 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "CLPRouter services API",
+    "version": "0.1.0",
+    "description": "Route status, registry views, quotes and the public forward/flush trigger queue of CLPRouter. Optional and re-checkable: every answer carries the block numbers (`inputs`) and registry versions it was built from. Read-only, unauthenticated, no cookies. Every response carries `x-request-id`; 5xx bodies carry only `{error, requestId}`.",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8787"
+    }
+  ],
+  "tags": [
+    {
+      "name": "routes"
+    },
+    {
+      "name": "registry"
+    },
+    {
+      "name": "quotes"
+    },
+    {
+      "name": "trigger"
+    },
+    {
+      "name": "ops"
+    }
+  ],
+  "paths": {
+    "/routes": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "listRoutes",
+        "summary": "Routes sent, newest first",
+        "parameters": [
+          {
+            "name": "ledger",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+              "example": "eip155:296"
+            }
+          },
+          {
+            "name": "sender",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^0x[0-9a-fA-F]{40}$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 50
+            },
+            "description": "Page size (max is `http.pagination.maxLimit`)."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,512}$"
+            },
+            "description": "Opaque cursor: the `next` value of the previous page."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of routes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/routes/{routeId}": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "getRoute",
+        "summary": "Hop-by-hop status, tx hashes per ledger and the final outcome",
+        "parameters": [
+          {
+            "name": "routeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(0x[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"
+            },
+            "description": "16-byte hex route id or its UUID form (the UETR under the ISO 20022 filter)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Route status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RouteStatus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Route not seen (same body, `found: false`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RouteStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/accounts/{caip10}/notices": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "getAccountNotices",
+        "summary": "Quarantine notices, sender receipts and blacklist listings for an account",
+        "parameters": [
+          {
+            "name": "caip10",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "CAIP-10 account id, URL-encoded."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notices",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountNotices"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/registry": {
+      "get": {
+        "tags": [
+          "registry"
+        ],
+        "operationId": "getRegistry",
+        "summary": "Certifications, disabled routes, blacklist with case ids, committee and vault holdings",
+        "parameters": [
+          {
+            "name": "ledger",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+              "example": "eip155:296"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Registry views per ledger",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Registry"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown ledger",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/quote": {
+      "post": {
+        "tags": [
+          "quotes"
+        ],
+        "operationId": "quote",
+        "summary": "Planner quote over the live graph, with its inputs",
+        "description": "Costs `http.rateLimit.quoteCost` rate-limit tokens. Bodies over `http.bodyLimitBytes` get 413. Unknown keys are rejected.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Quote (`ok: true`) or no route (`ok: false` with reason)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Quote service busy or not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "retry-after": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/graphs/{hash}": {
+      "get": {
+        "tags": [
+          "quotes"
+        ],
+        "operationId": "getGraph",
+        "summary": "Graph snapshot a quote was computed on (kept briefly)",
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^0x[0-9a-fA-F]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Route graph snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown or expired hash",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/pending": {
+      "get": {
+        "tags": [
+          "trigger"
+        ],
+        "operationId": "listPending",
+        "summary": "Hops waiting for the public forward / flush trigger, with calldata anyone can send",
+        "parameters": [
+          {
+            "name": "ledger",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+              "example": "eip155:296"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 50
+            },
+            "description": "Page size (max is `http.pagination.maxLimit`)."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,512}$"
+            },
+            "description": "Opaque cursor: the `next` value of the previous page."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of jobs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/stream": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "stream",
+        "summary": "Server-sent events: indexed events, route updates, reorgs",
+        "parameters": [
+          {
+            "name": "routeId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ledger",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+              "example": "eip155:296"
+            }
+          },
+          {
+            "name": "names",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{1,64}(,[A-Za-z]{1,64}){0,31}$"
+            },
+            "description": "Comma-separated event names."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "`text/event-stream` with events `route`, `indexed`, `reorg` and `shutdown`",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Too many open streams or shutting down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "health",
+        "summary": "Confirmed block per ledger",
+        "responses": {
+          "200": {
+            "description": "Cursors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "ledgers"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "ledgers": {
+                      "$ref": "#/components/schemas/Inputs"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "liveness",
+        "summary": "Liveness probe (process up)",
+        "responses": {
+          "200": {
+            "description": "Alive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "readiness",
+        "summary": "Readiness probe: store reachable and durable, every ledger polled recently with a chain-id-verified RPC, not shutting down",
+        "responses": {
+          "200": {
+            "description": "Ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "metrics",
+        "summary": "Prometheus metrics (here unless `metrics.port` moves them to a separate listener)",
+        "responses": {
+          "200": {
+            "description": "Prometheus text format",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "openapi",
+        "summary": "This document",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1 document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid input",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Rate limit exceeded",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "headers": {
+          "retry-after": {
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Seconds to wait."
+          }
+        }
+      },
+      "Internal": {
+        "description": "Internal error (no details; correlate with logs by requestId)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/InternalError"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "InternalError": {
+        "type": "object",
+        "required": [
+          "error",
+          "requestId"
+        ],
+        "properties": {
+          "error": {
+            "const": "internal error"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Cursor": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "required": [
+          "blockNumber",
+          "blockHash"
+        ],
+        "properties": {
+          "blockNumber": {
+            "type": "integer"
+          },
+          "blockHash": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{64}$"
+          }
+        }
+      },
+      "Inputs": {
+        "type": "object",
+        "description": "Confirmed block per ledger the answer was built from.",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/Cursor"
+        }
+      },
+      "RoutePage": {
+        "type": "object",
+        "required": [
+          "items",
+          "next",
+          "inputs"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "routeId",
+                "ledger",
+                "sender",
+                "txHash",
+                "blockNumber",
+                "timestamp"
+              ],
+              "properties": {
+                "routeId": {
+                  "type": "string"
+                },
+                "ledger": {
+                  "type": "string",
+                  "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+                  "example": "eip155:296"
+                },
+                "sender": {
+                  "type": "string"
+                },
+                "destinationLedger": {
+                  "type": "string"
+                },
+                "txHash": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{64}$"
+                },
+                "blockNumber": {
+                  "type": "integer"
+                },
+                "timestamp": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "inputs": {
+            "$ref": "#/components/schemas/Inputs"
+          }
+        }
+      },
+      "RouteStatus": {
+        "type": "object",
+        "required": [
+          "routeId",
+          "found",
+          "hops",
+          "receipts",
+          "outcome",
+          "inputs"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "routeId": {
+            "type": "string"
+          },
+          "found": {
+            "type": "boolean"
+          },
+          "origin": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "plannedHops": {
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "hops": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "index",
+                "ledger",
+                "status",
+                "events"
+              ],
+              "properties": {
+                "index": {
+                  "type": "integer"
+                },
+                "ledger": {
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "waiting",
+                    "sent",
+                    "forward-pending",
+                    "forwarded",
+                    "rejected",
+                    "delivered",
+                    "stopped"
+                  ]
+                },
+                "events": {
+                  "type": "array"
+                }
+              }
+            }
+          },
+          "receipts": {
+            "type": "array"
+          },
+          "outcome": {
+            "type": "object",
+            "required": [
+              "status",
+              "settled"
+            ],
+            "properties": {
+              "status": {
+                "enum": [
+                  "PENDING",
+                  "DELIVERED",
+                  "FAILED",
+                  "EXPIRED",
+                  "QUARANTINED"
+                ]
+              },
+              "settled": {
+                "type": "boolean"
+              }
+            }
+          },
+          "quarantine": {
+            "type": "array"
+          },
+          "notices": {
+            "type": "array"
+          },
+          "inputs": {
+            "$ref": "#/components/schemas/Inputs"
+          }
+        }
+      },
+      "AccountNotices": {
+        "type": "object",
+        "required": [
+          "account",
+          "accountKey",
+          "recipientNotices",
+          "senderReceipts",
+          "listings",
+          "inputs"
+        ],
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "accountKey": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{64}$"
+          },
+          "recipientNotices": {
+            "type": "array"
+          },
+          "senderReceipts": {
+            "type": "array"
+          },
+          "listings": {
+            "type": "array"
+          },
+          "inputs": {
+            "$ref": "#/components/schemas/Inputs"
+          }
+        }
+      },
+      "Registry": {
+        "type": "object",
+        "required": [
+          "asOf",
+          "registryLedger",
+          "ledgers"
+        ],
+        "properties": {
+          "asOf": {
+            "type": "integer"
+          },
+          "registryLedger": {
+            "type": "string"
+          },
+          "committee": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "ledgers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "ledger",
+                "version"
+              ],
+              "additionalProperties": true,
+              "properties": {
+                "ledger": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "QuoteRequest": {
+        "type": "object",
+        "required": [
+          "origin",
+          "destination"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "origin": {
+            "type": "string",
+            "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+            "example": "eip155:296"
+          },
+          "destination": {
+            "type": "string",
+            "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+            "example": "eip155:296"
+          },
+          "mode": {
+            "enum": [
+              "cheapest",
+              "fastest",
+              "reliable",
+              "greenest",
+              "balanced"
+            ],
+            "default": "balanced"
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "iso20022": {
+                "type": "boolean"
+              },
+              "mica": {
+                "type": "boolean"
+              },
+              "energy": {
+                "oneOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "capKgPerTx": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "constraints": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "maxHops": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8
+              },
+              "deadlineS": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "maxFeeUsd": {
+                "type": "number",
+                "minimum": 0
+              },
+              "trustFloor": {
+                "enum": [
+                  "attested",
+                  "committee",
+                  "light-client",
+                  "validity-proof"
+                ]
+              },
+              "excludedLedgers": {
+                "type": "array",
+                "maxItems": 256,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$",
+                  "example": "eip155:296"
+                }
+              },
+              "excludedJurisdictions": {
+                "type": "array",
+                "maxItems": 250,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Z]{2}$"
+                }
+              },
+              "finalizedOnly": {
+                "type": "boolean"
+              },
+              "allowProjected": {
+                "type": "boolean"
+              }
+            }
+          },
+          "payloadBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16777216
+          },
+          "k": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32
+          },
+          "balancedWeights": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "cost": {
+                "type": "number",
+                "minimum": 0
+              },
+              "time": {
+                "type": "number",
+                "minimum": 0
+              },
+              "reliability": {
+                "type": "number",
+                "minimum": 0
+              },
+              "carbon": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          },
+          "now": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Unix seconds to evaluate certifications at. Default: now."
+          },
+          "includeGraph": {
+            "type": "boolean",
+            "description": "Include the graph snapshot (else fetch it from /graphs/{hash})."
+          }
+        }
+      },
+      "QuoteResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "inputs"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "filters": {
+            "type": "array"
+          },
+          "chosen": {
+            "type": "object"
+          },
+          "perHop": {
+            "type": "array"
+          },
+          "pareto": {
+            "type": "array"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "candidates": {
+            "type": "integer"
+          },
+          "registryVersion": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "details": {
+            "type": "array"
+          },
+          "inputs": {
+            "type": "object",
+            "required": [
+              "request",
+              "blocks",
+              "registryVersions",
+              "graph"
+            ],
+            "properties": {
+              "request": {
+                "type": "object"
+              },
+              "blocks": {
+                "$ref": "#/components/schemas/Inputs"
+              },
+              "registryVersions": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer"
+                }
+              },
+              "registryLedger": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "graph": {
+                "type": "object",
+                "required": [
+                  "hash"
+                ],
+                "properties": {
+                  "hash": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{64}$"
+                  },
+                  "version": {
+                    "type": "string"
+                  },
+                  "asOf": {
+                    "type": "string"
+                  }
+                }
+              },
+              "liveReads": {
+                "type": "object",
+                "properties": {
+                  "channels": {
+                    "type": "integer"
+                  },
+                  "connectors": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PendingPage": {
+        "type": "object",
+        "required": [
+          "jobs",
+          "next",
+          "total"
+        ],
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "jobs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "ledger",
+                "kind",
+                "key",
+                "status",
+                "attempts",
+                "calldata"
+              ],
+              "additionalProperties": true,
+              "properties": {
+                "ledger": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "forward",
+                    "flush",
+                    "reject"
+                  ]
+                },
+                "key": {
+                  "type": "string"
+                },
+                "routeId": {
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "pending",
+                    "submitted",
+                    "failed"
+                  ]
+                },
+                "txHash": {
+                  "type": "string"
+                },
+                "error": {
+                  "type": "string"
+                },
+                "attempts": {
+                  "type": "integer"
+                },
+                "blockNumber": {
+                  "type": "integer"
+                },
+                "router": {
+                  "type": "string"
+                },
+                "calldata": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]*$"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Readiness": {
+        "type": "object",
+        "required": [
+          "ready",
+          "checks"
+        ],
+        "properties": {
+          "ready": {
+            "type": "boolean"
+          },
+          "checks": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "ok"
+              ],
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

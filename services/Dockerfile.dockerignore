@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: MIT
+# Build context is the repository root; send only what the image needs.
+**
+!sdk/package.json
+!sdk/pnpm-lock.yaml
+!sdk/src/**
+!services/package.json
+!services/pnpm-lock.yaml
+!services/pnpm-workspace.yaml
+!services/tsconfig.json
+!services/openapi.json
+!services/scripts/build.mjs
+!services/src/**

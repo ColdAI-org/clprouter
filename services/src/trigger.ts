@@ -3,6 +3,7 @@ import { encodeFunctionData, keccak256 } from "viem";
 import { ROUTER_ABI } from "./abi.js";
 import type { IndexedEvent } from "./events.js";
 import type { EventBus } from "./indexer.js";
+import { scrubMessage } from "./log.js";
 import type { Store, TriggerJob } from "./store.js";
 
 /** `ClprRouter.HopState` values a {forward} call accepts. */
@@ -67,6 +68,10 @@ export interface ForwardTriggerOptions {
   /** Also complete `ForwardRejected` hops (FAILED receipt to the origin). Default false: leave them for re-routing. */
   completeRejected?: boolean;
   log?: (msg: string) => void;
+  /** Attempts per job before it is left for someone else. Default 3. */
+  maxAttempts?: number;
+  /** Called with every job result (metrics). */
+  onResult?: (job: TriggerJob, result: "done" | "skipped" | "failed") => void;
 }
 
 /**
@@ -205,7 +210,7 @@ export class ForwardTrigger {
           for (const j of this.o.store.jobs({ status: ["pending", "failed"] })) {
             if (this.stopped) return;
             const chain = this.o.chains?.[j.ledger];
-            if (!chain || j.attempts >= MAX_ATTEMPTS) continue;
+            if (!chain || j.attempts >= (this.o.maxAttempts ?? MAX_ATTEMPTS)) continue;
             await this.run(chain, j);
           }
         } while (this.again && !this.stopped);
@@ -222,6 +227,7 @@ export class ForwardTrigger {
       if (j.kind === "flush") {
         if (!(await chain.outbox(j.key as Hex))) {
           this.o.store.updateJob(j.ledger, j.kind, j.key, { status: "skipped", error: "already flushed" });
+          this.o.onResult?.(j, "skipped");
           return;
         }
       } else {
@@ -230,16 +236,21 @@ export class ForwardTrigger {
         const wanted = j.kind === "forward" ? FORWARD_PENDING : NACKED;
         if (st !== wanted || ph.toLowerCase() !== j.key.toLowerCase()) {
           this.o.store.updateJob(j.ledger, j.kind, j.key, { status: "skipped", error: "already completed" });
+          this.o.onResult?.(j, "skipped");
           return;
         }
       }
       this.o.store.updateJob(j.ledger, j.kind, j.key, { status: "submitted", attempt: true });
+      // The attempt must be durable before the transaction goes out (a crash then retries, never loops unbounded).
+      await this.o.store.flush();
       const tx =
         j.kind === "flush" ? await chain.flush(p.channelId!, p.connectorId!, p.target!, p.data!) : await chain.forward(p.envelope!);
       this.o.store.updateJob(j.ledger, j.kind, j.key, { status: "done", txHash: tx });
+      this.o.onResult?.(j, "done");
       this.o.log?.(`trigger: ${j.kind} on ${j.ledger} ${j.routeId ?? j.key} → ${tx}`);
     } catch (err) {
-      this.o.store.updateJob(j.ledger, j.kind, j.key, { status: "failed", error: (err as Error).message.slice(0, 500) });
+      this.o.store.updateJob(j.ledger, j.kind, j.key, { status: "failed", error: scrubMessage((err as Error).message).slice(0, 500) });
+      this.o.onResult?.(j, "failed");
       this.o.log?.(`trigger: ${j.kind} on ${j.ledger} failed: ${(err as Error).message.split("\n")[0]}`);
     }
   }

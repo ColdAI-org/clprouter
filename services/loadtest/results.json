@@ -1,0 +1,70 @@
+{
+  "date": "2026-10-01T09:55:52.535Z",
+  "target": "self-contained (SQLite, 2000 routes indexed, rate limiting off)",
+  "connections": 50,
+  "durationS": 15,
+  "machine": {
+    "cpus": 10,
+    "cpu": "Apple M1 Max",
+    "memGiB": 64,
+    "node": "v24.21.0"
+  },
+  "results": [
+    {
+      "scenario": "GET /routes/:routeId",
+      "requests": 218053,
+      "rps": 14536,
+      "latencyMs": {
+        "p50": 3,
+        "p90": 3,
+        "p99": 7,
+        "max": 82
+      },
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0
+    },
+    {
+      "scenario": "GET /routes?limit=50",
+      "requests": 54439,
+      "rps": 3630,
+      "latencyMs": {
+        "p50": 13,
+        "p90": 14,
+        "p99": 26,
+        "max": 32
+      },
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0
+    },
+    {
+      "scenario": "POST /quote",
+      "requests": 149478,
+      "rps": 9966,
+      "latencyMs": {
+        "p50": 4,
+        "p90": 5,
+        "p99": 9,
+        "max": 161
+      },
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0
+    },
+    {
+      "scenario": "POST /quote (uncached)",
+      "requests": 5158,
+      "rps": 344,
+      "latencyMs": {
+        "p50": 143,
+        "p90": 153,
+        "p99": 179,
+        "max": 319
+      },
+      "non2xx": 0,
+      "errors": 0,
+      "timeouts": 0
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: MIT
+# Local run: one anvil chain, PostgreSQL and the services image.
+#   docker compose -f services/docker-compose.yml up --build
+# Contract addresses default to placeholders (the services index nothing until you deploy and set
+# ROUTER_ADDRESS / REGISTRY_ADDRESS / VAULT_ADDRESS). The trigger signs only with a TEST key, only against the
+# local anvil, and only because CLPROUTER_STRICT=0; leave CLPROUTER_TRIGGER_KEY unset to record jobs only.
+name: clprouter-services
+
+services:
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:v1.5.1@sha256:3a70bfa9bd2c732a767bb60d12c8770b40e8f9b6cca28efc4b12b1be81c7f28e
+    entrypoint: ["anvil", "--host", "0.0.0.0", "--port", "8545", "--chain-id", "31337", "--block-time", "1"]
+    # Publish 8545 if you want to deploy from the host: ports: ["127.0.0.1:8545:8545"]
+    networks:
+      default:
+        # `.localhost` marks it as a local dev chain: the only kind of RPC the test-key signer accepts.
+        aliases: ["anvil.localhost"]
+
+  postgres:
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    environment:
+      POSTGRES_DB: clprouter
+      POSTGRES_USER: clprouter
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clprouter -d clprouter"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  services:
+    build:
+      context: ..
+      dockerfile: services/Dockerfile
+    image: clprouter-services:local
+    depends_on:
+      postgres: { condition: service_healthy }
+      anvil: { condition: service_started }
+    environment:
+      CLPROUTER_SERVICES_CONFIG: /config/config.json
+      CLPROUTER_DATABASE_URL: postgres://clprouter:${POSTGRES_PASSWORD:-local-dev-only}@postgres:5432/clprouter
+      CLPROUTER_STRICT: "0"
+      ANVIL_RPC_URL: http://anvil.localhost:8545
+      ROUTER_ADDRESS: ${ROUTER_ADDRESS:-0x0000000000000000000000000000000000000001}
+      REGISTRY_ADDRESS: ${REGISTRY_ADDRESS:-0x0000000000000000000000000000000000000002}
+      VAULT_ADDRESS: ${VAULT_ADDRESS:-0x0000000000000000000000000000000000000003}
+      CLPROUTER_TRIGGER_KEY: ${CLPROUTER_TRIGGER_KEY:-}
+    volumes: ["./docker/config.compose.json:/config/config.json:ro"]
+    ports: ["127.0.0.1:8787:8787", "127.0.0.1:9464:9464"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 30s
+
+volumes:
+  pgdata:

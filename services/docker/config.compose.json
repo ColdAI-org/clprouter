@@ -1,0 +1,28 @@
+{
+  "database": { "url": "${CLPROUTER_DATABASE_URL}", "poolMax": 5 },
+  "http": {
+    "host": "0.0.0.0",
+    "port": 8787,
+    "cors": { "origins": ["*"] },
+    "rateLimit": { "requestsPerMinute": 600, "burst": 120, "quoteCost": 5 }
+  },
+  "metrics": { "port": 9464, "host": "0.0.0.0" },
+  "log": { "level": "info" },
+  "registryLedger": "eip155:31337",
+  "rpc": { "timeoutMs": 5000, "retries": 3, "backoffMs": 250, "maxBackoffMs": 5000 },
+  "ledgers": [
+    {
+      "id": "eip155:31337",
+      "chainId": 31337,
+      "rpcUrls": ["${ANVIL_RPC_URL}"],
+      "confirmations": 0,
+      "pollIntervalMs": 1000,
+      "contracts": {
+        "router": "${ROUTER_ADDRESS}",
+        "registry": "${REGISTRY_ADDRESS}",
+        "vault": "${VAULT_ADDRESS}"
+      }
+    }
+  ],
+  "trigger": { "enabled": true, "signer": { "kind": "local-test-key", "keyEnv": "CLPROUTER_TRIGGER_KEY" } }
+}

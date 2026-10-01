@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import type { Hex } from "viem";
+import { MIGRATIONS_TABLE, pendingMigrations } from "./db/migrations.js";
 import type { ContractKind, IndexedEvent } from "./events.js";
 
 export interface Cursor {
@@ -37,68 +38,58 @@ export class Store {
 
   constructor(path = ":memory:") {
     this.db = new DatabaseSync(path);
-    this.db.exec(`
-      PRAGMA journal_mode = WAL;
-      CREATE TABLE IF NOT EXISTS events (
-        ledger TEXT NOT NULL,
-        block_number INTEGER NOT NULL,
-        block_hash TEXT NOT NULL,
-        tx_hash TEXT NOT NULL,
-        log_index INTEGER NOT NULL,
-        contract TEXT NOT NULL,
-        address TEXT NOT NULL,
-        name TEXT NOT NULL,
-        timestamp INTEGER NOT NULL,
-        route_id TEXT,
-        case_id TEXT,
-        account_key TEXT,
-        args TEXT NOT NULL,
-        PRIMARY KEY (ledger, tx_hash, log_index)
-      );
-      CREATE INDEX IF NOT EXISTS events_route ON events(route_id);
-      CREATE INDEX IF NOT EXISTS events_case ON events(case_id);
-      CREATE INDEX IF NOT EXISTS events_account ON events(account_key);
-      CREATE INDEX IF NOT EXISTS events_block ON events(ledger, block_number);
-      CREATE INDEX IF NOT EXISTS events_contract ON events(contract, ledger);
-      CREATE TABLE IF NOT EXISTS cursors (
-        ledger TEXT PRIMARY KEY,
-        block_number INTEGER NOT NULL,
-        block_hash TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS checkpoints (
-        ledger TEXT NOT NULL,
-        block_number INTEGER NOT NULL,
-        block_hash TEXT NOT NULL,
-        PRIMARY KEY (ledger, block_number)
-      );
-      CREATE TABLE IF NOT EXISTS kv (
-        ledger TEXT NOT NULL,
-        key TEXT NOT NULL,
-        value TEXT NOT NULL,
-        PRIMARY KEY (ledger, key)
-      );
-      CREATE TABLE IF NOT EXISTS trigger_jobs (
-        ledger TEXT NOT NULL,
-        kind TEXT NOT NULL,
-        key TEXT NOT NULL,
-        route_id TEXT,
-        status TEXT NOT NULL,
-        tx_hash TEXT,
-        error TEXT,
-        attempts INTEGER NOT NULL DEFAULT 0,
-        block_number INTEGER NOT NULL,
-        payload TEXT NOT NULL,
-        updated_at INTEGER NOT NULL,
-        PRIMARY KEY (ledger, kind, key)
-      );
-    `);
+    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
+    this.migrate();
+  }
+
+  /** Apply pending schema migrations (see `db/migrations.ts`). Returns the versions applied. */
+  migrate(): number[] {
+    this.db.exec(MIGRATIONS_TABLE.sqlite);
+    const applied = (this.db.prepare("SELECT version FROM schema_migrations").all() as { version: number }[]).map((r) => Number(r.version));
+    const todo = pendingMigrations(applied);
+    for (const m of todo) {
+      this.tx(() => {
+        this.db.exec(m.sqlite);
+        this.db.prepare("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)").run(m.version, m.name, Date.now());
+      });
+    }
+    return todo.map((m) => m.version);
+  }
+
+  /** Highest applied schema version. */
+  schemaVersion(): number {
+    const r = this.db.prepare("SELECT MAX(version) AS v FROM schema_migrations").get() as { v: number | null };
+    return Number(r.v ?? 0);
+  }
+
+  /** Storage backend name (metrics, readiness). */
+  get backend(): "sqlite" | "postgres" {
+    return "sqlite";
+  }
+
+  /** Throws if the database cannot answer a trivial query (readiness). */
+  async ping(): Promise<void> {
+    this.db.prepare("SELECT 1").get();
+  }
+
+  /** Wait until every write so far is durable. SQLite writes are synchronous, so this is a no-op here. */
+  async flush(_timeoutMs?: number): Promise<void> {}
+
+  /** Readiness detail of the durable store; `ok: false` makes /readyz fail. */
+  health(): { ok: boolean; detail?: string } {
+    return { ok: true };
+  }
+
+  /** Flush and close (graceful shutdown). */
+  async shutdown(): Promise<void> {
+    this.close();
   }
 
   close(): void {
     this.db.close();
   }
 
-  private tx<T>(fn: () => T): T {
+  protected tx<T>(fn: () => T): T {
     this.db.exec("BEGIN");
     try {
       const r = fn();
@@ -331,4 +322,70 @@ export class Store {
       .prepare("DELETE FROM trigger_jobs WHERE ledger = ? AND block_number > ? AND status IN ('pending', 'failed')")
       .run(ledger, blockNumber);
   }
+  /** Open jobs per (ledger, kind, status) (metrics). */
+  jobCounts(): { ledger: string; kind: string; status: JobStatus; n: number }[] {
+    return (
+      this.db.prepare("SELECT ledger, kind, status, COUNT(*) AS n FROM trigger_jobs GROUP BY ledger, kind, status").all() as {
+        ledger: string;
+        kind: string;
+        status: JobStatus;
+        n: number;
+      }[]
+    ).map((r) => ({ ...r, n: Number(r.n) }));
+  }
+
+  // ── Pagination ─────────────────────────────────────────────────────────
+
+  /**
+   * Routes sent (`RouteSent`), newest first, keyset-paginated: pass the previous page's `next` as `after`.
+   * Filters: origin ledger and (indexed) sender address.
+   */
+  routesPage(o: { ledger?: string; sender?: string; limit: number; after?: PageKey }): { items: IndexedEvent[]; next: PageKey | null } {
+    const where = ["name = 'RouteSent'"];
+    const args: (string | number)[] = [];
+    if (o.ledger) {
+      where.push("ledger = ?");
+      args.push(o.ledger);
+    }
+    // Sender is an indexed topic stored inside `args`; filter after the keyset scan, reading ahead in chunks.
+    const out: IndexedEvent[] = [];
+    let cursor = o.after;
+    const chunk = Math.max(o.limit + 1, 64);
+    for (;;) {
+      const w = cursor ? [...where, "(timestamp, ledger, block_number, log_index) < (?, ?, ?, ?)"] : where;
+      const a = cursor ? [...args, cursor.timestamp, cursor.ledger, cursor.blockNumber, cursor.logIndex] : args;
+      const rows = this.rowsToEvents(
+        this.db
+          // The partial index (migration 2) gives the order directly; without the hint SQLite picks events_name and
+          // sorts every RouteSent row per page.
+          .prepare(`SELECT * FROM events INDEXED BY events_route_sent WHERE ${w.join(" AND ")} ORDER BY timestamp DESC, ledger DESC, block_number DESC, log_index DESC LIMIT ?`)
+          .all(...a, chunk),
+      );
+      for (const e of rows) {
+        if (o.sender && String(e.args.sender).toLowerCase() !== o.sender.toLowerCase()) continue;
+        out.push(e);
+        if (out.length > o.limit) break;
+      }
+      if (out.length > o.limit || rows.length < chunk) break;
+      const last = rows[rows.length - 1]!;
+      cursor = { timestamp: last.timestamp, ledger: last.ledger, blockNumber: last.blockNumber, logIndex: last.logIndex };
+    }
+    const items = out.slice(0, o.limit);
+    const tail = items[items.length - 1];
+    const next = out.length > o.limit && tail ? { timestamp: tail.timestamp, ledger: tail.ledger, blockNumber: tail.blockNumber, logIndex: tail.logIndex } : null;
+    return { items, next };
+  }
+
+  /** Raw row of one job (PostgreSQL replication). */
+  protected jobRow(ledger: string, kind: string, key: string): Record<string, unknown> | undefined {
+    return this.db.prepare("SELECT * FROM trigger_jobs WHERE ledger = ? AND kind = ? AND key = ?").get(ledger, kind, key) as Record<string, unknown> | undefined;
+  }
+}
+
+/** Keyset position in the event order used by {@link Store.routesPage}. */
+export interface PageKey {
+  timestamp: number;
+  ledger: string;
+  blockNumber: number;
+  logIndex: number;
 }
