@@ -71,7 +71,8 @@ contract RouterHopTest is Committee {
         e.hops = _hops();
         e.hopIndex = 1;
         e.constraints.deadline = uint64(block.timestamp + 1 hours);
-        e.constraints.remainingFeeBudget = 20;
+        e.constraints.remainingFeeBudget = loose ? 0 : 20; // loose routes carry no value
+        if (loose) e.hops[1].fee = 0;
         e.constraints.loose = loose;
         e.payload = "data";
         e.routerVersion = 1;
@@ -397,6 +398,14 @@ contract RouterHopTest is Committee {
         e.constraints.deadline = 0;
         bytes memory held = RouteCodec.encodeEnvelope(e);
         vm.expectRevert(abi.encodeWithSelector(ClprRouter.InvalidRoute.selector, RouteTypes.Reason.DEADLINE));
+        svc.deliver(router, CH_AB, abi.encodePacked(routerA), held);
+    }
+
+    function test_looseEnvelopeWithFeeBudget_reverts() public {
+        RouteTypes.Envelope memory e = _env(true);
+        e.constraints.remainingFeeBudget = 1;
+        bytes memory held = RouteCodec.encodeEnvelope(e);
+        vm.expectRevert(abi.encodeWithSelector(RouteLogic.InvalidRoute.selector, RouteTypes.Reason.FEE_BUDGET));
         svc.deliver(router, CH_AB, abi.encodePacked(routerA), held);
     }
 

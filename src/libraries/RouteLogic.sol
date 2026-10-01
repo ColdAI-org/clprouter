@@ -15,8 +15,12 @@ import {Caip} from "./Caip.sol";
 library RouteLogic {
     error InvalidRoute(RouteTypes.Reason reason);
 
-    /// @notice At least one edge, at most min(max_hops, ABSOLUTE_MAX_HOPS) edges, and no ledger twice.
+    /// @notice At least one edge, at most min(max_hops, ABSOLUTE_MAX_HOPS) edges, no ledger twice, and no fee
+    ///         budget on a loose route (loose routes carry no value; see ClprRouter.send).
     function validateStructure(RouteTypes.Envelope memory e) public pure {
+        if (e.constraints.loose && e.constraints.remainingFeeBudget != 0) {
+            revert InvalidRoute(RouteTypes.Reason.FEE_BUDGET);
+        }
         uint256 n = e.hops.length;
         uint256 maxHops = e.constraints.maxHops == 0 ? RouteTypes.DEFAULT_MAX_HOPS : e.constraints.maxHops;
         if (maxHops > RouteTypes.ABSOLUTE_MAX_HOPS) maxHops = RouteTypes.ABSOLUTE_MAX_HOPS;

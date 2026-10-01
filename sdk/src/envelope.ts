@@ -107,7 +107,11 @@ export interface BuildEnvelopeInput {
   maxFeeUsd?: number;
   trustFloor?: TrustTier;
   maxHops?: number;
-  /** Default: strict for asset payloads, loose for data (spec recommendation). */
+  /**
+   * Loose routing lets hops re-route. Routers only accept it for routes that carry no value (no escrow, no fee
+   * budget, so every hop fee must be zero), because receipts of loose routes cannot be checked against a stored hop
+   * list. Default: loose for data routes without fees, strict otherwise.
+   */
   loose?: boolean;
   /** Energy cap in kgCO2e per transaction (encoded as µgCO2e, rounded up). Defaults to the plan's filter cap. */
   energyCapKgPerTx?: number;
@@ -234,6 +238,11 @@ export function buildEnvelope(input: BuildEnvelopeInput): ClprRouteEnvelope {
   const maxFee = usdToUnits(maxFeeUsd, input.feeUnit);
   const budget = maxFee > sumFees ? maxFee : sumFees;
 
+  const carriesValue = budget > 0n || payloadType === "asset";
+  if (input.loose && carriesValue) {
+    throw new Error("loose routing is only for routes without value: Routers reject loose routes with fees or assets");
+  }
+
   const capKg = input.energyCapKgPerTx ?? plan.energyCapKgPerTx;
   const energyCap = filters.includes("ENERGY") && capKg !== undefined ? kgToUg(capKg, "up") : 0n;
   if (filters.includes("ENERGY") && capKg !== undefined && energyCap === 0n) {
@@ -260,7 +269,7 @@ export function buildEnvelope(input: BuildEnvelopeInput): ClprRouteEnvelope {
       remaining_fee_budget: budget,
       trust_floor: trustFloor,
       max_hops: maxHops,
-      loose: input.loose ?? payloadType !== "asset",
+      loose: input.loose ?? !carriesValue,
       energy_cap: energyCap,
     },
     payload_type: payloadType,

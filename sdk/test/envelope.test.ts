@@ -76,7 +76,7 @@ describe("envelope builder", () => {
       remaining_fee_budget: 2_500_000n,
       trust_floor: "light-client",
       max_hops: 3,
-      loose: true, // data defaults to loose routing
+      loose: false, // the route has hop fees: value routes are strict
       energy_cap: 0n,
     });
     expect(env.payload_type).toBe("raw");
@@ -92,6 +92,17 @@ describe("envelope builder", () => {
     const env = buildEnvelope(input(planned({ mode: "reliable" }), { receiptPath: "reverse" }));
     expect(env.receipt_path.map((h) => h.ledger_id)).toEqual([B, H, A]);
     expect(env.receipt_path.map((h) => h.channel_id)).toEqual([env.hops[1]!.channel_id, env.hops[0]!.channel_id, "0x"]);
+  });
+
+  it("loose routing only for routes without value (Routers reject loose + value)", () => {
+    const p = planned({ mode: "reliable" });
+    expect(() => buildEnvelope(input(p, { loose: true }))).toThrow(/without value/);
+    expect(() => buildEnvelope(input(p, { loose: true, asset: { symbol: "USDC", micaClass: "EMT" } }))).toThrow(/without value/);
+    // A data route whose hops cost nothing on-chain may be loose, and is by default.
+    const free = buildEnvelope(input(p, { feeUnit: { nativeUsd: 1e30, decimals: 0 }, maxFeeUsd: 2 }));
+    expect(free.hops.map((h) => h.fee)).toEqual([0n, 0n, 0n]);
+    expect(free.constraints.remaining_fee_budget).toBe(0n);
+    expect(free.constraints.loose).toBe(true);
   });
 
   it("asset payloads default to strict routing", () => {

@@ -214,6 +214,42 @@ contract RouterFlowTest is ThreeLedgerFixture {
         _sendAs(alice, req, 1.1 ether);
     }
 
+    /// @dev Receipts of loose routes cannot be checked against a stored hop list, so loose routes carry no value:
+    ///      neither escrow nor a fee budget.
+    function test_send_looseRoutesCarryNoValue() public {
+        ClprRouter.SendRequest memory req = _request(0);
+        req.constraints.loose = true;
+        vm.expectRevert(ClprRouter.ValueRoutesMustBeStrict.selector);
+        _sendAs(alice, req, 0.03 ether); // fee budget only
+
+        vm.expectRevert(ClprRouter.ValueRoutesMustBeStrict.selector);
+        _sendAs(alice, req, 1 wei);
+
+        req = _request(1 ether);
+        req.constraints.loose = true;
+        req.hops[0].fee = 0;
+        req.hops[1].fee = 0;
+        vm.expectRevert(ClprRouter.ValueRoutesMustBeStrict.selector);
+        _sendAs(alice, req, 1 ether); // escrow only
+    }
+
+    function test_looseDataRoute_withoutValue_delivers() public {
+        ClprRouter.SendRequest memory req = _request(0);
+        req.constraints.loose = true;
+        req.hops[0].fee = 0;
+        req.hops[1].fee = 0;
+        bytes16 id = _sendAs(alice, req, 0);
+        _settle();
+        assertEq(uint8(_routeStatus(id)), uint8(ClprRouter.RouteStatus.DELIVERED));
+        assertEq(C.app.deliveredCount(), 1);
+
+        // A loose route whose hops still ask for fees cannot be paid from a zero budget.
+        req = _request(0);
+        req.constraints.loose = true;
+        vm.expectRevert(abi.encodeWithSelector(RouteLogic.InvalidRoute.selector, RouteTypes.Reason.FEE_BUDGET));
+        _sendAs(alice, req, 0);
+    }
+
     function test_send_revertsOnDuplicateRouteId() public {
         ClprRouter.SendRequest memory req = _request(0);
         req.routeId = bytes16(uint128(42));

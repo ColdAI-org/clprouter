@@ -238,7 +238,7 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
 
     /// @notice Send a routed message, optionally with an escrowed payment.
     /// @dev `msg.value = escrow + fee budget`. Reverts if the route is malformed, disabled or fails a filter
-    ///      (nothing moves). If the sender, recipient or payee is blacklisted the call succeeds but nothing is
+    ///      (nothing moves), or if a loose route carries any value ({ValueRoutesMustBeStrict}). If the sender, recipient or payee is blacklisted the call succeeds but nothing is
     ///      forwarded: all value goes to the quarantine vault and the route settles as QUARANTINED.
     /// @return routeId The route id.
     function send(SendRequest calldata req) external payable nonReentrant returns (bytes16 routeId) {
@@ -656,9 +656,12 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
 
     function _buildEnvelope(SendRequest calldata req, uint64 budget) private returns (RouteTypes.Envelope memory e) {
         if (req.payloadType == RouteTypes.PayloadType.RECEIPT) revert InvalidRoute(RouteTypes.Reason.BAD_ROUTE);
-        if (req.escrow > 0 && (req.constraints.loose || req.receiptPath.length > 0 || req.payee == address(0))) {
-            revert ValueRoutesMustBeStrict();
-        }
+        // Value routes are strict: the origin settles fees and escrow against the hop list it stored, which a
+        // loose route may change. So a loose route carries no value at all (no escrow and no fee budget).
+        if (
+            (req.constraints.loose && msg.value > 0)
+                || (req.escrow > 0 && (req.receiptPath.length > 0 || req.payee == address(0)))
+        ) revert ValueRoutesMustBeStrict();
         e.routeId = req.routeId == bytes16(0)
             ? bytes16(keccak256(abi.encodePacked(address(this), ledgerId, msg.sender, ++_nonce)))
             : req.routeId;
