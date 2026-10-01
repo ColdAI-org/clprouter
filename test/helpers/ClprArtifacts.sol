@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 // Pulls the reference CLPR logic modules into the build so `vm.getCode` (ClprDeployHelper) and the
