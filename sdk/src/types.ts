@@ -61,7 +61,7 @@ export interface Certification {
   /** Unix seconds from which the registry entry is effective, if known. */
   effectiveFrom?: number;
   /**
-   * Emissions per transaction (kgCO2e). Required for ENERGY; optional for MICA, where it is the sustainability
+   * Emissions per transaction (kgCO2e; on-chain the registry stores integer µgCO2e). Required for ENERGY; optional for MICA, where it is the sustainability
    * indicator disclosed in the registered white paper.
    */
   kgCO2ePerTx?: number;
@@ -194,6 +194,11 @@ export interface RouteGraphData {
   edges: Edge[];
   /** Router contract versions disabled by the provider. */
   disabledRouterVersions?: number[];
+  /**
+   * `ProviderRegistry.version()` (decision counter) the registry overlay was read at, if any. Pass it to
+   * `buildEnvelope` as `registryVersion` for filtered routes.
+   */
+  registryVersion?: number;
 }
 
 export interface Filters {

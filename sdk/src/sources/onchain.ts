@@ -10,6 +10,7 @@ import {
 } from "viem";
 import { RouteGraph, edgeId } from "../graph.js";
 import type { Caip2, Certification, ChannelStatus, Edge, FilterLabel, RouteGraphData } from "../types.js";
+import { ugToKg } from "../filters.js";
 import type { GraphSource } from "./static.js";
 
 /** Live Channel state read from a ledger's CLPR service. */
@@ -26,6 +27,11 @@ export interface ConnectorState {
 
 /** Provider registry state (certifications, route-safety switches). One decision applies on every ledger. */
 export interface RegistryState {
+  /**
+   * `ProviderRegistry.version()`: the decision counter (not a timestamp). Pass it to `buildEnvelope` as
+   * `registryVersion`; Routers read certifications as of this version.
+   */
+  version?: bigint;
   certifications: Record<Caip2, Partial<Record<FilterLabel, Certification>>>;
   disabledLedgers: Caip2[];
   /** Edge ids (see `edgeId`). */
@@ -89,6 +95,7 @@ export class OnChainGraphSource implements GraphSource {
       const disabled = new Set(reg.disabledEdges);
       for (const e of data.edges) if (disabled.has(edgeId(e))) e.disabled = true;
       data.disabledRouterVersions = [...new Set([...(data.disabledRouterVersions ?? []), ...reg.disabledRouterVersions])];
+      if (reg.version !== undefined) data.registryVersion = Number(reg.version);
     }
     data.asOf = new Date().toISOString();
     return new RouteGraph(data);
@@ -147,6 +154,26 @@ export const REGISTRY_ABI = [
   },
   {
     type: "function",
+    name: "version",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint64" }],
+  },
+  {
+    type: "function",
+    name: "certificationAt",
+    stateMutability: "view",
+    inputs: [
+      { name: "certKey", type: "bytes32" },
+      { name: "atVersion", type: "uint64" },
+    ],
+    outputs: [
+      { name: "certified", type: "bool" },
+      { name: "emissionsUg", type: "uint64" },
+    ],
+  },
+  {
+    type: "function",
     name: "certificationLog",
     stateMutability: "view",
     inputs: [{ name: "certKey", type: "bytes32" }],
@@ -154,11 +181,13 @@ export const REGISTRY_ABI = [
       {
         name: "",
         type: "tuple[]",
+        // ProviderRegistry.Certification, in declaration order.
         components: [
+          { name: "version", type: "uint64" }, // registry version that appended the entry
           { name: "effectiveFrom", type: "uint64" },
           { name: "expiry", type: "uint64" },
           { name: "certified", type: "bool" },
-          { name: "emissions", type: "uint64" }, // gCO2e per transaction, ENERGY only
+          { name: "emissionsUg", type: "uint64" }, // µgCO2e per transaction, ENERGY only
           { name: "evidenceHash", type: "bytes32" },
         ],
       },
@@ -242,6 +271,9 @@ export class ViemOnChainReader implements OnChainReader {
     const client = this.cfg.ledgers[r.ledger]?.client;
     if (!client) return undefined;
     const now = Math.floor((this.cfg.now?.() ?? new Date()).getTime() / 1000);
+    // Read the version first: every entry read below was appended at or before it, so the snapshot is
+    // consistent with the version a route sent now would pin (entries appended later are ignored).
+    const version = await client.readContract({ address: r.address, abi: REGISTRY_ABI, functionName: "version" });
     const disabled = (key: Hex) =>
       client.readContract({ address: r.address, abi: REGISTRY_ABI, functionName: "isDisabled", args: [key] });
 
@@ -256,15 +288,16 @@ export class ViemOnChainReader implements OnChainReader {
           functionName: "certificationLog",
           args: [registryKeys.cert(id, label)],
         });
-        // The entry in effect now is the last one whose effectiveFrom has passed (the log is time-ordered).
-        const entry = [...log].reverse().find((c) => Number(c.effectiveFrom) <= now);
+        // As `certificationAt(key, version)`: the last entry appended at or before `version` whose notice period
+        // has passed (the log is ordered by version and by effective time).
+        const entry = [...log].reverse().find((c) => c.version <= version && Number(c.effectiveFrom) <= now);
         if (!entry) continue;
         certs[label] = {
           status: entry.certified ? "full" : "revoked",
           expiresAt: new Date(Number(entry.expiry) * 1000).toISOString(),
           evidenceHash: entry.evidenceHash,
           effectiveFrom: Number(entry.effectiveFrom),
-          kgCO2ePerTx: label === "ENERGY" && entry.emissions > 0n ? Number(entry.emissions) / 1000 : undefined,
+          kgCO2ePerTx: label === "ENERGY" && entry.emissionsUg > 0n ? ugToKg(entry.emissionsUg) : undefined,
           source: { kind: "on-chain", ref: `ProviderRegistry ${r.address} on ${r.ledger}` },
         };
       }
@@ -279,6 +312,6 @@ export class ViemOnChainReader implements OnChainReader {
     for (const v of this.cfg.routerVersions ?? []) {
       if (await disabled(registryKeys.routerVersion(v))) disabledRouterVersions.push(v);
     }
-    return { certifications, disabledLedgers, disabledEdges, disabledRouterVersions };
+    return { version, certifications, disabledLedgers, disabledEdges, disabledRouterVersions };
   }
 }

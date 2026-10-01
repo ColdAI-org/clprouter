@@ -5,6 +5,26 @@ export interface ActiveFilters {
   energyCapKgPerTx?: number;
 }
 
+/** Micrograms per kilogram: the on-chain unit of emissions figures and the Energy cap is µgCO2e per transaction. */
+export const UG_PER_KG = 1_000_000_000;
+
+/**
+ * kgCO2e → integer µgCO2e, the unit of `ProviderRegistry` emissions figures and of the envelope's `energy_cap`.
+ * `up` rounds a cap so it never becomes stricter than asked; `nearest` rounds a certified figure. A relative
+ * tolerance absorbs binary floating-point noise (0.0105 kg is 10_500_000 µg, not 10_500_001).
+ */
+export function kgToUg(kg: number, round: "up" | "nearest" = "nearest"): bigint {
+  if (!(kg >= 0) || !Number.isFinite(kg)) throw new Error(`invalid emissions figure ${kg}`);
+  const ug = kg * UG_PER_KG;
+  if (round === "nearest") return BigInt(Math.round(ug));
+  return BigInt(Math.ceil(ug - 1e-9 * Math.max(1, ug)));
+}
+
+/** Integer µgCO2e → kgCO2e. */
+export function ugToKg(ug: bigint | number): number {
+  return Number(ug) / UG_PER_KG;
+}
+
 export function activeFilters(f: Filters | undefined): ActiveFilters {
   const labels: FilterLabel[] = [];
   let energyCapKgPerTx: number | undefined;
@@ -51,7 +71,11 @@ export function ledgerFilterFailures(ledger: Ledger, filters: ActiveFilters, mod
     if (label === "ENERGY") {
       if (c.kgCO2ePerTx === undefined) {
         fails.push(`ENERGY: ${ledger.id} certification carries no emissions figure`);
-      } else if (filters.energyCapKgPerTx !== undefined && c.kgCO2ePerTx > filters.energyCapKgPerTx) {
+      } else if (
+        filters.energyCapKgPerTx !== undefined &&
+        // Same integer comparison as the Router: certified µg figure > cap in µg (rounded up, as in the envelope).
+        kgToUg(c.kgCO2ePerTx) > kgToUg(filters.energyCapKgPerTx, "up")
+      ) {
         fails.push(
           `ENERGY: ${ledger.id} emits ${c.kgCO2ePerTx} kgCO2e/tx, above the cap of ${filters.energyCapKgPerTx}`,
         );

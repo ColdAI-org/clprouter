@@ -1,5 +1,6 @@
 import type { Hex, LocalAccount } from "viem";
 import { bytesToHex, hexToBytes, isHex, keccak256, recoverMessageAddress, stringToBytes } from "viem";
+import { kgToUg } from "./filters.js";
 import type { PlanSuccess } from "./planner.js";
 import { ProtoWriter, fieldString, readFields } from "./proto.js";
 import type { RouteQuote } from "./quote.js";
@@ -47,13 +48,16 @@ export interface RouteConstraints {
   max_hops: number;
   /** false = strict source routing; true = hops may re-route. */
   loose: boolean;
-  /** Energy filter cap, gCO2e per transaction (0 = no cap). */
+  /** Energy filter cap in µgCO2e (micrograms) per transaction, the registry's unit (0 = no cap). */
   energy_cap: bigint;
 }
 
 export interface FilterRegistryVersion {
   filter: FilterLabel;
-  /** Registry effective-time cursor (unix seconds) the route was planned against. */
+  /**
+   * `ProviderRegistry.version()` the route was checked against: the registry's decision counter (one per applied
+   * committee decision, identical on every ledger), not a timestamp. The origin Router stamps it at `send`.
+   */
   version: bigint;
 }
 
@@ -105,8 +109,14 @@ export interface BuildEnvelopeInput {
   maxHops?: number;
   /** Default: strict for asset payloads, loose for data (spec recommendation). */
   loose?: boolean;
-  /** Energy cap in kgCO2e per transaction (encoded as grams, rounded up). Defaults to the plan's filter cap. */
+  /** Energy cap in kgCO2e per transaction (encoded as µgCO2e, rounded up). Defaults to the plan's filter cap. */
   energyCapKgPerTx?: number;
+  /**
+   * `ProviderRegistry.version()` on the origin ledger (e.g. `RegistryState.version` from `ViemOnChainReader`).
+   * Required when a filter is active: it is pinned into `filter_registry_versions`, mirroring what the origin
+   * Router stamps at `send`.
+   */
+  registryVersion?: bigint;
   /** `reverse` writes the reversed hops; `auto` (default) leaves the path empty, which Routers read as reverse hops. */
   receiptPath?: "auto" | "reverse";
   /** CLPRouter deployment per ledger, pinned into the hops. */
@@ -225,7 +235,14 @@ export function buildEnvelope(input: BuildEnvelopeInput): ClprRouteEnvelope {
   const budget = maxFee > sumFees ? maxFee : sumFees;
 
   const capKg = input.energyCapKgPerTx ?? plan.energyCapKgPerTx;
-  const energyCap = filters.includes("ENERGY") && capKg !== undefined ? BigInt(Math.ceil(capKg * 1000)) : 0n;
+  const energyCap = filters.includes("ENERGY") && capKg !== undefined ? kgToUg(capKg, "up") : 0n;
+  if (filters.includes("ENERGY") && capKg !== undefined && energyCap === 0n) {
+    throw new Error("ENERGY cap rounds to 0 µgCO2e, which the Router reads as no cap");
+  }
+  if (filters.length > 0 && input.registryVersion === undefined) {
+    throw new Error("filters are active: pass registryVersion (ProviderRegistry.version() on the origin ledger)");
+  }
+  if (input.registryVersion !== undefined && input.registryVersion < 0n) throw new Error("registryVersion must be >= 0");
 
   return {
     route_id: routeId,
@@ -262,7 +279,7 @@ export function buildEnvelope(input: BuildEnvelopeInput): ClprRouteEnvelope {
           }))
         : [],
     origin_signature: "0x",
-    filter_registry_versions: filters.map((f) => ({ filter: f, version: BigInt(plan.plannedAt) })),
+    filter_registry_versions: filters.map((f) => ({ filter: f, version: input.registryVersion! })),
     router_version: input.routerVersion ?? 1,
   };
 }
@@ -293,12 +310,20 @@ function bitsToFilters(bits: number): FilterLabel[] {
   return (["ISO20022", "MICA", "ENERGY"] as FilterLabel[]).filter((f) => bits & FILTER_BIT[f]);
 }
 
+/**
+ * Fixed-length ids (route_id, channel_id, connector_id) are `bytes16` / `bytes32` in Solidity, where all zeros means
+ * "absent" and is omitted on the wire. Treat an all-zero id the same way so both codecs emit identical bytes.
+ */
+function idField(v: Hex): Hex {
+  return /^0x0*$/.test(v) ? "0x" : v;
+}
+
 function hopWriter(h: RouteHop): ProtoWriter {
   return new ProtoWriter()
     .string(1, h.ledger_id)
     .bytes(2, h.router)
-    .bytes(3, h.channel_id)
-    .bytes(4, h.connector_id)
+    .bytes(3, idField(h.channel_id))
+    .bytes(4, idField(h.connector_id))
     .uint(5, h.fee)
     .bytes(6, h.fee_payee);
 }
@@ -307,7 +332,7 @@ function hopWriter(h: RouteHop): ProtoWriter {
 export function encodeEnvelope(env: ClprRouteEnvelope): Hex {
   const c = env.constraints;
   const w = new ProtoWriter()
-    .bytes(1, env.route_id)
+    .bytes(1, idField(env.route_id))
     .message(2, new ProtoWriter().string(1, env.origin.ledger_id).bytes(2, env.origin.application))
     .message(3, new ProtoWriter().string(1, env.destination.ledger_id).bytes(2, env.destination.application))
     .string(4, env.sender)

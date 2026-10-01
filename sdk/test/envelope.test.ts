@@ -100,43 +100,59 @@ describe("envelope builder", () => {
     expect(env.constraints.loose).toBe(false);
   });
 
-  it("ISO 20022: route id is the UETR, payload_type iso20022, registry pinned to the planning time", () => {
+  it("ISO 20022: route id is the UETR, payload_type iso20022, registry pinned to the registry version", () => {
     const p = planned({ mode: "fastest", filters: { iso20022: true } });
-    const env = buildEnvelope(input(p, { payload: HASH, payloadProtection: "hash" }));
+    const env = buildEnvelope(input(p, { payload: HASH, payloadProtection: "hash", registryVersion: 42n }));
     expect(env.payload_type).toBe("iso20022");
     const uetr = envelopeUetr(env)!;
     expect(uetr).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(uetr).toBe(routeIdToUuid(env.route_id));
     expect(env.constraints.filters).toEqual(["ISO20022"]);
-    expect(env.filter_registry_versions).toEqual([{ filter: "ISO20022", version: NOW_S }]);
+    // ProviderRegistry.version() is a decision counter, not the planning time.
+    expect(env.filter_registry_versions).toEqual([{ filter: "ISO20022", version: 42n }]);
     expect(env.hops.map((h) => h.ledger_id)).toEqual([A, Y, B]);
   });
 
   it("ISO 20022 refuses plaintext payloads, wrong payload types and non-UUIDv4 route ids", () => {
     const p = planned({ mode: "fastest", filters: { iso20022: true } });
-    expect(() => buildEnvelope(input(p))).toThrow(/never plaintext/);
-    expect(() => buildEnvelope(input(p, { payloadType: "raw", payloadProtection: "ciphertext" }))).toThrow(/iso20022/);
-    expect(() => buildEnvelope(input(p, { payload: HASH, payloadProtection: "hash", routeId: `0x${"00".repeat(16)}` }))).toThrow(
-      /UUIDv4/,
-    );
-    expect(() => buildEnvelope(input(p, { payload: "0x12", payloadProtection: "hash" }))).toThrow(/32 bytes/);
+    expect(() => buildEnvelope(input(p, { registryVersion: 1n }))).toThrow(/never plaintext/);
+    expect(() => buildEnvelope(input(p, { payloadType: "raw", payloadProtection: "ciphertext", registryVersion: 1n }))).toThrow(/iso20022/);
+    expect(() =>
+      buildEnvelope(input(p, { payload: HASH, payloadProtection: "hash", routeId: `0x${"00".repeat(16)}`, registryVersion: 1n })),
+    ).toThrow(/UUIDv4/);
+    expect(() => buildEnvelope(input(p, { payload: "0x12", payloadProtection: "hash", registryVersion: 1n }))).toThrow(/32 bytes/);
   });
 
   it("MiCA refuses stablecoins that are not EMTs or ARTs", () => {
     const p = planned({ mode: "cheapest", filters: { mica: true } });
-    expect(() => buildEnvelope(input(p, { asset: { symbol: "USDT", micaClass: "other" }, payloadProtection: "ciphertext" }))).toThrow(
+    const v = { registryVersion: 7n };
+    expect(() => buildEnvelope(input(p, { ...v, asset: { symbol: "USDT", micaClass: "other" }, payloadProtection: "ciphertext" }))).toThrow(
       /USDT is not a MiCA-authorised EMT or ART/,
     );
-    const env = buildEnvelope(input(p, { asset: { symbol: "EURC", micaClass: "EMT" }, payloadProtection: "ciphertext" }));
-    expect(env.filter_registry_versions).toEqual([{ filter: "MICA", version: NOW_S }]);
-    expect(() => buildEnvelope(input(p, { asset: { symbol: "EURC", micaClass: "EMT" } }))).toThrow(/plaintext/);
+    const env = buildEnvelope(input(p, { ...v, asset: { symbol: "EURC", micaClass: "EMT" }, payloadProtection: "ciphertext" }));
+    expect(env.filter_registry_versions).toEqual([{ filter: "MICA", version: 7n }]);
+    expect(() => buildEnvelope(input(p, { ...v, asset: { symbol: "EURC", micaClass: "EMT" } }))).toThrow(/plaintext/);
   });
 
-  it("ENERGY cap is carried in grams, rounded up", () => {
+  it("filtered routes need the registry version (never a timestamp fallback)", () => {
+    const p = planned({ mode: "cheapest", filters: { mica: true } });
+    expect(() => buildEnvelope(input(p, { payloadProtection: "ciphertext" }))).toThrow(/registryVersion/);
+    // Unfiltered routes pin nothing and need no version.
+    expect(buildEnvelope(input(planned())).filter_registry_versions).toEqual([]);
+  });
+
+  it("ENERGY cap is carried in µgCO2e (the registry's unit), rounded up", () => {
     const p = planned({ mode: "greenest", filters: { mica: true, energy: { capKgPerTx: 0.0105 } } });
-    const env = buildEnvelope(input(p, { payloadProtection: "ciphertext" }));
+    const env = buildEnvelope(input(p, { payloadProtection: "ciphertext", registryVersion: 3n }));
     expect(env.constraints.filters).toEqual(["MICA", "ENERGY"]);
-    expect(env.constraints.energy_cap).toBe(11n);
+    expect(env.constraints.energy_cap).toBe(10_500_000n); // 0.0105 kg = 10.5 g = 10_500_000 µg
+    expect(env.filter_registry_versions).toEqual([
+      { filter: "MICA", version: 3n },
+      { filter: "ENERGY", version: 3n },
+    ]);
+    // Rounded up, never stricter than asked: 2.4e-9 kg = 2.4 µg -> 3 µg.
+    expect(buildEnvelope(input(p, { payloadProtection: "ciphertext", registryVersion: 3n, energyCapKgPerTx: 2.4e-9 })).constraints.energy_cap).toBe(3n);
+    expect(() => buildEnvelope(input(p, { payloadProtection: "ciphertext", registryVersion: 3n, energyCapKgPerTx: 0 }))).toThrow(/no cap/);
   });
 
   it("checks sender and recipient CAIP-10 ids against the route ends", () => {
@@ -179,6 +195,7 @@ describe("protobuf codec", () => {
         receiptPath: "reverse",
         feePayees: { 0: "0x00000000000000000000000000000000000000fe" },
         routerVersion: 3,
+        registryVersion: 12n,
       }),
     );
   }

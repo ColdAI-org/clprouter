@@ -84,11 +84,13 @@ describe("OnChainGraphSource", () => {
       disabledEdges: [ID(A, X)],
       disabledLedgers: ["test:z"],
       disabledRouterVersions: [2],
+      version: 9n,
     };
     const g = await new OnChainGraphSource(base, reader).load();
     expect(g.edge(ID(A, X)).disabled).toBe(true);
     expect(g.ledger("test:z").disabled).toBe(true);
     expect(g.data.disabledRouterVersions).toEqual([2]);
+    expect(g.data.registryVersion).toBe(9);
     const iso = plan(g, { origin: A, destination: B, mode: "cheapest", filters: { iso20022: true }, now: NOW });
     expect(iso.ok && iso.route.ledgers).toEqual([A, "test:y", B]); // the hub lost its ISO listing
   });
@@ -132,20 +134,23 @@ describe("ViemOnChainReader", () => {
       return parseEther("12.5");
     },
     async readContract({ functionName, args }: { functionName: string; args: [Hex] }) {
+      if (functionName === "version") return 6n;
       if (functionName === "isDisabled") {
         return [registryKeys.ledger(X), registryKeys.edge(CH, H), registryKeys.routerVersion(2)].includes(args[0]);
       }
       if (functionName === "certificationLog") {
         if (args[0] === registryKeys.cert(H, "ENERGY")) {
           return [
-            { effectiveFrom: 100n, expiry: 1830297600n, certified: true, emissions: 5n, evidenceHash: pad("0xee") },
-            { effectiveFrom: 200n, expiry: 1830297600n, certified: true, emissions: 3n, evidenceHash: pad("0xef") },
+            { version: 1n, effectiveFrom: 100n, expiry: 1830297600n, certified: true, emissionsUg: 5_000_000n, evidenceHash: pad("0xee") },
+            { version: 4n, effectiveFrom: 200n, expiry: 1830297600n, certified: true, emissionsUg: 3_000_000n, evidenceHash: pad("0xef") },
             // Scheduled after "now": not in effect yet.
-            { effectiveFrom: 9_999_999_999n, expiry: 9_999_999_999n, certified: false, emissions: 0n, evidenceHash: pad("0xf0") },
+            { version: 5n, effectiveFrom: 9_999_999_999n, expiry: 9_999_999_999n, certified: false, emissionsUg: 0n, evidenceHash: pad("0xf0") },
+            // Appended after the version read below (a racing decision): ignored, as the Router would.
+            { version: 7n, effectiveFrom: 150n, expiry: 1830297600n, certified: true, emissionsUg: 1n, evidenceHash: pad("0xf1") },
           ];
         }
         if (args[0] === registryKeys.cert(H, "MICA")) {
-          return [{ effectiveFrom: 100n, expiry: 1830297600n, certified: false, emissions: 0n, evidenceHash: pad("0xaa") }];
+          return [{ version: 2n, effectiveFrom: 100n, expiry: 1830297600n, certified: false, emissionsUg: 0n, evidenceHash: pad("0xaa") }];
         }
         return [];
       }
@@ -175,7 +180,7 @@ describe("ViemOnChainReader", () => {
     const s = (await reader.registryState())!;
     expect(s.certifications[H]!.ENERGY).toMatchObject({
       status: "full",
-      kgCO2ePerTx: 0.003, // 3 gCO2e/tx, the latest entry already in effect
+      kgCO2ePerTx: 0.003, // 3_000_000 µgCO2e/tx = 3 g, the latest entry already in effect at version 6
       effectiveFrom: 200,
       evidenceHash: pad("0xef"),
     });
@@ -184,6 +189,7 @@ describe("ViemOnChainReader", () => {
     expect(s.disabledLedgers).toEqual([X]);
     expect(s.disabledEdges).toEqual([edgeId(edge)]);
     expect(s.disabledRouterVersions).toEqual([2]);
+    expect(s.version).toBe(6n);
   });
 
   it("derives the same keys as Caip.sol", () => {
