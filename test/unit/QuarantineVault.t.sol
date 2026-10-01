@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {ProviderRegistry} from "@clprouter/ProviderRegistry.sol";
@@ -37,7 +37,7 @@ contract QuarantineVaultTest is Committee {
     {
         d = _decision(reg, action, payload);
         d.nonce = ++vaultNonce; // vault decisions keep their own replay set
-        sigs = _sign(d, K);
+        sigs = _sign(address(vault), d, reg.requiredSignatures(action));
     }
 
     function _release(uint256 id, bytes32 caseId, QuarantineVault.Beneficiary kind) internal {
@@ -67,6 +67,72 @@ contract QuarantineVaultTest is Committee {
         assertEq(rc, recipient);
         assertEq(amt, 1 ether);
         assertFalse(rel);
+    }
+
+    function test_constructor_enforcesMinimumWindows() public {
+        vm.expectRevert(QuarantineVault.InvalidParameters.selector);
+        new QuarantineVault(IProviderRegistry(address(reg)), 0, CHALLENGE_WINDOW);
+        vm.expectRevert(QuarantineVault.InvalidParameters.selector);
+        new QuarantineVault(IProviderRegistry(address(reg)), RECOVERY_NOTICE, 3 days - 1);
+        vm.expectRevert(QuarantineVault.InvalidParameters.selector);
+        new QuarantineVault(IProviderRegistry(address(0)), RECOVERY_NOTICE, CHALLENGE_WINDOW);
+    }
+
+    function test_bindRouter_onceWithKPlusOne_thenOnlyRouterDeposits() public {
+        address router = makeAddr("router");
+        IProviderRegistry.Decision memory d = _decision(reg, 12, abi.encode(router));
+        d.nonce = ++vaultNonce;
+        bytes[] memory few = _sign(address(vault), d, K);
+        vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.InsufficientSignatures.selector, K, K + 1));
+        vault.bindRouter(d, few);
+        vault.bindRouter(d, _sign(address(vault), d, K + 1));
+        assertEq(vault.router(), router);
+
+        vm.deal(address(this), 1 ether);
+        vm.expectRevert(QuarantineVault.NotRouter.selector);
+        vault.deposit{value: 1 ether}(ROUTE, CASE, sender, recipient);
+        vm.deal(router, 1 ether);
+        vm.prank(router);
+        vault.deposit{value: 1 ether}(ROUTE, CASE, sender, recipient);
+
+        (IProviderRegistry.Decision memory d2, bytes[] memory s2) = _vaultDecision(12, abi.encode(address(this)));
+        vm.expectRevert(QuarantineVault.AlreadyBound.selector);
+        vault.bindRouter(d2, s2);
+    }
+
+    function test_decisionsBindToThisVault() public {
+        QuarantineVault other = new QuarantineVault(IProviderRegistry(address(reg)), RECOVERY_NOTICE, CHALLENGE_WINDOW);
+        uint256 id = _deposit(1 ether);
+        vm.deal(address(this), 1 ether);
+        other.deposit{value: 1 ether}(ROUTE, CASE, sender, recipient);
+        (IProviderRegistry.Decision memory d, bytes[] memory sigs) =
+            _vaultDecision(A_VAULT_RELEASE, abi.encode(id, CASE, uint8(0)));
+        assertTrue(vault.decisionDigest(d) != other.decisionDigest(d));
+        vm.expectRevert(ProviderRegistry.BadSignature.selector);
+        other.release(d, sigs);
+        vault.release(d, sigs);
+    }
+
+    function test_release_waitsForEffectiveAt() public {
+        uint256 id = _deposit(1 ether);
+        IProviderRegistry.Decision memory d = _decision(reg, A_VAULT_RELEASE, abi.encode(id, CASE, uint8(0)));
+        d.nonce = ++vaultNonce;
+        d.effectiveAt = uint64(block.timestamp + 2 days);
+        d.validUntil = uint64(block.timestamp + 3 days);
+        bytes[] memory sigs = _sign(address(vault), d, K);
+        vm.expectRevert(QuarantineVault.NotYetEffective.selector);
+        vault.release(d, sigs);
+        vm.warp(d.effectiveAt);
+        vault.release(d, sigs);
+        assertEq(sender.balance, 1 ether);
+    }
+
+    function test_nameRecovery_needsKPlusOne() public {
+        IProviderRegistry.Decision memory d = _decision(reg, A_VAULT_NAME_RECOVERY, abi.encode(CASE, recovery));
+        d.nonce = ++vaultNonce;
+        bytes[] memory sigs = _sign(address(vault), d, K);
+        vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.InsufficientSignatures.selector, K, K + 1));
+        vault.nameRecovery(d, sigs);
     }
 
     function test_deposit_requiresCaseAndFunds() public {
@@ -121,7 +187,7 @@ contract QuarantineVaultTest is Committee {
     function test_release_insufficientSignatures() public {
         uint256 id = _deposit(1 ether);
         IProviderRegistry.Decision memory d = _decision(reg, A_VAULT_RELEASE, abi.encode(id, CASE, uint8(0)));
-        bytes[] memory sigs = _sign(d, K - 1);
+        bytes[] memory sigs = _sign(address(vault), d, K - 1);
         vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.InsufficientSignatures.selector, K - 1, K));
         vault.release(d, sigs);
     }
@@ -190,6 +256,49 @@ contract QuarantineVaultTest is Committee {
         // the original parties can still be paid
         _release(id, CASE, QuarantineVault.Beneficiary.RECIPIENT);
         assertEq(recipient.balance, 1 ether);
+    }
+
+    function test_recovery_challengePersists_overrideNeedsSupermajorityAndSecondWindow() public {
+        uint256 id = _deposit(1 ether);
+        uint256 other = _deposit(1 ether);
+        _nameRecovery(recovery);
+        vm.prank(sender);
+        vault.challengeRecovery(id, keccak256("objection"));
+        _nameRecovery(recovery); // naming the same address again does not lift the challenge
+        assertGt(vault.challengedAt(id, recovery), 0);
+        vm.warp(block.timestamp + RECOVERY_NOTICE + CHALLENGE_WINDOW);
+        (IProviderRegistry.Decision memory d, bytes[] memory sigs) =
+            _vaultDecision(A_VAULT_RELEASE, abi.encode(id, CASE, uint8(2)));
+        vm.expectRevert(QuarantineVault.RecoveryNotReady.selector);
+        vault.release(d, sigs);
+        // The challenge is scoped to the challenger's own deposit.
+        _release(other, CASE, QuarantineVault.Beneficiary.RECOVERY);
+        assertEq(recovery.balance, 1 ether);
+
+        // Override: kind 3, supermajority, and only after one more window.
+        IProviderRegistry.Decision memory o = _decision(reg, A_VAULT_RELEASE, abi.encode(id, CASE, uint8(3)));
+        o.nonce = ++vaultNonce;
+        o.validUntil = uint64(block.timestamp + 30 days);
+        bytes[] memory kp1 = _sign(address(vault), o, K);
+        vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.InsufficientSignatures.selector, K, K + 1));
+        vault.release(o, kp1);
+        bytes[] memory sup = _sign(address(vault), o, reg.requiredSignatures(7));
+        vm.expectRevert(QuarantineVault.RecoveryNotReady.selector);
+        vault.release(o, sup);
+        vm.warp(block.timestamp + CHALLENGE_WINDOW);
+        vault.release(o, sup);
+        assertEq(recovery.balance, 2 ether);
+    }
+
+    function test_recovery_overrideOnlyForChallengedDeposit() public {
+        uint256 id = _deposit(1 ether);
+        _nameRecovery(recovery);
+        vm.warp(block.timestamp + RECOVERY_NOTICE + 2 * CHALLENGE_WINDOW);
+        IProviderRegistry.Decision memory d = _decision(reg, A_VAULT_RELEASE, abi.encode(id, CASE, uint8(3)));
+        d.nonce = ++vaultNonce;
+        bytes[] memory sigs = _sign(address(vault), d, reg.requiredSignatures(7));
+        vm.expectRevert(QuarantineVault.NotChallenged.selector);
+        vault.release(d, sigs);
     }
 
     function test_recovery_challengeAfterWindowRejected() public {

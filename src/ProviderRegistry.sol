@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
@@ -10,28 +10,43 @@ import {Caip} from "./libraries/Caip.sol";
 ///         filters; label Channel directions with their verifier trust tier (read by Routers to enforce a route's
 ///         trust floor); disable and re-enable malicious routes (a Channel direction, a ledger, a Router deployment
 ///         or a Router version); and blacklist CAIP-10 accounts after an exploit.
-/// @dev Append-only and admin-less. A decision is signed once off-chain by k of n committee members over a
-///      ledger-independent digest, and anyone can relay it to the registry on any ledger. Rules:
+/// @dev Append-only and admin-less. A decision is signed once off-chain by committee members over an EIP-712-style
+///      digest bound to `DEPLOYMENT_ID` (one CLPRouter deployment, shared by every ledger it runs on), so anyone
+///      can relay it to the registry on every ledger of that deployment and on no other deployment. Rules:
 ///        - certification changes (k signatures) take effect after a notice period
-///          (`CERT_NOTICE` to certify, `REMOVAL_NOTICE` to uncertify); certifications last at most a year;
+///          (`CERT_NOTICE` to certify, `REMOVAL_NOTICE` to uncertify); certifications last at most a year; the
+///          newest decision in effect wins, so an uncertify is never held back by an earlier, later-dated certify;
 ///        - trust-tier labels (k signatures) take effect after `CERT_NOTICE` when they raise an edge's tier and
 ///          after `REMOVAL_NOTICE` when they lower or remove it. A label only describes an edge: it moves no
 ///          funds, and a lowered label can at most stop routes whose floor it no longer meets (they are refunded);
 ///        - disables and blacklist entries need k + 1 signatures, take effect immediately, and lapse after
 ///          `DISABLE_LAPSE` / `BLACKLIST_LAPSE` unless renewed by a new decision;
-///        - re-enabling (k) takes effect after `REENABLE_NOTICE`; delisting (k) is immediate;
-///        - committee changes are signed by the current committee (k) and bump the epoch, which invalidates
-///          every decision signed by the previous committee that has not been relayed yet.
+///        - delisting needs k + 1 (the quorum that listed); re-enabling (k) takes effect after `REENABLE_NOTICE`,
+///          during which a k + 1 renewal of the disable cancels it;
+///        - committee changes are the strongest decision: a supermajority of the current committee
+///          (at least k + 1 and at least ceil(2n/3)) schedules the new committee, which takes over only after
+///          `COMMITTEE_NOTICE` (visible on-chain via {pendingCommittee}) and with the first decision it signs.
+///          Every committee keeps n >= 3, k >= 2 and k > n / 2. Until then the outgoing committee keeps acting
+///          and can replace the pending change with another supermajority decision; once the notice has
+///          passed, it needs a supermajority for everything, so k outgoing keys cannot stall the hand-over.
+///      Residual risk: a supermajority of the current committee can install any committee after the notice period.
+///      The notice makes that visible; nothing on-chain can stop it.
 ///
-///      Registry version. Every applied decision increments {version}, and decisions must be relayed in nonce
-///      order (`nonce == version + 1`), so every ledger's registry passes through the same sequence of versions
-///      and a version number names the same registry state on every ledger. A route pins the version it was
-///      sent against (`filter_registry_versions`); each hop reads certifications as of that version. Effective
-///      time is a separate, second condition: an entry visible at the pinned version applies only once its
-///      notice period has passed (and until its expiry). To keep the sequence from ever getting stuck, handlers
-///      whose effect depends on local state (re-enable something not disabled, delist an entry that already
-///      lapsed) apply as no-ops instead of reverting; a malformed or expired decision is replaced by the
-///      committee signing a new decision with the same nonce.
+///      Decision chain. Decisions form a hash chain: decision N commits (in its digest) to the head hash after
+///      decision N - 1, and is accepted only as `nonce == version + 1` on a registry whose head is that hash. So a
+///      position can only ever be filled by the one decision that extends the current head, and version N names
+///      one registry history everywhere; {headAt} exposes version -> head hash so anyone can check that two
+///      ledgers agree before trusting a pinned version. Nothing that depends on relay time or local state makes a
+///      decision revert: `validUntil` is not enforced for these ordered decisions (a signed decision is final and
+///      must be relayed to every ledger), effective times are recorded with the decision and evaluated when read,
+///      certification expiry is clamped instead of rejected, and handlers whose effect depends on local state
+///      (re-enable something not disabled, delist an entry that already lapsed) apply as no-ops. The only checks
+///      that can fail are on signed values alone (so they fail on every ledger alike), plus
+///      `effectiveAt <= now + MAX_NOTICE`, which a later relay only relaxes.
+///
+///      A route pins the version it was sent against (`filter_registry_versions`); each hop reads certifications
+///      as of that version. Effective time is a separate, second condition: an entry visible at the pinned version
+///      applies only once its notice period has passed (and until its expiry).
 ///
 ///      History is never rewritten: each (ledger, label) keeps its full certification log, so every past
 ///      version stays readable.
@@ -50,7 +65,8 @@ contract ProviderRegistry is IProviderRegistry {
         CONTACT, // (string contact)
         VAULT_RELEASE, // verified by QuarantineVault, never accepted here
         VAULT_NAME_RECOVERY, // verified by QuarantineVault, never accepted here
-        TRUST_TIER // (bytes32 channelId, string toLedgerId, uint8 tier) — tier TIER_NONE removes the label
+        TRUST_TIER, // (bytes32 channelId, string toLedgerId, uint8 tier) — tier TIER_NONE removes the label
+        VAULT_BIND_ROUTER // verified by QuarantineVault, never accepted here
     }
 
     /// @notice Certification labels (filter names).
@@ -73,6 +89,15 @@ contract ProviderRegistry is IProviderRegistry {
     uint8 public constant TIER_NONE = type(uint8).max;
 
     uint64 public constant MAX_CERT_DURATION = 366 days;
+    /// @notice Furthest a decision may schedule its effect: `effectiveAt <= block.timestamp + MAX_NOTICE`.
+    uint64 public constant MAX_NOTICE = 90 days;
+
+    /// @notice Floors for the immutable notice periods and lapses (a zero would silently disable a rule).
+    uint64 public constant MIN_CERT_NOTICE = 1 days;
+    uint64 public constant MIN_REMOVAL_NOTICE = 1 hours;
+    uint64 public constant MIN_REENABLE_NOTICE = 1 days;
+    uint64 public constant MIN_LAPSE = 1 days;
+    uint64 public constant MIN_COMMITTEE_NOTICE = 7 days;
 
     struct Certification {
         uint64 version; // registry version that appended this entry
@@ -107,8 +132,6 @@ contract ProviderRegistry is IProviderRegistry {
 
     // ── Errors ──────────────────────────────────────────────────────────────
 
-    error DecisionAlreadyUsed();
-    error DecisionExpired();
     error OutOfOrder(uint64 expectedNonce, uint64 nonce);
     error WrongEpoch();
     error MissingEvidence();
@@ -122,6 +145,9 @@ contract ProviderRegistry is IProviderRegistry {
     error MissingEmissions();
     error InvalidCommittee();
     error InvalidTier();
+    error InvalidParameters();
+    error EffectiveTooFar();
+    error CommitteeNotYetActive(uint64 activatesAt);
 
     // ── Events (every action carries its evidence hash and decision digest) ─
 
@@ -172,6 +198,17 @@ contract ProviderRegistry is IProviderRegistry {
         bytes32 evidenceHash,
         bytes32 digest
     );
+    /// @notice A committee change was signed; `epoch` takes over at `activatesAt` at the earliest, with the first
+    ///         decision its members sign.
+    event CommitteeScheduled(
+        uint64 indexed epoch,
+        address[] members,
+        uint8 threshold,
+        uint64 activatesAt,
+        bytes32 evidenceHash,
+        bytes32 digest
+    );
+    /// @notice `epoch` took over (emitted with the first decision it signed).
     event CommitteeChanged(
         uint64 indexed epoch, address[] members, uint8 threshold, bytes32 evidenceHash, bytes32 digest
     );
@@ -189,19 +226,33 @@ contract ProviderRegistry is IProviderRegistry {
 
     // ── Immutable parameters ────────────────────────────────────────────────
 
-    bytes32 public constant DOMAIN = keccak256("CLPRouter.ProviderRegistry.v1");
+    /// @notice EIP-712 domain: name, version and `salt = DEPLOYMENT_ID`. No chain id and no contract address on
+    ///         purpose: registry decisions relay to every ledger of the deployment.
+    bytes32 internal constant DOMAIN_TYPEHASH = keccak256("EIP712Domain(string name,string version,bytes32 salt)");
+    bytes32 public constant DECISION_TYPEHASH = keccak256(
+        "Decision(uint8 action,bytes payload,bytes32 evidenceHash,uint64 nonce,bytes32 prevHead,uint64 effectiveAt,uint64 validUntil,uint64 epoch)"
+    );
+    string public constant NAME = "CLPRouter.ProviderRegistry";
+    string public constant PROTOCOL_VERSION = "2";
+
+    /// @notice Id of the CLPRouter deployment this registry belongs to (identical on all of its ledgers).
+    bytes32 public immutable DEPLOYMENT_ID;
+    bytes32 public immutable DOMAIN_SEPARATOR;
 
     uint64 public immutable CERT_NOTICE;
     uint64 public immutable REMOVAL_NOTICE;
     uint64 public immutable REENABLE_NOTICE;
     uint64 public immutable DISABLE_LAPSE;
     uint64 public immutable BLACKLIST_LAPSE;
+    uint64 public immutable COMMITTEE_NOTICE;
 
     // ── State ───────────────────────────────────────────────────────────────
 
     /// @notice Registry version: number of decisions applied so far. Monotonically increasing; the next
     ///         decision must carry nonce `version + 1`.
     uint64 public version;
+    /// @notice Head hash after `version` decisions (the digest of decision `version`; a genesis hash at 0).
+    mapping(uint64 => bytes32) public headAt;
 
     uint64 public epoch;
     uint8 public threshold;
@@ -209,26 +260,62 @@ contract ProviderRegistry is IProviderRegistry {
     mapping(uint64 => mapping(address => bool)) private _isMember;
     mapping(address => bool) public isProviderAccount;
 
+    /// @notice Scheduled committee (0 = none): its epoch id, threshold and earliest take-over time.
+    uint64 public pendingEpoch;
+    uint8 public pendingThreshold;
+    uint64 public pendingFrom;
+    address[] private _pendingMembers;
+    uint64 private _epochCount;
+
     string public contact;
 
-    mapping(bytes32 => bool) public used;
     mapping(bytes32 => Certification[]) private _certs;
     mapping(bytes32 => Switch) public switches;
     mapping(bytes32 => Listing) public listings;
     mapping(bytes32 => TierLabel) private _tiers;
 
+    /// @param deploymentId Id of the CLPRouter deployment; the same on every ledger of the deployment.
     /// @param initialMembers Initial committee, strictly ascending addresses.
-    /// @param k Signatures needed for a certification change (disable/blacklist need k + 1).
+    /// @param k Signatures needed for a certification change (disable/blacklist/delist need k + 1, committee
+    ///        changes a supermajority).
     /// @param contact_ Provider contact address quoted in quarantine notices.
-    /// @param notices [certNotice, removalNotice, reenableNotice, disableLapse, blacklistLapse] in seconds.
-    constructor(address[] memory initialMembers, uint8 k, string memory contact_, uint64[5] memory notices) {
-        _setCommittee(initialMembers, k);
+    /// @param notices [certNotice, removalNotice, reenableNotice, disableLapse, blacklistLapse, committeeNotice]
+    ///        in seconds, each at least its MIN_* floor, with removalNotice <= certNotice <= MAX_NOTICE.
+    constructor(
+        bytes32 deploymentId,
+        address[] memory initialMembers,
+        uint8 k,
+        string memory contact_,
+        uint64[6] memory notices
+    ) {
+        if (
+            deploymentId == bytes32(0) || notices[0] < MIN_CERT_NOTICE || notices[0] > MAX_NOTICE
+                || notices[1] < MIN_REMOVAL_NOTICE || notices[1] > notices[0] || notices[2] < MIN_REENABLE_NOTICE
+                || notices[2] > MAX_NOTICE || notices[3] < MIN_LAPSE || notices[4] < MIN_LAPSE
+                || notices[5] < MIN_COMMITTEE_NOTICE || notices[5] > MAX_NOTICE
+        ) revert InvalidParameters();
+        _checkCommittee(initialMembers, k);
+        for (uint256 i = 0; i < initialMembers.length; i++) {
+            _isMember[0][initialMembers[i]] = true;
+            isProviderAccount[initialMembers[i]] = true;
+        }
+        _members = initialMembers;
+        threshold = k;
         contact = contact_;
+        DEPLOYMENT_ID = deploymentId;
+        bytes32 sep = keccak256(
+            abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(NAME)), keccak256(bytes(PROTOCOL_VERSION)), deploymentId)
+        );
+        DOMAIN_SEPARATOR = sep;
         CERT_NOTICE = notices[0];
         REMOVAL_NOTICE = notices[1];
         REENABLE_NOTICE = notices[2];
         DISABLE_LAPSE = notices[3];
         BLACKLIST_LAPSE = notices[4];
+        COMMITTEE_NOTICE = notices[5];
+        // Genesis commits to the whole initial configuration: a ledger deployed with different parameters never
+        // shares a head with the others, so it can accept no decision of theirs.
+        headAt[0] = keccak256(abi.encode(sep, initialMembers, k, contact_, notices));
     }
 
     // ═════════════════════════════════════════════════════════════════════
@@ -236,23 +323,44 @@ contract ProviderRegistry is IProviderRegistry {
     // ═════════════════════════════════════════════════════════════════════
 
     /// @notice Apply the next committee decision. Anyone may relay it.
-    /// @param d The signed decision; `d.nonce` must be `version + 1`.
+    /// @param d The signed decision; `d.nonce` must be `version + 1` and it must have been signed over the
+    ///        current head (see {decisionDigest}).
     /// @param sigs 65-byte ECDSA signatures over the EIP-191 hash of {decisionDigest}, ordered by signer address.
-    /// @return digest The decision digest (also the replay key).
+    /// @return digest The decision digest, which is the new head hash.
     function submit(Decision calldata d, bytes[] calldata sigs) external returns (bytes32 digest) {
         if (
             d.action == uint8(Action.NONE) || d.action == uint8(Action.VAULT_RELEASE)
                 || d.action == uint8(Action.VAULT_NAME_RECOVERY) || d.action > uint8(Action.TRUST_TIER)
         ) revert UnsupportedAction();
         Action action = Action(d.action);
-        if (block.timestamp > d.validUntil) revert DecisionExpired();
         if (d.evidenceHash == bytes32(0)) revert MissingEvidence();
         if (d.nonce != version + 1) revert OutOfOrder(version + 1, d.nonce);
+        // A later relay only relaxes this bound, so it never turns a relayable decision into a stuck one.
+        if (d.effectiveAt > block.timestamp + MAX_NOTICE) revert EffectiveTooFar();
         digest = decisionDigest(d);
-        if (used[digest]) revert DecisionAlreadyUsed();
-        checkApproval(digest, d.epoch, sigs, requiredSignatures(d.action));
-        used[digest] = true;
+
+        // Which committee signs: the active one, or the scheduled one once its notice has passed (it then takes
+        // over). After the notice the outgoing committee needs a supermajority for everything.
+        uint64 from = pendingFrom;
+        bool takeOver = from != 0 && d.epoch == pendingEpoch;
+        uint256 n;
+        uint256 k;
+        if (takeOver) {
+            if (block.timestamp < from) revert CommitteeNotYetActive(from);
+            n = _pendingMembers.length;
+            k = pendingThreshold;
+        } else {
+            if (d.epoch != epoch) revert WrongEpoch();
+            n = _members.length;
+            k = threshold;
+        }
+        uint256 required = _required(d.action, k, n);
+        if (!takeOver && from != 0 && block.timestamp >= from) required = _max(required, _supermajority(k, n));
+        _verify(digest, d.epoch, sigs, required);
+        if (takeOver) _activate(d.evidenceHash, digest);
+
         uint64 v = ++version;
+        headAt[v] = digest;
 
         if (action == Action.CERTIFY || action == Action.UNCERTIFY) _certify(action, d, digest, v);
         else if (action == Action.DISABLE) _disable(d, digest);
@@ -270,35 +378,53 @@ contract ProviderRegistry is IProviderRegistry {
     // ═════════════════════════════════════════════════════════════════════
 
     /// @inheritdoc IProviderRegistry
-    function decisionDigest(Decision calldata d) public pure returns (bytes32) {
-        return keccak256(
+    function decisionDigest(Decision calldata d) public view returns (bytes32) {
+        // Position `nonce` extends the head after `nonce - 1` decisions (zero while this registry has not got there).
+        bytes32 prevHead = d.nonce == 0 ? bytes32(0) : headAt[d.nonce - 1];
+        bytes32 structHash = keccak256(
             abi.encode(
-                DOMAIN, d.action, keccak256(d.payload), d.evidenceHash, d.nonce, d.effectiveAt, d.validUntil, d.epoch
+                DECISION_TYPEHASH,
+                d.action,
+                keccak256(d.payload),
+                d.evidenceHash,
+                d.nonce,
+                prevHead,
+                d.effectiveAt,
+                d.validUntil,
+                d.epoch
             )
         );
+        return keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
+    }
+
+    /// @notice Current version and head hash. A pinned version names one history: compare `headAt(v)` across ledgers.
+    function head() external view returns (uint64, bytes32) {
+        return (version, headAt[version]);
     }
 
     /// @inheritdoc IProviderRegistry
     function requiredSignatures(uint8 action) public view returns (uint256) {
-        if (action == uint8(Action.DISABLE) || action == uint8(Action.BLACKLIST)) return uint256(threshold) + 1;
-        return threshold;
+        return _required(action, threshold, _members.length);
     }
 
     /// @inheritdoc IProviderRegistry
     function checkApproval(bytes32 digest, uint64 decisionEpoch, bytes[] calldata sigs, uint256 required) public view {
         if (decisionEpoch != epoch) revert WrongEpoch();
-        bytes32 h = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", digest));
-        uint256 valid;
-        address last;
-        for (uint256 i = 0; i < sigs.length; i++) {
-            (address signer, ECDSA.RecoverError err,) = ECDSA.tryRecover(h, sigs[i]);
-            if (err != ECDSA.RecoverError.NoError) revert BadSignature();
-            if (signer <= last) revert SignersNotSorted();
-            last = signer;
-            if (!_isMember[epoch][signer]) revert BadSignature();
-            valid++;
-        }
-        if (valid < required) revert InsufficientSignatures(valid, required);
+        _verify(digest, decisionEpoch, sigs, required);
+    }
+
+    /// @notice The scheduled committee (empty when none): epoch id, members, threshold and earliest take-over.
+    function pendingCommittee()
+        external
+        view
+        returns (uint64 epoch_, address[] memory members_, uint8 threshold_, uint64 activatesAt)
+    {
+        return (pendingEpoch, _pendingMembers, pendingThreshold, pendingFrom);
+    }
+
+    /// @notice True if `account` is a member of committee epoch `epochId` (active, past or scheduled).
+    function isMemberOf(uint64 epochId, address account) external view returns (bool) {
+        return _isMember[epochId][account];
     }
 
     /// @inheritdoc IProviderRegistry
@@ -381,54 +507,37 @@ contract ProviderRegistry is IProviderRegistry {
     // ═════════════════════════════════════════════════════════════════════
 
     function _certify(Action action, Decision calldata d, bytes32 digest, uint64 v) private {
+        bool certify = action == Action.CERTIFY;
         string memory ledgerId;
-        uint8 label;
-        uint64 expiry;
-        uint64 emissionsUg;
         string memory source;
-        if (action == Action.CERTIFY) {
-            (ledgerId, label, expiry, emissionsUg, source) =
+        Certification memory c;
+        uint8 label;
+        if (certify) {
+            (ledgerId, label, c.expiry, c.emissionsUg, source) =
                 abi.decode(d.payload, (string, uint8, uint64, uint64, string));
         } else {
             (ledgerId, label) = abi.decode(d.payload, (string, uint8));
         }
         if (label < LABEL_ISO20022 || label > LABEL_ENERGY) revert InvalidLabel();
 
+        // No clamp to earlier entries: readers take the newest entry in effect, so a later decision supersedes a
+        // pending earlier one instead of queueing behind it.
+        c.effectiveFrom = uint64(_max(d.effectiveAt, block.timestamp + (certify ? CERT_NOTICE : REMOVAL_NOTICE)));
+        if (certify) {
+            // Signed values only (identical on every ledger); the time-dependent part degrades instead of reverting.
+            if (c.expiry <= d.effectiveAt) revert InvalidExpiry();
+            if (label == LABEL_ENERGY && (c.emissionsUg == 0 || bytes(source).length == 0)) revert MissingEmissions();
+            if (label != LABEL_ENERGY) c.emissionsUg = 0;
+            // At most a year of validity; relayed so late that it would be expired on arrival, it simply never holds.
+            if (c.expiry > c.effectiveFrom + MAX_CERT_DURATION) c.expiry = c.effectiveFrom + MAX_CERT_DURATION;
+        }
+        c.version = v;
+        c.certified = certify;
+        c.evidenceHash = d.evidenceHash;
         bytes32 key = Caip.certKey(ledgerId, label);
-        Certification[] storage log = _certs[key];
-        uint64 notice = action == Action.CERTIFY ? CERT_NOTICE : REMOVAL_NOTICE;
-        uint64 effectiveFrom = _max(d.effectiveAt, uint64(block.timestamp) + notice);
-        // Keep the log ordered by effective time: a later decision never takes effect before an earlier one.
-        if (log.length > 0 && log[log.length - 1].effectiveFrom > effectiveFrom) {
-            effectiveFrom = log[log.length - 1].effectiveFrom;
-        }
-        if (action == Action.CERTIFY) {
-            if (expiry <= effectiveFrom || expiry > effectiveFrom + MAX_CERT_DURATION) revert InvalidExpiry();
-            if (label == LABEL_ENERGY && (emissionsUg == 0 || bytes(source).length == 0)) revert MissingEmissions();
-            if (label != LABEL_ENERGY) emissionsUg = 0;
-        }
-        log.push(
-            Certification({
-                version: v,
-                effectiveFrom: effectiveFrom,
-                expiry: expiry,
-                certified: action == Action.CERTIFY,
-                emissionsUg: emissionsUg,
-                evidenceHash: d.evidenceHash
-            })
-        );
+        _certs[key].push(c);
         emit CertificationScheduled(
-            key,
-            ledgerId,
-            label,
-            action == Action.CERTIFY,
-            effectiveFrom,
-            expiry,
-            emissionsUg,
-            source,
-            v,
-            d.evidenceHash,
-            digest
+            key, ledgerId, label, certify, c.effectiveFrom, c.expiry, c.emissionsUg, source, v, c.evidenceHash, digest
         );
     }
 
@@ -450,7 +559,7 @@ contract ProviderRegistry is IProviderRegistry {
         if (kind < TARGET_EDGE || kind > TARGET_ROUTER_VERSION || subject == bytes32(0)) revert InvalidTarget();
         uint64 reenableAt;
         if (isDisabled(subject)) {
-            reenableAt = _max(d.effectiveAt, uint64(block.timestamp) + REENABLE_NOTICE);
+            reenableAt = uint64(_max(d.effectiveAt, block.timestamp + REENABLE_NOTICE));
             switches[subject].reenableAt = reenableAt;
         }
         emit RouteReenableScheduled(kind, subject, reenableAt, d.evidenceHash, digest);
@@ -492,7 +601,7 @@ contract ProviderRegistry is IProviderRegistry {
         uint8 stored = tier == TIER_NONE ? 0 : tier + 1;
         // Raising trust needs the certification notice; lowering or removing it the (shorter) removal notice.
         uint64 notice = stored > t.current ? CERT_NOTICE : REMOVAL_NOTICE;
-        uint64 effectiveFrom = _max(d.effectiveAt, uint64(block.timestamp) + notice);
+        uint64 effectiveFrom = uint64(_max(d.effectiveAt, block.timestamp + notice));
         t.next = stored;
         t.nextFrom = effectiveFrom;
         emit TrustTierScheduled(key, channelId, toLedgerId, tier, effectiveFrom, d.evidenceHash, digest);
@@ -500,8 +609,30 @@ contract ProviderRegistry is IProviderRegistry {
 
     function _committee(Decision calldata d, bytes32 digest) private {
         (address[] memory newMembers, uint8 k) = abi.decode(d.payload, (address[], uint8));
-        _setCommittee(newMembers, k);
-        emit CommitteeChanged(epoch, newMembers, k, d.evidenceHash, digest);
+        _checkCommittee(newMembers, k);
+        // A fresh epoch id per scheduled change, so a replaced schedule can never take over.
+        uint64 id = ++_epochCount;
+        for (uint256 i = 0; i < newMembers.length; i++) {
+            _isMember[id][newMembers[i]] = true;
+            isProviderAccount[newMembers[i]] = true; // never a vault beneficiary, from the moment it is named
+        }
+        uint64 activatesAt = uint64(_max(d.effectiveAt, block.timestamp + COMMITTEE_NOTICE));
+        pendingEpoch = id;
+        pendingThreshold = k;
+        pendingFrom = activatesAt;
+        _pendingMembers = newMembers;
+        emit CommitteeScheduled(id, newMembers, k, activatesAt, d.evidenceHash, digest);
+    }
+
+    function _activate(bytes32 evidenceHash, bytes32 digest) private {
+        epoch = pendingEpoch;
+        threshold = pendingThreshold;
+        _members = _pendingMembers;
+        delete _pendingMembers;
+        pendingEpoch = 0;
+        pendingThreshold = 0;
+        pendingFrom = 0;
+        emit CommitteeChanged(epoch, _members, threshold, evidenceHash, digest);
     }
 
     function _contact(Decision calldata d, bytes32 digest) private {
@@ -510,23 +641,46 @@ contract ProviderRegistry is IProviderRegistry {
         emit ContactChanged(c, d.evidenceHash, digest);
     }
 
-    function _setCommittee(address[] memory newMembers, uint8 k) private {
-        // k >= 1 and k + 1 <= n so that disables and blacklist entries remain possible.
-        if (k == 0 || uint256(k) + 1 > newMembers.length) revert InvalidCommittee();
-        uint64 next = _members.length == 0 ? 0 : epoch + 1;
+    /// @dev n >= 3, 2 <= k, k > n / 2 (two disjoint quorums cannot both act) and k + 1 <= n (so the k + 1 rules
+    ///      remain satisfiable); members strictly ascending.
+    function _checkCommittee(address[] memory m, uint8 k) private pure {
+        uint256 n = m.length;
+        if (n < 3 || k < 2 || 2 * uint256(k) <= n || uint256(k) + 1 > n) revert InvalidCommittee();
         address last;
-        for (uint256 i = 0; i < newMembers.length; i++) {
-            if (newMembers[i] <= last) revert InvalidCommittee();
-            last = newMembers[i];
-            _isMember[next][newMembers[i]] = true;
-            isProviderAccount[newMembers[i]] = true;
+        for (uint256 i = 0; i < n; i++) {
+            if (m[i] <= last) revert InvalidCommittee();
+            last = m[i];
         }
-        epoch = next;
-        threshold = k;
-        _members = newMembers;
     }
 
-    function _max(uint64 a, uint64 b) private pure returns (uint64) {
+    function _required(uint8 action, uint256 k, uint256 n) private pure returns (uint256) {
+        if (action == uint8(Action.COMMITTEE)) return _supermajority(k, n);
+        if (
+            action == uint8(Action.DISABLE) || action == uint8(Action.BLACKLIST) || action == uint8(Action.DELIST)
+                || action == uint8(Action.VAULT_NAME_RECOVERY) || action == uint8(Action.VAULT_BIND_ROUTER)
+        ) return k + 1;
+        return k;
+    }
+
+    /// @dev max(k + 1, ceil(2n / 3)).
+    function _supermajority(uint256 k, uint256 n) private pure returns (uint256) {
+        return _max(k + 1, (2 * n + 2) / 3);
+    }
+
+    function _verify(bytes32 digest, uint64 epochId, bytes[] calldata sigs, uint256 required) private view {
+        bytes32 h = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", digest));
+        address last;
+        for (uint256 i = 0; i < sigs.length; i++) {
+            (address signer, ECDSA.RecoverError err,) = ECDSA.tryRecover(h, sigs[i]);
+            if (err != ECDSA.RecoverError.NoError) revert BadSignature();
+            if (signer <= last) revert SignersNotSorted();
+            last = signer;
+            if (!_isMember[epochId][signer]) revert BadSignature();
+        }
+        if (sigs.length < required) revert InsufficientSignatures(sigs.length, required);
+    }
+
+    function _max(uint256 a, uint256 b) private pure returns (uint256) {
         return a > b ? a : b;
     }
 }

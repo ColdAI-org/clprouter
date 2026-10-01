@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {ProviderRegistry} from "@clprouter/ProviderRegistry.sol";
@@ -26,6 +26,7 @@ contract RegistryVaultHandler is AuditBase {
     bool public quorumViolated;
     bool public releaseRuleViolated;
     bool public providerPaid;
+    bool public chainBroken;
     uint256 public sumUnreleased;
     uint256 public releasedCount;
     mapping(bytes32 => uint256) public logLen;
@@ -54,7 +55,7 @@ contract RegistryVaultHandler is AuditBase {
 
     // ── registry ───────────────────────────────────────────────────────────
 
-    function submit(uint8 actionSeed, uint8 signerMask, uint256 argSeed, bool badNonce) external {
+    function submit(uint8 actionSeed, uint8 signerMask, uint256 argSeed, bool badNonce, bool asPending) external {
         uint8 action = uint8(bound(actionSeed, 1, 11));
         if (action == 9 || action == 10) action = 8;
         bytes memory payload = _payload(action, argSeed);
@@ -65,15 +66,21 @@ contract RegistryVaultHandler is AuditBase {
             nonce: reg.version() + (badNonce ? 2 : 1),
             effectiveAt: uint64(block.timestamp + (argSeed % 3) * 1 days),
             validUntil: uint64(block.timestamp + 1 days),
-            epoch: reg.epoch()
+            epoch: asPending && reg.pendingFrom() != 0 ? reg.pendingEpoch() : reg.epoch()
         });
-        (uint256[] memory chosen, uint256 nMembers) = _chosen(signerMask);
-        bytes[] memory sigs = _signSorted(d, chosen);
-        uint256 required = reg.requiredSignatures(action);
+        (uint256[] memory chosen, uint256 nMembers) = _chosenIn(signerMask, d.epoch);
+        bytes[] memory sigs = _signSorted(address(reg), d, chosen);
+        // A lower bound on what the registry demands (the outgoing committee may need more after a notice).
+        uint256 required = d.epoch == reg.epoch()
+            ? reg.requiredSignatures(action)
+            : (action == A_DISABLE || action == A_BLACKLIST || action == A_DELIST ? reg.pendingThreshold() + 1 : reg.pendingThreshold());
+        bytes32 headBefore = reg.headAt(reg.version());
         uint256[] memory before = _snapLens();
-        try reg.submit(d, sigs) {
+        try reg.submit(d, sigs) returns (bytes32 digest) {
             applied++;
             if (nMembers < required || nMembers != chosen.length || badNonce) quorumViolated = true;
+            // Hash chain: the new head is the digest, and it committed to the previous head.
+            if (reg.headAt(reg.version()) != digest || reg.headAt(reg.version() - 1) != headBefore) chainBroken = true;
         } catch {}
         _checkLogs(before);
         uint64 v = reg.version();
@@ -98,8 +105,10 @@ contract RegistryVaultHandler is AuditBase {
         address target = to % 5 == 4 ? address(0xBEEF) : actors[to % 4];
         IProviderRegistry.Decision memory d =
             _vaultDecision(reg, A_VAULT_NAME_RECOVERY, abi.encode(cases[caseB ? 1 : 0], target));
-        (uint256[] memory chosen,) = _chosen(signerMask);
-        try vault.nameRecovery(d, _signSorted(d, chosen)) {} catch {}
+        (uint256[] memory chosen, uint256 nMembers) = _chosen(signerMask);
+        try vault.nameRecovery(d, _signSorted(address(vault), d, chosen)) {
+            if (nMembers < uint256(reg.threshold()) + 1 || nMembers != chosen.length) releaseRuleViolated = true;
+        } catch {}
     }
 
     function challenge(uint256 idSeed, uint8 who) external {
@@ -117,27 +126,35 @@ contract RegistryVaultHandler is AuditBase {
         (bytes16 rid, bytes32 cid,,,,,) = vault.deposits(id);
         rid;
         bytes32 c = wrongCase ? keccak256("nope") : cid;
-        IProviderRegistry.Decision memory d =
-            _vaultDecision(reg, A_VAULT_RELEASE, abi.encode(id, c, uint8(kind % 3)));
+        uint8 k4 = kind % 4;
+        IProviderRegistry.Decision memory d = _vaultDecision(reg, A_VAULT_RELEASE, abi.encode(id, c, k4));
         (uint256[] memory chosen, uint256 nMembers) = _chosen(signerMask);
-        (address recTo,, uint64 relAt, bool challenged) = vault.recoveries(cid);
+        (address recTo,, uint64 relAt) = vault.recoveries(cid);
+        bool challenged = vault.challengedAt(id, recTo) != 0;
         address[] memory watch = new address[](3);
         watch[0] = s;
         watch[1] = r;
         watch[2] = recTo;
         uint256[3] memory bal = [s.balance, r.balance, recTo.balance];
-        try vault.release(d, _signSorted(d, chosen)) {
+        try vault.release(d, _signSorted(address(vault), d, chosen)) {
             releasedCount++;
             sumUnreleased -= amt;
             if (rel || wrongCase || nMembers < reg.threshold() || nMembers != chosen.length) {
                 releaseRuleViolated = true;
             }
-            if (kind % 3 == 2 && (challenged || block.timestamp < relAt || recTo == address(0))) {
+            if (k4 == 2 && (challenged || block.timestamp < relAt || recTo == address(0))) {
                 releaseRuleViolated = true;
             }
-            address paid = kind % 3 == 0 ? s : kind % 3 == 1 ? r : recTo;
+            if (
+                k4 == 3
+                    && (
+                        !challenged || block.timestamp < uint256(relAt) + vault.CHALLENGE_WINDOW()
+                            || nMembers < reg.requiredSignatures(A_COMMITTEE)
+                    )
+            ) releaseRuleViolated = true;
+            address paid = k4 == 0 ? s : k4 == 1 ? r : recTo;
             if (reg.isProviderAccount(paid)) providerPaid = true;
-            uint256 idx = kind % 3;
+            uint256 idx = k4 > 2 ? 2 : k4;
             if (watch[idx].balance < bal[idx] + amt && watch[idx] != address(this)) releaseRuleViolated = true;
         } catch {}
     }
@@ -145,6 +162,10 @@ contract RegistryVaultHandler is AuditBase {
     // ── helpers ────────────────────────────────────────────────────────────
 
     function _chosen(uint8 mask) internal view returns (uint256[] memory chosen, uint256 nMembers) {
+        return _chosenIn(mask, reg.epoch());
+    }
+
+    function _chosenIn(uint8 mask, uint64 epochId) internal view returns (uint256[] memory chosen, uint256 nMembers) {
         uint256 cnt;
         for (uint256 i = 0; i < pool.length; i++) {
             if (mask & (1 << i) != 0) cnt++;
@@ -154,7 +175,7 @@ contract RegistryVaultHandler is AuditBase {
         for (uint256 i = 0; i < pool.length; i++) {
             if (mask & (1 << i) != 0) {
                 chosen[j++] = pool[i];
-                if (reg.isMember(vm.addr(pool[i]))) nMembers++;
+                if (reg.isMemberOf(epochId, vm.addr(pool[i]))) nMembers++;
             }
         }
     }
@@ -183,6 +204,7 @@ contract RegistryVaultHandler is AuditBase {
             for (uint256 i = 0; i < pool.length; i++) {
                 if (m & (1 << i) != 0) pk[j++] = pool[i];
             }
+            // Sometimes invalid on purpose (k = 1, or k not a strict majority): the registry must reject those.
             uint8 k = uint8(cnt - 1 - ((seed >> 40) % 2));
             return abi.encode(_sortedAddrs(pk), k == 0 ? uint8(1) : k);
         }
@@ -205,10 +227,9 @@ contract RegistryVaultHandler is AuditBase {
                 bytes32 h = keccak256(abi.encode(log[0]));
                 if (logHead[certKeys[i]] == bytes32(0)) logHead[certKeys[i]] = h;
                 else if (logHead[certKeys[i]] != h) versionWentBack = true; // history rewritten
+                // Versions strictly increase; effective times need not (the newest entry in effect wins, RV-06).
                 for (uint256 j = 1; j < log.length; j++) {
-                    if (log[j].version <= log[j - 1].version || log[j].effectiveFrom < log[j - 1].effectiveFrom) {
-                        versionWentBack = true;
-                    }
+                    if (log[j].version <= log[j - 1].version) versionWentBack = true;
                 }
             }
             logLen[certKeys[i]] = log.length;
@@ -253,9 +274,11 @@ contract RegistryVaultInvariantTest is AuditBase {
         assertFalse(h.versionWentBack());
     }
 
-    /// A decision only applies with >= required distinct current-epoch members, no outsiders, right nonce.
+    /// A decision only applies with >= required distinct members of the signing epoch, no outsiders, right nonce,
+    /// and it extends the head (hash chain).
     function invariant_decisionsOnlyWithQuorum() public view {
         assertFalse(h.quorumViolated());
+        assertFalse(h.chainBroken());
     }
 
     /// Vault balance equals the sum of unreleased deposits (no forced sends in this harness).
@@ -276,10 +299,20 @@ contract RegistryVaultInvariantTest is AuditBase {
         emit log_named_uint("rotations epoch", reg.epoch());
     }
 
-    /// The committee always keeps k >= 1 and k + 1 <= n.
+    /// The committee always keeps n >= 3, k >= 2, k > n / 2 and k + 1 <= n (active and scheduled).
     function invariant_committeeShape() public view {
         uint256 n = reg.members().length;
-        assertGe(reg.threshold(), 1);
-        assertLe(uint256(reg.threshold()) + 1, n);
+        uint256 k = reg.threshold();
+        assertGe(n, 3);
+        assertGe(k, 2);
+        assertGt(2 * k, n);
+        assertLe(k + 1, n);
+        (,, uint8 pk, uint64 at) = reg.pendingCommittee();
+        if (at != 0) {
+            (, address[] memory pm,,) = reg.pendingCommittee();
+            assertGe(pm.length, 3);
+            assertGt(2 * uint256(pk), pm.length);
+            assertLe(uint256(pk) + 1, pm.length);
+        }
     }
 }

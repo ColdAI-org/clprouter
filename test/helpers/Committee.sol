@@ -1,11 +1,17 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {ProviderRegistry} from "@clprouter/ProviderRegistry.sol";
 import {IProviderRegistry} from "@clprouter/interfaces/IProviderRegistry.sol";
 
-/// @notice Provider committee test helper: 5 members, k = 3 (disable/blacklist need 4).
+/// @dev Anything that digests a committee decision: the registry (chained, deployment-bound) or a vault
+///      (deployment-, chain- and vault-bound).
+interface IDecisionDigest {
+    function decisionDigest(IProviderRegistry.Decision calldata d) external view returns (bytes32);
+}
+
+/// @notice Provider committee test helper: 5 members, k = 3 (disable/blacklist/delist need 4, committee changes 4).
 abstract contract Committee is Test {
     uint8 internal constant K = 3;
     uint64 internal constant CERT_NOTICE = 7 days;
@@ -13,6 +19,8 @@ abstract contract Committee is Test {
     uint64 internal constant REENABLE_NOTICE = 7 days;
     uint64 internal constant DISABLE_LAPSE = 7 days;
     uint64 internal constant BLACKLIST_LAPSE = 30 days;
+    uint64 internal constant COMMITTEE_NOTICE = 7 days;
+    bytes32 internal constant DEPLOYMENT_ID = keccak256("clprouter-test-deployment");
     string internal constant CONTACT = "mailto:incident@provider.example";
     bytes32 internal constant EVIDENCE = keccak256("evidence-document-v1");
 
@@ -46,8 +54,17 @@ abstract contract Committee is Test {
     }
 
     function _deployRegistry() internal returns (ProviderRegistry) {
+        return _deployRegistry(DEPLOYMENT_ID);
+    }
+
+    /// @dev One registry of deployment `id` (every ledger of one deployment uses the same id).
+    function _deployRegistry(bytes32 id) internal returns (ProviderRegistry) {
         return new ProviderRegistry(
-            memberAddrs, K, CONTACT, [CERT_NOTICE, REMOVAL_NOTICE, REENABLE_NOTICE, DISABLE_LAPSE, BLACKLIST_LAPSE]
+            id,
+            memberAddrs,
+            K,
+            CONTACT,
+            [CERT_NOTICE, REMOVAL_NOTICE, REENABLE_NOTICE, DISABLE_LAPSE, BLACKLIST_LAPSE, COMMITTEE_NOTICE]
         );
     }
 
@@ -68,28 +85,22 @@ abstract contract Committee is Test {
         });
     }
 
-    /// @dev Signatures of the first `count` members (address order) over `d`.
-    function _sign(IProviderRegistry.Decision memory d, uint256 count) internal view returns (bytes[] memory sigs) {
-        return _signWith(d, memberPks, count);
-    }
-
-    function _signWith(IProviderRegistry.Decision memory d, uint256[] memory pks, uint256 count)
+    /// @dev Signatures of the first `count` members (address order) over `d` as digested by `target`
+    ///      (the registry the decision is relayed to, or a vault).
+    function _sign(address target, IProviderRegistry.Decision memory d, uint256 count)
         internal
-        pure
+        view
         returns (bytes[] memory sigs)
     {
-        bytes32 digest = keccak256(
-            abi.encode(
-                keccak256("CLPRouter.ProviderRegistry.v1"),
-                d.action,
-                keccak256(d.payload),
-                d.evidenceHash,
-                d.nonce,
-                d.effectiveAt,
-                d.validUntil,
-                d.epoch
-            )
-        );
+        return _signWith(target, d, memberPks, count);
+    }
+
+    function _signWith(address target, IProviderRegistry.Decision memory d, uint256[] memory pks, uint256 count)
+        internal
+        view
+        returns (bytes[] memory sigs)
+    {
+        bytes32 digest = IDecisionDigest(target).decisionDigest(d);
         bytes32 h = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", digest));
         sigs = new bytes[](count);
         for (uint256 i = 0; i < count; i++) {
@@ -101,7 +112,21 @@ abstract contract Committee is Test {
     /// @dev Apply a decision with exactly the required number of signatures.
     function _apply(ProviderRegistry reg, uint8 action, bytes memory payload) internal returns (bytes32) {
         IProviderRegistry.Decision memory d = _decision(reg, action, payload);
-        return reg.submit(d, _sign(d, reg.requiredSignatures(action)));
+        return reg.submit(d, _sign(address(reg), d, reg.requiredSignatures(action)));
+    }
+
+    /// @dev Rotate to `pks` (sorted by address) with threshold `k`: schedule it, wait out the notice, and let the
+    ///      new committee take over with its first decision (a CONTACT re-statement).
+    function _rotate(ProviderRegistry reg, uint256[] memory pks, uint8 k) internal {
+        address[] memory a = new address[](pks.length);
+        for (uint256 i = 0; i < pks.length; i++) {
+            a[i] = vm.addr(pks[i]);
+        }
+        _apply(reg, A_COMMITTEE, abi.encode(a, k));
+        vm.warp(block.timestamp + COMMITTEE_NOTICE);
+        IProviderRegistry.Decision memory d = _decision(reg, A_CONTACT, abi.encode(reg.contact()));
+        d.epoch = reg.pendingEpoch();
+        reg.submit(d, _signWith(address(reg), d, pks, k));
     }
 
     // ── payload builders ───────────────────────────────────────────────────

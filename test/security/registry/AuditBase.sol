@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {ProviderRegistry} from "@clprouter/ProviderRegistry.sol";
@@ -21,10 +21,11 @@ abstract contract AuditBase is Committee {
         return new QuarantineVault(IProviderRegistry(address(r)), RECOVERY_NOTICE, CHALLENGE_WINDOW);
     }
 
-    /// @dev Signatures over `d` by `pks` (any order), sorted by signer address as the registry requires.
-    function _signSorted(IProviderRegistry.Decision memory d, uint256[] memory pks)
+    /// @dev Signatures over `d` (as digested by `target`) by `pks` (any order), sorted by signer address as the
+    ///      registry requires.
+    function _signSorted(address target, IProviderRegistry.Decision memory d, uint256[] memory pks)
         internal
-        pure
+        view
         returns (bytes[] memory sigs)
     {
         uint256 n = pks.length;
@@ -37,7 +38,7 @@ abstract contract AuditBase is Committee {
                 (p[j - 1], p[j]) = (p[j], p[j - 1]);
             }
         }
-        return _signWith(d, p, n);
+        return _signWith(target, d, p, n);
     }
 
     function _vaultDecision(ProviderRegistry r, uint8 action, bytes memory payload)
@@ -46,6 +47,12 @@ abstract contract AuditBase is Committee {
     {
         d = _decision(r, action, payload);
         d.nonce = ++vaultNonce;
+    }
+
+    /// @dev Bind `v` to `router` (k + 1 vault decision).
+    function _bind(ProviderRegistry r, QuarantineVault v, address router) internal {
+        IProviderRegistry.Decision memory d = _vaultDecision(r, 12, abi.encode(router));
+        v.bindRouter(d, _sign(address(v), d, K + 1));
     }
 
     function _firstK(uint256 count) internal view returns (uint256[] memory pks) {

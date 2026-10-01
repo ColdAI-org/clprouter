@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import {ProviderRegistry} from "@clprouter/ProviderRegistry.sol";
@@ -30,56 +30,100 @@ contract ProviderRegistryTest is Committee {
     // Signatures
     // ═════════════════════════════════════════════════════════════════════
 
+    function _notices() internal pure returns (uint64[6] memory) {
+        return [CERT_NOTICE, REMOVAL_NOTICE, REENABLE_NOTICE, DISABLE_LAPSE, BLACKLIST_LAPSE, COMMITTEE_NOTICE];
+    }
+
     function test_constructor_rejectsBadCommittee() public {
+        address[] memory three = new address[](3);
+        three[0] = address(1);
+        three[1] = address(2);
+        three[2] = address(3);
+        uint64[6] memory n = _notices();
+        vm.expectRevert(ProviderRegistry.InvalidCommittee.selector);
+        new ProviderRegistry(DEPLOYMENT_ID, three, 3, CONTACT, n); // k + 1 > n
+        vm.expectRevert(ProviderRegistry.InvalidCommittee.selector);
+        new ProviderRegistry(DEPLOYMENT_ID, three, 1, CONTACT, n); // k < 2
         address[] memory two = new address[](2);
         two[0] = address(1);
         two[1] = address(2);
-        uint64[5] memory n;
         vm.expectRevert(ProviderRegistry.InvalidCommittee.selector);
-        new ProviderRegistry(two, 2, CONTACT, n); // k + 1 > n
+        new ProviderRegistry(DEPLOYMENT_ID, two, 1, CONTACT, n); // n < 3
+        address[] memory four = new address[](4);
+        for (uint256 i = 0; i < 4; i++) {
+            four[i] = address(uint160(i + 1));
+        }
         vm.expectRevert(ProviderRegistry.InvalidCommittee.selector);
-        new ProviderRegistry(two, 0, CONTACT, n);
-        two[1] = address(1);
+        new ProviderRegistry(DEPLOYMENT_ID, four, 2, CONTACT, n); // k must be a strict majority
+        three[2] = address(2);
         vm.expectRevert(ProviderRegistry.InvalidCommittee.selector);
-        new ProviderRegistry(two, 1, CONTACT, n); // not strictly ascending
+        new ProviderRegistry(DEPLOYMENT_ID, three, 2, CONTACT, n); // not strictly ascending
+        new ProviderRegistry(DEPLOYMENT_ID, four, 3, CONTACT, n); // smallest valid shapes
+        three[2] = address(3);
+        new ProviderRegistry(DEPLOYMENT_ID, three, 2, CONTACT, n);
+    }
+
+    function test_constructor_rejectsBadParameters() public {
+        uint64[6] memory n = _notices();
+        vm.expectRevert(ProviderRegistry.InvalidParameters.selector);
+        new ProviderRegistry(bytes32(0), memberAddrs, K, CONTACT, n); // no deployment id
+        for (uint256 i = 0; i < 6; i++) {
+            uint64[6] memory z = _notices();
+            z[i] = 0;
+            vm.expectRevert(ProviderRegistry.InvalidParameters.selector);
+            new ProviderRegistry(DEPLOYMENT_ID, memberAddrs, K, CONTACT, z);
+        }
+        n[1] = CERT_NOTICE + 1; // removal notice longer than the certification notice
+        vm.expectRevert(ProviderRegistry.InvalidParameters.selector);
+        new ProviderRegistry(DEPLOYMENT_ID, memberAddrs, K, CONTACT, n);
+        n = _notices();
+        n[5] = 6 days; // committee notice below its floor
+        vm.expectRevert(ProviderRegistry.InvalidParameters.selector);
+        new ProviderRegistry(DEPLOYMENT_ID, memberAddrs, K, CONTACT, n);
     }
 
     function test_submit_acceptsKSignaturesForCertification_anyoneRelays() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_CERTIFY, _certifyPayload(HEDERA, 1, _expiry(), 0));
-        bytes[] memory sigs = _sign(d, K);
+        bytes[] memory sigs = _sign(address(reg), d, K);
         vm.prank(makeAddr("random-relayer"));
         bytes32 digest = reg.submit(d, sigs);
-        assertEq(digest, reg.decisionDigest(d));
-        assertTrue(reg.used(digest));
         assertEq(reg.version(), 1);
+        (uint64 v, bytes32 h) = reg.head();
+        assertEq(v, 1);
+        assertEq(h, digest, "the digest is the new head");
+        assertEq(reg.headAt(1), digest);
+        assertTrue(reg.headAt(0) != bytes32(0), "genesis head");
     }
 
     function test_submit_insufficientSigners() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_CERTIFY, _certifyPayload(HEDERA, 1, _expiry(), 0));
-        bytes[] memory sigs = _sign(d, K - 1);
+        bytes[] memory sigs = _sign(address(reg), d, K - 1);
         vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.InsufficientSignatures.selector, K - 1, K));
         reg.submit(d, sigs);
     }
 
     function test_disableAndBlacklist_needKPlusOne() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_DISABLE, _disablePayload(2, Caip.ledgerKey(HEDERA)));
-        bytes[] memory sigs = _sign(d, K);
+        bytes[] memory sigs = _sign(address(reg), d, K);
         vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.InsufficientSignatures.selector, K, K + 1));
         reg.submit(d, sigs);
 
         d = _decision(reg, A_BLACKLIST, _blacklistPayload(ACCT, CASE));
-        sigs = _sign(d, K);
+        sigs = _sign(address(reg), d, K);
         vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.InsufficientSignatures.selector, K, K + 1));
         reg.submit(d, sigs);
 
         assertEq(reg.requiredSignatures(A_DISABLE), K + 1);
         assertEq(reg.requiredSignatures(A_BLACKLIST), K + 1);
+        assertEq(reg.requiredSignatures(A_DELIST), K + 1);
+        assertEq(reg.requiredSignatures(A_COMMITTEE), K + 1); // max(k + 1, ceil(2 * 5 / 3)) = 4
         assertEq(reg.requiredSignatures(A_CERTIFY), K);
+        assertEq(reg.requiredSignatures(A_ENABLE), K);
     }
 
     function test_submit_badSignature() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_CERTIFY, _certifyPayload(HEDERA, 1, _expiry(), 0));
-        bytes[] memory sigs = _sign(d, K);
+        bytes[] memory sigs = _sign(address(reg), d, K);
         sigs[1] = abi.encodePacked(bytes32(uint256(1)), bytes32(uint256(2)), uint8(27));
         vm.expectRevert();
         reg.submit(d, sigs);
@@ -87,7 +131,7 @@ contract ProviderRegistryTest is Committee {
 
     function test_submit_signatureOverDifferentDecision() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_CERTIFY, _certifyPayload(HEDERA, 1, _expiry(), 0));
-        bytes[] memory sigs = _sign(d, K);
+        bytes[] memory sigs = _sign(address(reg), d, K);
         d.payload = _certifyPayload(HEDERA, 2, _expiry(), 0); // tampered after signing
         vm.expectRevert(); // recovers non-members
         reg.submit(d, sigs);
@@ -99,7 +143,7 @@ contract ProviderRegistryTest is Committee {
         pks[0] = memberPks[0];
         pks[1] = memberPks[1];
         pks[2] = 0xBAD;
-        bytes[] memory sigs = _signWith(d, pks, 3);
+        bytes[] memory sigs = _signWith(address(reg), d, pks, 3);
         // order by address may be wrong too; either error is a rejection
         vm.expectRevert();
         reg.submit(d, sigs);
@@ -107,7 +151,7 @@ contract ProviderRegistryTest is Committee {
 
     function test_submit_duplicateSignerRejected() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_CERTIFY, _certifyPayload(HEDERA, 1, _expiry(), 0));
-        bytes[] memory sigs = _sign(d, K);
+        bytes[] memory sigs = _sign(address(reg), d, K);
         sigs[2] = sigs[1];
         vm.expectRevert(ProviderRegistry.SignersNotSorted.selector);
         reg.submit(d, sigs);
@@ -115,7 +159,7 @@ contract ProviderRegistryTest is Committee {
 
     function test_submit_replayRejected() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_CONTACT, abi.encode("x"));
-        bytes[] memory sigs = _sign(d, K);
+        bytes[] memory sigs = _sign(address(reg), d, K);
         reg.submit(d, sigs);
         vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.OutOfOrder.selector, 2, 1));
         reg.submit(d, sigs);
@@ -124,30 +168,41 @@ contract ProviderRegistryTest is Committee {
     function test_submit_outOfOrderNonce() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_CONTACT, abi.encode("x"));
         d.nonce = 2;
-        bytes[] memory sigs = _sign(d, K);
+        bytes[] memory sigs = _sign(address(reg), d, K);
         vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.OutOfOrder.selector, 1, 2));
         reg.submit(d, sigs);
     }
 
-    function test_submit_expiredDecision() public {
+    function test_submit_validUntilNotEnforcedForOrderedDecisions() public {
+        // A signed registry decision is final: a ledger that reaches its position late must still apply it.
         IProviderRegistry.Decision memory d = _decision(reg, A_CONTACT, abi.encode("x"));
-        bytes[] memory sigs = _sign(d, K);
-        vm.warp(d.validUntil + 1);
-        vm.expectRevert(ProviderRegistry.DecisionExpired.selector);
+        bytes[] memory sigs = _sign(address(reg), d, K);
+        vm.warp(d.validUntil + 365 days);
+        reg.submit(d, sigs);
+        assertEq(reg.contact(), "x");
+    }
+
+    function test_submit_effectiveAtBoundedByMaxNotice() public {
+        IProviderRegistry.Decision memory d = _decision(reg, A_CONTACT, abi.encode("x"));
+        d.effectiveAt = uint64(block.timestamp + reg.MAX_NOTICE() + 1);
+        bytes[] memory sigs = _sign(address(reg), d, K);
+        vm.expectRevert(ProviderRegistry.EffectiveTooFar.selector);
+        reg.submit(d, sigs);
+        vm.warp(block.timestamp + 1); // a later relay only relaxes the bound
         reg.submit(d, sigs);
     }
 
     function test_submit_missingEvidence() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_CONTACT, abi.encode("x"));
         d.evidenceHash = bytes32(0);
-        bytes[] memory sigs = _sign(d, K);
+        bytes[] memory sigs = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.MissingEvidence.selector);
         reg.submit(d, sigs);
     }
 
     function test_submit_vaultActionsAreNotAcceptedHere() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_VAULT_RELEASE, abi.encode(uint256(1)));
-        bytes[] memory sigs = _sign(d, K);
+        bytes[] memory sigs = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.UnsupportedAction.selector);
         reg.submit(d, sigs);
         d.action = 0;
@@ -158,9 +213,10 @@ contract ProviderRegistryTest is Committee {
     function test_sameDecisionAppliesOnEveryLedger() public {
         ProviderRegistry other = _deployRegistry();
         IProviderRegistry.Decision memory d = _decision(reg, A_DISABLE, _disablePayload(2, Caip.ledgerKey(HEDERA)));
-        bytes[] memory sigs = _sign(d, K + 1);
+        bytes[] memory sigs = _sign(address(reg), d, K + 1);
         reg.submit(d, sigs);
         other.submit(d, sigs);
+        assertEq(reg.headAt(1), other.headAt(1), "same history");
         assertTrue(reg.isDisabled(Caip.ledgerKey(HEDERA)));
         assertTrue(other.isDisabled(Caip.ledgerKey(HEDERA)));
         assertEq(reg.version(), other.version());
@@ -170,47 +226,107 @@ contract ProviderRegistryTest is Committee {
     // Committee changes
     // ═════════════════════════════════════════════════════════════════════
 
-    function test_committeeChange_signedByCurrentCommittee_bumpsEpoch() public {
-        uint256[] memory newPks = new uint256[](4);
+    function _newCommittee() internal pure returns (uint256[] memory newPks, address[] memory newMembers) {
+        newPks = new uint256[](4);
         newPks[0] = 0x1111;
         newPks[1] = 0x2222;
         newPks[2] = 0x3333;
         newPks[3] = 0x4444;
-        address[] memory newMembers = new address[](4);
+        newMembers = new address[](4);
         for (uint256 i = 0; i < 4; i++) {
             newMembers[i] = vm.addr(newPks[i]);
         }
-        // sort
         for (uint256 i = 1; i < 4; i++) {
             for (uint256 j = i; j > 0 && newMembers[j - 1] > newMembers[j]; j--) {
                 (newMembers[j - 1], newMembers[j]) = (newMembers[j], newMembers[j - 1]);
                 (newPks[j - 1], newPks[j]) = (newPks[j], newPks[j - 1]);
             }
         }
-        IProviderRegistry.Decision memory pre = _decision(reg, A_CONTACT, abi.encode("old"));
-        bytes[] memory preSigs = _sign(pre, K); // signed under epoch 0, relayed too late
+    }
 
-        _apply(reg, A_COMMITTEE, abi.encode(newMembers, uint8(2)));
+    function test_committeeChange_needsSupermajority_noticeThenTakeOver() public {
+        (uint256[] memory newPks, address[] memory newMembers) = _newCommittee();
+        IProviderRegistry.Decision memory c = _decision(reg, A_COMMITTEE, abi.encode(newMembers, uint8(3)));
+        bytes[] memory kSigs = _sign(address(reg), c, K);
+        vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.InsufficientSignatures.selector, K, K + 1));
+        reg.submit(c, kSigs);
+        reg.submit(c, _sign(address(reg), c, K + 1));
+
+        // Scheduled, visible, not in effect.
+        (uint64 pe, address[] memory pm, uint8 pk, uint64 at) = reg.pendingCommittee();
+        assertEq(pe, 1);
+        assertEq(pm.length, 4);
+        assertEq(pk, 3);
+        assertEq(at, block.timestamp + COMMITTEE_NOTICE);
+        assertEq(reg.epoch(), 0);
+        assertTrue(reg.isMember(memberAddrs[0]));
+        assertTrue(reg.isProviderAccount(newMembers[0]), "named members are provider accounts at once");
+
+        // The outgoing committee keeps acting during the notice (k for a k action).
+        _apply(reg, A_CONTACT, abi.encode("during notice"));
+        // The incoming one cannot yet.
+        IProviderRegistry.Decision memory d = _decision(reg, A_CONTACT, abi.encode("by new committee"));
+        d.epoch = pe;
+        bytes[] memory newSigs = _signWith(address(reg), d, newPks, 3);
+        vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.CommitteeNotYetActive.selector, at));
+        reg.submit(d, newSigs);
+
+        vm.warp(at);
+        reg.submit(d, newSigs); // takes over with its first decision
         assertEq(reg.epoch(), 1);
-        assertEq(reg.threshold(), 2);
+        assertEq(reg.threshold(), 3);
         assertTrue(reg.isMember(newMembers[0]));
         assertFalse(reg.isMember(memberAddrs[0]));
         assertTrue(reg.isProviderAccount(memberAddrs[0]), "past members stay provider accounts");
+        assertEq(reg.contact(), "by new committee");
+        (,,, at) = reg.pendingCommittee();
+        assertEq(at, 0);
 
         // Old committee can no longer act.
-        IProviderRegistry.Decision memory d = _decision(reg, A_CONTACT, abi.encode("by old committee"));
+        d = _decision(reg, A_CONTACT, abi.encode("by old committee"));
         d.epoch = 0;
-        bytes[] memory sigs = _sign(d, K);
+        bytes[] memory sigs = _sign(address(reg), d, 5);
         vm.expectRevert(ProviderRegistry.WrongEpoch.selector);
         reg.submit(d, sigs);
-        pre.nonce = reg.version() + 1;
-        vm.expectRevert(ProviderRegistry.WrongEpoch.selector);
-        reg.submit(pre, preSigs);
+    }
 
-        // New committee can.
-        d = _decision(reg, A_CONTACT, abi.encode("by new committee"));
-        reg.submit(d, _signWith(d, newPks, 2));
-        assertEq(reg.contact(), "by new committee");
+    function test_committeeChange_outgoingNeedsSupermajorityAfterNotice() public {
+        (, address[] memory newMembers) = _newCommittee();
+        _apply(reg, A_COMMITTEE, abi.encode(newMembers, uint8(3)));
+        vm.warp(block.timestamp + COMMITTEE_NOTICE);
+        // k outgoing keys can no longer fill positions to stall the hand-over...
+        IProviderRegistry.Decision memory d = _decision(reg, A_CONTACT, abi.encode("stall"));
+        bytes[] memory sigs_1 = _sign(address(reg), d, K);
+        vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.InsufficientSignatures.selector, K, K + 1));
+        reg.submit(d, sigs_1);
+        // ...but the same decision with more outgoing signatures still applies (nothing is ever stuck).
+        reg.submit(d, _sign(address(reg), d, K + 1));
+        assertEq(reg.contact(), "stall");
+    }
+
+    function test_committeeChange_replacedOrCancelledDuringNotice() public {
+        (uint256[] memory newPks, address[] memory newMembers) = _newCommittee();
+        _apply(reg, A_COMMITTEE, abi.encode(newMembers, uint8(3)));
+        uint64 replaced = reg.pendingEpoch();
+        _apply(reg, A_COMMITTEE, abi.encode(memberAddrs, K)); // cancel: re-state the current committee
+        assertTrue(reg.pendingEpoch() != replaced);
+        vm.warp(block.timestamp + COMMITTEE_NOTICE);
+        IProviderRegistry.Decision memory d = _decision(reg, A_CONTACT, abi.encode("x"));
+        d.epoch = replaced;
+        bytes[] memory sigs = _signWith(address(reg), d, newPks, 3);
+        vm.expectRevert(ProviderRegistry.WrongEpoch.selector);
+        reg.submit(d, sigs);
+    }
+
+    function test_committeeChange_enforcesFloors() public {
+        address[] memory three = new address[](3);
+        for (uint256 i = 0; i < 3; i++) {
+            three[i] = memberAddrs[i];
+        }
+        IProviderRegistry.Decision memory d = _decision(reg, A_COMMITTEE, abi.encode(three, uint8(1)));
+        bytes[] memory sigs = _sign(address(reg), d, K + 1);
+        vm.expectRevert(ProviderRegistry.InvalidCommittee.selector);
+        reg.submit(d, sigs);
     }
 
     function test_contactChange() public {
@@ -249,21 +365,27 @@ contract ProviderRegistryTest is Committee {
         assertFalse(ok);
     }
 
-    function test_certify_rejectsExpiryBeyondOneYearOrBeforeEffect() public {
-        IProviderRegistry.Decision memory d =
-            _decision(reg, A_CERTIFY, _certifyPayload(HEDERA, 1, uint64(block.timestamp + CERT_NOTICE + 367 days), 0));
-        bytes[] memory sigs = _sign(d, K);
-        vm.expectRevert(ProviderRegistry.InvalidExpiry.selector);
-        reg.submit(d, sigs);
-        d = _decision(reg, A_CERTIFY, _certifyPayload(HEDERA, 1, uint64(block.timestamp + 1 days), 0));
-        sigs = _sign(d, K);
+    function test_certify_expiryClampedToOneYear_neverReverts() public {
+        uint64 t0 = uint64(block.timestamp);
+        _apply(reg, A_CERTIFY, _certifyPayload(HEDERA, 1, t0 + CERT_NOTICE + 400 days, 0));
+        ProviderRegistry.Certification[] memory log = reg.certificationLog(Caip.certKey(HEDERA, 1));
+        assertEq(log[0].expiry, t0 + CERT_NOTICE + 366 days, "clamped to MAX_CERT_DURATION");
+        // Relayed so late that it is expired on arrival: recorded, never holds, the sequence goes on.
+        _apply(reg, A_CERTIFY, _certifyPayload(HEDERA, 2, t0 + 1 days, 0));
+        vm.warp(t0 + CERT_NOTICE);
+        (bool ok,) = _certified(HEDERA, 2);
+        assertFalse(ok);
+        // Only a signed-values contradiction is rejected (on every ledger alike).
+        IProviderRegistry.Decision memory d = _decision(reg, A_CERTIFY, _certifyPayload(HEDERA, 1, t0 + 30 days, 0));
+        d.effectiveAt = t0 + 30 days;
+        bytes[] memory sigs = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.InvalidExpiry.selector);
         reg.submit(d, sigs);
     }
 
     function test_certify_invalidLabel() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_CERTIFY, _certifyPayload(HEDERA, 4, _expiry(), 0));
-        bytes[] memory sigs = _sign(d, K);
+        bytes[] memory sigs = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.InvalidLabel.selector);
         reg.submit(d, sigs);
     }
@@ -283,11 +405,11 @@ contract ProviderRegistryTest is Committee {
 
     function test_energy_requiresFigureAndSource() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_CERTIFY, _certifyPayload(HEDERA, 3, _expiry(), 0));
-        bytes[] memory sigs = _sign(d, K);
+        bytes[] memory sigs = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.MissingEmissions.selector);
         reg.submit(d, sigs);
         d = _decision(reg, A_CERTIFY, abi.encode(HEDERA, uint8(3), _expiry(), uint64(2400), ""));
-        sigs = _sign(d, K);
+        sigs = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.MissingEmissions.selector);
         reg.submit(d, sigs);
     }
@@ -318,11 +440,11 @@ contract ProviderRegistryTest is Committee {
         assertEq(reg.certificationLog(Caip.certKey(HEDERA, 1)).length, 2, "append-only");
     }
 
-    function test_laterDecisionNeverTakesEffectBeforeEarlierOne() public {
+    function test_laterRemovalSupersedesPendingCertification() public {
         _apply(reg, A_CERTIFY, _certifyPayload(HEDERA, 1, _expiry(), 0)); // effective in 7 days
-        _apply(reg, A_UNCERTIFY, abi.encode(HEDERA, uint8(1))); // would be 72h, pushed to 7 days
+        _apply(reg, A_UNCERTIFY, abi.encode(HEDERA, uint8(1))); // effective in 72 hours
         ProviderRegistry.Certification[] memory log = reg.certificationLog(Caip.certKey(HEDERA, 1));
-        assertEq(log[1].effectiveFrom, log[0].effectiveFrom);
+        assertEq(log[1].effectiveFrom, block.timestamp + REMOVAL_NOTICE, "not queued behind the certification");
         vm.warp(block.timestamp + CERT_NOTICE);
         (bool ok,) = _certified(HEDERA, 1);
         assertFalse(ok, "the later removal wins");
@@ -346,11 +468,11 @@ contract ProviderRegistryTest is Committee {
 
     function test_disable_invalidTarget() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_DISABLE, _disablePayload(5, bytes32(uint256(1))));
-        bytes[] memory sigs = _sign(d, K + 1);
+        bytes[] memory sigs = _sign(address(reg), d, K + 1);
         vm.expectRevert(ProviderRegistry.InvalidTarget.selector);
         reg.submit(d, sigs);
         d = _decision(reg, A_DISABLE, _disablePayload(1, bytes32(0)));
-        sigs = _sign(d, K + 1);
+        sigs = _sign(address(reg), d, K + 1);
         vm.expectRevert(ProviderRegistry.InvalidTarget.selector);
         reg.submit(d, sigs);
     }
@@ -404,8 +526,16 @@ contract ProviderRegistryTest is Committee {
 
     function test_blacklist_requiresCaseId() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_BLACKLIST, _blacklistPayload(ACCT, bytes32(0)));
-        bytes[] memory sigs = _sign(d, K + 1);
+        bytes[] memory sigs = _sign(address(reg), d, K + 1);
         vm.expectRevert(ProviderRegistry.InvalidTarget.selector);
+        reg.submit(d, sigs);
+    }
+
+    function test_delist_needsKPlusOne() public {
+        _apply(reg, A_BLACKLIST, _blacklistPayload(ACCT, CASE));
+        IProviderRegistry.Decision memory d = _decision(reg, A_DELIST, abi.encode(ACCT, CASE));
+        bytes[] memory sigs = _sign(address(reg), d, K);
+        vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.InsufficientSignatures.selector, K, K + 1));
         reg.submit(d, sigs);
     }
 
@@ -424,7 +554,7 @@ contract ProviderRegistryTest is Committee {
 
     function test_everyActionEmitsEvidence() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_BLACKLIST, _blacklistPayload(ACCT, CASE));
-        bytes[] memory sigs = _sign(d, K + 1);
+        bytes[] memory sigs = _sign(address(reg), d, K + 1);
         bytes32 digest = reg.decisionDigest(d);
         vm.expectEmit(true, true, true, true, address(reg));
         emit ProviderRegistry.DecisionApplied(1, A_BLACKLIST, digest, EVIDENCE);
@@ -449,7 +579,7 @@ contract ProviderRegistryTest is Committee {
     function test_trustTier_needsKSignatures_andAdvancesVersion() public {
         assertEq(reg.requiredSignatures(A_TRUST_TIER), K);
         IProviderRegistry.Decision memory d = _decision(reg, A_TRUST_TIER, abi.encode(CH, HEDERA, uint8(2)));
-        bytes[] memory few = _sign(d, K - 1);
+        bytes[] memory few = _sign(address(reg), d, K - 1);
         vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.InsufficientSignatures.selector, K - 1, K));
         reg.submit(d, few);
         bytes32 digest = reg.decisionDigest(d);
@@ -457,7 +587,7 @@ contract ProviderRegistryTest is Committee {
         emit ProviderRegistry.TrustTierScheduled(
             Caip.edgeKey(CH, HEDERA), CH, HEDERA, 2, uint64(block.timestamp + CERT_NOTICE), EVIDENCE, digest
         );
-        reg.submit(d, _sign(d, K));
+        reg.submit(d, _sign(address(reg), d, K));
         assertEq(reg.version(), 1);
     }
 
@@ -513,27 +643,27 @@ contract ProviderRegistryTest is Committee {
 
     function test_trustTier_rejectsInvalidTierAndTarget() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_TRUST_TIER, abi.encode(CH, HEDERA, uint8(4)));
-        bytes[] memory sigs = _sign(d, K);
+        bytes[] memory sigs = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.InvalidTier.selector);
         reg.submit(d, sigs);
         d.payload = abi.encode(bytes32(0), HEDERA, uint8(1));
-        sigs = _sign(d, K);
+        sigs = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.InvalidTarget.selector);
         reg.submit(d, sigs);
         d.payload = abi.encode(CH, "", uint8(1));
-        sigs = _sign(d, K);
+        sigs = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.InvalidTarget.selector);
         reg.submit(d, sigs);
-        d.action = 12; // no action beyond TRUST_TIER
+        d.action = 12; // VAULT_BIND_ROUTER: vault only
         d.payload = abi.encode(CH, HEDERA, uint8(1));
-        sigs = _sign(d, K);
+        sigs = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.UnsupportedAction.selector);
         reg.submit(d, sigs);
     }
 
     function test_vaultNameRecoveryStillNotAcceptedHere() public {
         IProviderRegistry.Decision memory d = _decision(reg, A_VAULT_NAME_RECOVERY, abi.encode(uint256(1)));
-        bytes[] memory sigs = _sign(d, K);
+        bytes[] memory sigs = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.UnsupportedAction.selector);
         reg.submit(d, sigs);
     }

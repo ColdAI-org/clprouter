@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 /// @title IProviderRegistry
@@ -8,9 +8,12 @@ interface IProviderRegistry {
     /// @param action One of ProviderRegistry.Action.
     /// @param payload ABI-encoded action arguments (see ProviderRegistry).
     /// @param evidenceHash Hash of the published evidence document; never zero.
-    /// @param nonce Free-form uniqueness value chosen by the committee.
-    /// @param effectiveAt Earliest effective time the committee asks for (notice periods still apply).
-    /// @param validUntil Last timestamp at which the decision may be relayed.
+    /// @param nonce Registry decisions: position in the decision chain (`version + 1` of the registry it extends;
+    ///        the digest also commits to the head hash after `nonce - 1`). Vault decisions: free-form uniqueness value.
+    /// @param effectiveAt Earliest effective time the committee asks for (notice periods still apply); at most
+    ///        `MAX_NOTICE` after relay. The vault does not act before it.
+    /// @param validUntil Vault decisions: last timestamp at which the decision may be relayed. Signed but not
+    ///        enforced for ordered registry decisions, which must apply whenever a ledger reaches their position.
     /// @param epoch Committee epoch whose members signed.
     struct Decision {
         uint8 action;
@@ -56,8 +59,16 @@ interface IProviderRegistry {
     /// @notice Signatures a decision of `action` needs under the current committee.
     function requiredSignatures(uint8 action) external view returns (uint256);
 
-    /// @notice Ledger-independent digest committee members sign for `d`.
-    function decisionDigest(Decision calldata d) external pure returns (bytes32);
+    /// @notice EIP-712-style digest committee members sign (EIP-191 personal-sign over it) for registry decision `d`:
+    ///         bound to the deployment id (not to a ledger) and to the head hash the decision extends.
+    function decisionDigest(Decision calldata d) external view returns (bytes32);
+
+    /// @notice Id of the CLPRouter deployment (identical on every ledger of the deployment).
+    function DEPLOYMENT_ID() external view returns (bytes32);
+
+    /// @notice Head hash of the decision chain after `version` decisions (zero for versions not reached yet).
+    ///         Equal heads at a version mean equal registry histories up to that version.
+    function headAt(uint64 version) external view returns (bytes32);
 
     /// @notice Reverts unless `sigs` carry at least `required` distinct valid signatures over `digest`
     ///         from members of the current epoch `decisionEpoch`.
