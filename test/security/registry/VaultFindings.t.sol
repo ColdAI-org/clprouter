@@ -26,7 +26,8 @@ contract ReentrantBeneficiary {
     receive() external payable {
         if (reentered) return;
         reentered = true;
-        try vault.release(d, sigs) {} catch {
+        try vault.release(d, sigs) {}
+        catch {
             reentryReverted = true;
         }
     }
@@ -61,7 +62,10 @@ contract VaultFindingsTest is AuditBase {
         return v.deposit{value: amt}(ROUTE, CASE, s, r);
     }
 
-    function _name(QuarantineVault v, address to) internal returns (IProviderRegistry.Decision memory d, bytes[] memory s) {
+    function _name(QuarantineVault v, address to)
+        internal
+        returns (IProviderRegistry.Decision memory d, bytes[] memory s)
+    {
         d = _vaultDecision(reg, A_VAULT_NAME_RECOVERY, abi.encode(CASE, to));
         s = _sign(address(v), d, K + 1);
         v.nameRecovery(d, s);
@@ -257,8 +261,7 @@ contract VaultFindingsTest is AuditBase {
 
     function test_ok_noReleaseWithoutOrWithWrongCase() public {
         uint256 id = _dep(vault, 1 ether, sender, recipient);
-        IProviderRegistry.Decision memory d =
-            _vaultDecision(reg, A_VAULT_RELEASE, abi.encode(id, bytes32(0), uint8(0)));
+        IProviderRegistry.Decision memory d = _vaultDecision(reg, A_VAULT_RELEASE, abi.encode(id, bytes32(0), uint8(0)));
         bytes[] memory s = _sign(address(vault), d, K);
         vm.expectRevert(QuarantineVault.CaseMismatch.selector);
         vault.release(d, s);

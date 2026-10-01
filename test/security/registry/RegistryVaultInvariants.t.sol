@@ -73,7 +73,9 @@ contract RegistryVaultHandler is AuditBase {
         // A lower bound on what the registry demands (the outgoing committee may need more after a notice).
         uint256 required = d.epoch == reg.epoch()
             ? reg.requiredSignatures(action)
-            : (action == A_DISABLE || action == A_BLACKLIST || action == A_DELIST ? reg.pendingThreshold() + 1 : reg.pendingThreshold());
+            : (action == A_DISABLE || action == A_BLACKLIST || action == A_DELIST
+                    ? reg.pendingThreshold() + 1
+                    : reg.pendingThreshold());
         bytes32 headBefore = reg.headAt(reg.version());
         uint256[] memory before = _snapLens();
         try reg.submit(d, sigs) returns (bytes32 digest) {
@@ -122,7 +124,7 @@ contract RegistryVaultHandler is AuditBase {
         uint256 n = vault.depositCount();
         if (n == 0) return;
         uint256 id = bound(idSeed, 1, n);
-        (,, , address s, address r, uint256 amt, bool rel) = vault.deposits(id);
+        (,,, address s, address r, uint256 amt, bool rel) = vault.deposits(id);
         (bytes16 rid, bytes32 cid,,,,,) = vault.deposits(id);
         rid;
         bytes32 c = wrongCase ? keccak256("nope") : cid;
@@ -147,10 +149,9 @@ contract RegistryVaultHandler is AuditBase {
             }
             if (
                 k4 == 3
-                    && (
-                        !challenged || block.timestamp < uint256(relAt) + vault.CHALLENGE_WINDOW()
-                            || nMembers < reg.requiredSignatures(A_COMMITTEE)
-                    )
+                    && (!challenged
+                        || block.timestamp < uint256(relAt) + vault.CHALLENGE_WINDOW()
+                        || nMembers < reg.requiredSignatures(A_COMMITTEE))
             ) releaseRuleViolated = true;
             address paid = k4 == 0 ? s : k4 == 1 ? r : recTo;
             if (reg.isProviderAccount(paid)) providerPaid = true;

@@ -130,8 +130,7 @@ contract RegistryFindingsTest is AuditBase {
         fresh[0] = 0xF1;
         fresh[1] = 0xF2;
         fresh[2] = 0xF3;
-        IProviderRegistry.Decision memory rot =
-            _decision(reg, A_COMMITTEE, abi.encode(_sortedAddrs(fresh), uint8(2)));
+        IProviderRegistry.Decision memory rot = _decision(reg, A_COMMITTEE, abi.encode(_sortedAddrs(fresh), uint8(2)));
         bytes[] memory rotSigs = _sign(address(reg), rot, K + 1);
         reg.submit(rot, rotSigs);
 

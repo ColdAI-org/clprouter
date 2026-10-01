@@ -164,7 +164,8 @@ contract QuarantineVault {
     /// @notice Bind this vault to its ledger's Router, once (committee decision, k + 1, payload `(address router)`).
     ///         From then on only that Router can deposit.
     function bindRouter(IProviderRegistry.Decision calldata d, bytes[] calldata sigs) external {
-        bytes32 digest = _consume(d, sigs, ACTION_VAULT_BIND_ROUTER, REGISTRY.requiredSignatures(ACTION_VAULT_BIND_ROUTER));
+        bytes32 digest =
+            _consume(d, sigs, ACTION_VAULT_BIND_ROUTER, REGISTRY.requiredSignatures(ACTION_VAULT_BIND_ROUTER));
         if (router != address(0)) revert AlreadyBound();
         address r = abi.decode(d.payload, (address));
         if (r == address(0)) revert InvalidParameters();
