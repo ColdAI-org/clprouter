@@ -64,7 +64,10 @@ message ClprRouteConstraints {
   uint64 deadline = 2;           // unix seconds; any hop past it drops the message
   uint64 max_fee = 3;            // cap on the sum of hop fees (0 = budget only)
   uint64 remaining_fee_budget = 4; // decremented by each forwarding hop
-  uint32 trust_floor = 5;        // minimum verifier trust tier (planner-enforced in phase 1)
+  uint32 trust_floor = 5;        // minimum verifier trust tier of every edge: 0 attested, 1 committee,
+                                 // 2 light client, 3 validity proof. Above 0, every Router refuses to
+                                 // forward onto an edge the provider registry has not labelled with at
+                                 // least this tier (unlabelled edges fail closed); 0 = no floor
   uint32 max_hops = 6;           // maximum edges (0 = default 3)
   bool loose = 7;                // false = strict source routing; true = hops may re-route
   uint64 energy_cap = 8;         // Energy filter: max certified emissions, in micrograms CO2e (µgCO2e)
@@ -124,6 +127,7 @@ enum ReceiptReason {
   RECEIPT_REASON_NEXT_HOP_ERROR = 10;
   RECEIPT_REASON_SEND_FAILED = 11;
   RECEIPT_REASON_BAD_ROUTE = 12;
+  RECEIPT_REASON_TRUST_FLOOR = 13;   // next edge is unlabelled or labelled below the route's trust floor
 }
 
 // Payload of an envelope with payload_type = PAYLOAD_TYPE_RECEIPT.

@@ -588,6 +588,103 @@ contract RouterFlowTest is ThreeLedgerFixture {
     }
 
     // ═════════════════════════════════════════════════════════════════════
+    // Trust floor (edge trust tiers labelled in the provider registry)
+    // ═════════════════════════════════════════════════════════════════════
+
+    uint8 internal constant A_TRUST_TIER = 11;
+
+    /// @dev Label the edge `ch` → `toLedger` with `tier` on every ledger's registry.
+    function _labelAll(bytes32 ch, string memory toLedger, uint8 tier) internal {
+        _applyAll(A_TRUST_TIER, abi.encode(ch, toLedger, tier));
+    }
+
+    function _floorRequest(uint256 escrow, uint32 floor) internal view returns (ClprRouter.SendRequest memory req) {
+        req = _request(escrow);
+        req.constraints.trustFloor = floor;
+        req.constraints.deadline = uint64(block.timestamp + 10 days);
+    }
+
+    /// @dev Only forward edges are labelled: receipts carry no floor, so the unlabelled reverse edges still
+    ///      bring the DELIVERED receipt home.
+    function test_trustFloor_edgesAtOrAboveFloor_deliver() public {
+        _labelAll(chAB, ID_B, 3);
+        _labelAll(chBC, ID_C, 2);
+        vm.warp(block.timestamp + CERT_NOTICE);
+        bytes16 id = _sendAs(alice, _floorRequest(1 ether, 2), 1.1 ether);
+        _settle();
+        assertEq(uint8(_routeStatus(id)), uint8(ClprRouter.RouteStatus.DELIVERED));
+        assertEq(payee.balance, 1 ether);
+    }
+
+    function test_trustFloor_zero_ignoresMissingLabels() public {
+        bytes16 id = _sendAs(alice, _floorRequest(0, 0), 0.03 ether);
+        _settle();
+        assertEq(uint8(_routeStatus(id)), uint8(ClprRouter.RouteStatus.DELIVERED));
+    }
+
+    function test_trustFloor_unlabelledEdge_atSend_reverts() public {
+        _labelAll(chAB, ID_B, 3);
+        vm.warp(block.timestamp + CERT_NOTICE);
+        vm.expectRevert(abi.encodeWithSelector(ClprRouter.RouteBlocked.selector, 1, RouteTypes.Reason.TRUST_FLOOR));
+        _sendAs(alice, _floorRequest(0, 1), 0.03 ether);
+    }
+
+    function test_trustFloor_edgeBelowFloor_atSend_reverts() public {
+        _labelAll(chAB, ID_B, 1); // committee tier
+        _labelAll(chBC, ID_C, 3);
+        vm.warp(block.timestamp + CERT_NOTICE);
+        vm.expectRevert(abi.encodeWithSelector(ClprRouter.RouteBlocked.selector, 0, RouteTypes.Reason.TRUST_FLOOR));
+        _sendAs(alice, _floorRequest(1 ether, 2), 1.1 ether);
+    }
+
+    function test_trustFloor_labelBeforeNotice_reverts() public {
+        _labelAll(chAB, ID_B, 3);
+        _labelAll(chBC, ID_C, 3);
+        vm.warp(block.timestamp + CERT_NOTICE - 1);
+        vm.expectRevert(abi.encodeWithSelector(ClprRouter.RouteBlocked.selector, 0, RouteTypes.Reason.TRUST_FLOOR));
+        _sendAs(alice, _floorRequest(0, 1), 0.03 ether);
+    }
+
+    function test_trustFloor_aboveHighestTier_neverPasses() public {
+        _labelAll(chAB, ID_B, 3);
+        _labelAll(chBC, ID_C, 3);
+        vm.warp(block.timestamp + CERT_NOTICE);
+        vm.expectRevert(abi.encodeWithSelector(ClprRouter.RouteBlocked.selector, 0, RouteTypes.Reason.TRUST_FLOOR));
+        _sendAs(alice, _floorRequest(0, 4), 0.03 ether);
+    }
+
+    /// @dev B's registry lowers B → C below the floor while the route is in flight: B refuses to forward,
+    ///      sends a FAILED receipt, and the origin refunds the escrow and the unused budget.
+    function test_trustFloor_downgradeMidRoute_stopsAtHopAndRefunds() public {
+        _labelAll(chAB, ID_B, 3);
+        _labelAll(chBC, ID_C, 3);
+        vm.warp(block.timestamp + CERT_NOTICE);
+        uint256 before = alice.balance;
+        bytes16 id = _sendAs(alice, _floorRequest(1 ether, 3), 1.1 ether);
+        _apply(B.registry, A_TRUST_TIER, abi.encode(chBC, ID_C, uint8(2)));
+        vm.warp(block.timestamp + REMOVAL_NOTICE);
+
+        (, Vm.Log[] memory logs) = _relayWithLogs(A, B, chAB);
+        bool stopped;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].emitter == address(B.router) && logs[i].topics[0] == ClprRouter.RouteStopped.selector) {
+                (, RouteTypes.ReceiptStatus st, RouteTypes.Reason r) =
+                    abi.decode(logs[i].data, (uint32, RouteTypes.ReceiptStatus, RouteTypes.Reason));
+                assertEq(uint8(st), uint8(RouteTypes.ReceiptStatus.FAILED));
+                assertEq(uint8(r), uint8(RouteTypes.Reason.TRUST_FLOOR));
+                stopped = true;
+            }
+        }
+        assertTrue(stopped, "B refused to forward");
+        _settle();
+        assertEq(C.app.deliveredCount(), 0);
+        assertEq(C.service.getChannel(chBC).receivedMessageId, 0, "nothing sent onto the downgraded edge");
+        assertEq(uint8(_routeStatus(id)), uint8(ClprRouter.RouteStatus.FAILED));
+        assertEq(alice.balance, before - 0.01 ether, "escrow and unused fees refunded");
+        assertEq(payee.balance, 0);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
     // Forged receipts and inbound authentication
     // ═════════════════════════════════════════════════════════════════════
 

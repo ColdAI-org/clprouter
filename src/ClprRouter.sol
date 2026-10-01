@@ -19,7 +19,8 @@ import {Caip} from "./libraries/Caip.sol";
 ///         A CLPR application on top of an unchanged CLPR Service: it only calls `sendMessage` and implements
 ///         `IClprApplication`.
 /// @dev Immutable, no admin key, no pause. The only outside inputs that change behaviour are the provider
-///      registry (route disables, blacklist, filter certifications) whose address is fixed at deployment.
+///      registry (route disables, blacklist, filter certifications, edge trust tiers) whose address is fixed at
+///      deployment.
 ///
 ///      Flow: `send` on the origin → forward inside CLPR application delivery on each intermediate ledger →
 ///      deliver to the destination application → receipt back to the origin as a new routed message → origin
@@ -477,7 +478,8 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
     }
 
     /// @dev Checks on the edge leaving hop `idx`: disabled edge, ledger or Router; Channel goes to the named
-    ///      ledger; (routes only) filters on the next ledger at the pinned registry version, and fee budget.
+    ///      ledger; (routes only) filters on the next ledger at the pinned registry version, the edge's trust tier
+    ///      against the route's trust floor, and fee budget.
     function _checkNext(RouteTypes.Envelope memory e, uint256 idx, bool isReceipt) private returns (RouteTypes.Reason) {
         RouteTypes.Hop memory h = e.hops[idx];
         RouteTypes.Hop memory next = e.hops[idx + 1];
@@ -488,6 +490,7 @@ contract ClprRouter is IClprApplication, ReentrancyGuardTransient {
         if (!RouteLogic.filtersPass(REGISTRY, next.ledgerId, e.constraints, e.filterRegistryVersions)) {
             return RouteTypes.Reason.FILTER;
         }
+        if (!RouteLogic.edgeTrusted(REGISTRY, h, next, e.constraints.trustFloor)) return RouteTypes.Reason.TRUST_FLOOR;
         if (e.constraints.remainingFeeBudget < h.fee) return RouteTypes.Reason.FEE_BUDGET;
         return RouteTypes.Reason.NONE;
     }

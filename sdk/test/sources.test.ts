@@ -85,12 +85,14 @@ describe("OnChainGraphSource", () => {
       disabledLedgers: ["test:z"],
       disabledRouterVersions: [2],
       version: 9n,
+      edgeTrustTiers: { [ID(A, H)]: "attested" },
     };
     const g = await new OnChainGraphSource(base, reader).load();
     expect(g.edge(ID(A, X)).disabled).toBe(true);
     expect(g.ledger("test:z").disabled).toBe(true);
     expect(g.data.disabledRouterVersions).toEqual([2]);
     expect(g.data.registryVersion).toBe(9);
+    expect(g.edge(ID(A, H)).trustTier).toBe("attested"); // the on-chain label replaces the snapshot's tier
     const iso = plan(g, { origin: A, destination: B, mode: "cheapest", filters: { iso20022: true }, now: NOW });
     expect(iso.ok && iso.route.ledgers).toEqual([A, "test:y", B]); // the hub lost its ISO listing
   });
@@ -135,6 +137,7 @@ describe("ViemOnChainReader", () => {
     },
     async readContract({ functionName, args }: { functionName: string; args: [Hex] }) {
       if (functionName === "version") return 6n;
+      if (functionName === "trustTier") return args[0] === registryKeys.edge(CH, H) ? [true, 1] : [false, 0];
       if (functionName === "isDisabled") {
         return [registryKeys.ledger(X), registryKeys.edge(CH, H), registryKeys.routerVersion(2)].includes(args[0]);
       }
@@ -190,6 +193,7 @@ describe("ViemOnChainReader", () => {
     expect(s.disabledEdges).toEqual([edgeId(edge)]);
     expect(s.disabledRouterVersions).toEqual([2]);
     expect(s.version).toBe(6n);
+    expect(s.edgeTrustTiers).toEqual({ [edgeId(edge)]: "committee" });
   });
 
   it("derives the same keys as Caip.sol", () => {

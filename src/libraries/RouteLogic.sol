@@ -44,6 +44,19 @@ library RouteLogic {
         return RouteTypes.Reason.NONE;
     }
 
+    /// @notice The edge hops[i] -> hops[i+1] meets the trust floor `floor`: the provider registry labels it with
+    ///         a tier of at least `floor`. A floor of zero is always met and never reads the registry; above zero,
+    ///         an unlabelled edge fails closed.
+    function edgeTrusted(IProviderRegistry registry, RouteTypes.Hop memory h, RouteTypes.Hop memory next, uint32 floor)
+        public
+        view
+        returns (bool)
+    {
+        if (floor == 0) return true;
+        (bool labelled, uint8 tier) = registry.trustTier(Caip.edgeKey(h.channelId, next.ledgerId));
+        return labelled && tier >= floor;
+    }
+
     /// @notice Route-safety reason for the ledger holding a message that arrived from `prev`
     ///         (own Router deployment or version disabled; inbound edge, previous ledger or Router disabled).
     function hereSafety(
@@ -89,7 +102,7 @@ library RouteLogic {
     }
 
     /// @notice Origin-side check of a whole route before any value moves: own Router and ledger, then every
-    ///         edge and every ledger's filters. Returns the first failing (hop, reason), or (0, NONE).
+    ///         edge (route safety, trust floor) and every ledger's filters. Returns the first failing (hop, reason), or (0, NONE).
     function checkRoute(IProviderRegistry registry, bytes32 selfRouterKey, uint32 version, RouteTypes.Envelope memory e)
         public
         view
@@ -105,6 +118,9 @@ library RouteLogic {
         for (uint256 i = 0; i + 1 < e.hops.length; i++) {
             RouteTypes.Reason r = edgeSafety(registry, e.hops[i], e.hops[i + 1]);
             if (r != RouteTypes.Reason.NONE) return (i, r);
+            if (!edgeTrusted(registry, e.hops[i], e.hops[i + 1], e.constraints.trustFloor)) {
+                return (i, RouteTypes.Reason.TRUST_FLOOR);
+            }
             if (!filtersPass(registry, e.hops[i + 1].ledgerId, e.constraints, e.filterRegistryVersions)) {
                 return (i, RouteTypes.Reason.FILTER);
             }

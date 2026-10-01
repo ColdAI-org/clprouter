@@ -7,12 +7,16 @@ import {Caip} from "./libraries/Caip.sol";
 
 /// @title ProviderRegistry
 /// @notice The provider's only on-chain power in CLPRouter: certify networks for the ISO 20022, MiCA and Energy
-///         filters; disable and re-enable malicious routes (a Channel direction, a ledger, a Router deployment or
-///         a Router version); and blacklist CAIP-10 accounts after an exploit.
+///         filters; label Channel directions with their verifier trust tier (read by Routers to enforce a route's
+///         trust floor); disable and re-enable malicious routes (a Channel direction, a ledger, a Router deployment
+///         or a Router version); and blacklist CAIP-10 accounts after an exploit.
 /// @dev Append-only and admin-less. A decision is signed once off-chain by k of n committee members over a
 ///      ledger-independent digest, and anyone can relay it to the registry on any ledger. Rules:
 ///        - certification changes (k signatures) take effect after a notice period
 ///          (`CERT_NOTICE` to certify, `REMOVAL_NOTICE` to uncertify); certifications last at most a year;
+///        - trust-tier labels (k signatures) take effect after `CERT_NOTICE` when they raise an edge's tier and
+///          after `REMOVAL_NOTICE` when they lower or remove it. A label only describes an edge: it moves no
+///          funds, and a lowered label can at most stop routes whose floor it no longer meets (they are refunded);
 ///        - disables and blacklist entries need k + 1 signatures, take effect immediately, and lapse after
 ///          `DISABLE_LAPSE` / `BLACKLIST_LAPSE` unless renewed by a new decision;
 ///        - re-enabling (k) takes effect after `REENABLE_NOTICE`; delisting (k) is immediate;
@@ -45,7 +49,8 @@ contract ProviderRegistry is IProviderRegistry {
         COMMITTEE, // (address[] members, uint8 threshold)
         CONTACT, // (string contact)
         VAULT_RELEASE, // verified by QuarantineVault, never accepted here
-        VAULT_NAME_RECOVERY // verified by QuarantineVault, never accepted here
+        VAULT_NAME_RECOVERY, // verified by QuarantineVault, never accepted here
+        TRUST_TIER // (bytes32 channelId, string toLedgerId, uint8 tier) — tier TIER_NONE removes the label
     }
 
     /// @notice Certification labels (filter names).
@@ -58,6 +63,14 @@ contract ProviderRegistry is IProviderRegistry {
     uint8 public constant TARGET_LEDGER = 2;
     uint8 public constant TARGET_ROUTER = 3;
     uint8 public constant TARGET_ROUTER_VERSION = 4;
+
+    /// @notice Verifier trust tiers, weakest to strongest (same numbers as the envelope's `trust_floor`).
+    uint8 public constant TIER_ATTESTED = 0;
+    uint8 public constant TIER_COMMITTEE = 1;
+    uint8 public constant TIER_LIGHT_CLIENT = 2;
+    uint8 public constant TIER_VALIDITY_PROOF = 3;
+    /// @notice Payload value of a TRUST_TIER decision that removes an edge's label.
+    uint8 public constant TIER_NONE = type(uint8).max;
 
     uint64 public constant MAX_CERT_DURATION = 366 days;
 
@@ -76,6 +89,14 @@ contract ProviderRegistry is IProviderRegistry {
         uint64 disabledAt;
         uint64 lapseAt;
         uint64 reenableAt; // 0 = no re-enable scheduled
+    }
+
+    /// @dev Trust-tier label of one Channel direction. Tiers are stored as tier + 1 so that 0 means "unlabelled".
+    ///      A scheduled change sits in `next` until `nextFrom`.
+    struct TierLabel {
+        uint8 current;
+        uint8 next;
+        uint64 nextFrom; // 0 = nothing scheduled
     }
 
     struct Listing {
@@ -100,6 +121,7 @@ contract ProviderRegistry is IProviderRegistry {
     error InvalidExpiry();
     error MissingEmissions();
     error InvalidCommittee();
+    error InvalidTier();
 
     // ── Events (every action carries its evidence hash and decision digest) ─
 
@@ -154,6 +176,16 @@ contract ProviderRegistry is IProviderRegistry {
         uint64 indexed epoch, address[] members, uint8 threshold, bytes32 evidenceHash, bytes32 digest
     );
     event ContactChanged(string contact, bytes32 evidenceHash, bytes32 digest);
+    /// @notice `tier` is TIER_NONE when the label is removed.
+    event TrustTierScheduled(
+        bytes32 indexed edgeKey,
+        bytes32 channelId,
+        string toLedgerId,
+        uint8 tier,
+        uint64 effectiveFrom,
+        bytes32 evidenceHash,
+        bytes32 indexed digest
+    );
 
     // ── Immutable parameters ────────────────────────────────────────────────
 
@@ -183,6 +215,7 @@ contract ProviderRegistry is IProviderRegistry {
     mapping(bytes32 => Certification[]) private _certs;
     mapping(bytes32 => Switch) public switches;
     mapping(bytes32 => Listing) public listings;
+    mapping(bytes32 => TierLabel) private _tiers;
 
     /// @param initialMembers Initial committee, strictly ascending addresses.
     /// @param k Signatures needed for a certification change (disable/blacklist need k + 1).
@@ -207,7 +240,10 @@ contract ProviderRegistry is IProviderRegistry {
     /// @param sigs 65-byte ECDSA signatures over the EIP-191 hash of {decisionDigest}, ordered by signer address.
     /// @return digest The decision digest (also the replay key).
     function submit(Decision calldata d, bytes[] calldata sigs) external returns (bytes32 digest) {
-        if (d.action == uint8(Action.NONE) || d.action >= uint8(Action.VAULT_RELEASE)) revert UnsupportedAction();
+        if (
+            d.action == uint8(Action.NONE) || d.action == uint8(Action.VAULT_RELEASE)
+                || d.action == uint8(Action.VAULT_NAME_RECOVERY) || d.action > uint8(Action.TRUST_TIER)
+        ) revert UnsupportedAction();
         Action action = Action(d.action);
         if (block.timestamp > d.validUntil) revert DecisionExpired();
         if (d.evidenceHash == bytes32(0)) revert MissingEvidence();
@@ -224,6 +260,7 @@ contract ProviderRegistry is IProviderRegistry {
         else if (action == Action.BLACKLIST) _blacklist(d, digest);
         else if (action == Action.DELIST) _delist(d, digest);
         else if (action == Action.COMMITTEE) _committee(d, digest);
+        else if (action == Action.TRUST_TIER) _trustTier(d, digest);
         else _contact(d, digest);
         emit DecisionApplied(v, d.action, digest, d.evidenceHash);
     }
@@ -289,6 +326,13 @@ contract ProviderRegistry is IProviderRegistry {
             emissionsUg = certified ? c.emissionsUg : 0;
             return (certified, emissionsUg);
         }
+    }
+
+    /// @inheritdoc IProviderRegistry
+    function trustTier(bytes32 edgeKey_) public view returns (bool labelled, uint8 tier) {
+        TierLabel storage t = _tiers[edgeKey_];
+        uint8 v = t.nextFrom != 0 && block.timestamp >= t.nextFrom ? t.next : t.current;
+        return v == 0 ? (false, 0) : (true, v - 1);
     }
 
     /// @notice Full certification log of `key` (every past version stays readable).
@@ -435,6 +479,23 @@ contract ProviderRegistry is IProviderRegistry {
         bool applied = l.caseId == caseId && block.timestamp < l.lapseAt;
         if (applied) l.lapseAt = uint64(block.timestamp);
         emit AccountDelisted(key, caip10, caseId, applied, d.evidenceHash, digest);
+    }
+
+    function _trustTier(Decision calldata d, bytes32 digest) private {
+        (bytes32 channelId, string memory toLedgerId, uint8 tier) = abi.decode(d.payload, (bytes32, string, uint8));
+        if (tier > TIER_VALIDITY_PROOF && tier != TIER_NONE) revert InvalidTier();
+        if (channelId == bytes32(0) || bytes(toLedgerId).length == 0) revert InvalidTarget();
+        bytes32 key = Caip.edgeKey(channelId, toLedgerId);
+        TierLabel storage t = _tiers[key];
+        // Fold a scheduled change that already took effect; a pending one is superseded by this decision.
+        if (t.nextFrom != 0 && block.timestamp >= t.nextFrom) t.current = t.next;
+        uint8 stored = tier == TIER_NONE ? 0 : tier + 1;
+        // Raising trust needs the certification notice; lowering or removing it the (shorter) removal notice.
+        uint64 notice = stored > t.current ? CERT_NOTICE : REMOVAL_NOTICE;
+        uint64 effectiveFrom = _max(d.effectiveAt, uint64(block.timestamp) + notice);
+        t.next = stored;
+        t.nextFrom = effectiveFrom;
+        emit TrustTierScheduled(key, channelId, toLedgerId, tier, effectiveFrom, d.evidenceHash, digest);
     }
 
     function _committee(Decision calldata d, bytes32 digest) private {

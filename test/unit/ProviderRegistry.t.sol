@@ -430,4 +430,111 @@ contract ProviderRegistryTest is Committee {
         emit ProviderRegistry.DecisionApplied(1, A_BLACKLIST, digest, EVIDENCE);
         reg.submit(d, sigs);
     }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // Trust-tier labels (Channel directions)
+    // ═════════════════════════════════════════════════════════════════════
+
+    uint8 internal constant A_TRUST_TIER = 11;
+    bytes32 internal constant CH = keccak256("channel-eth-hedera");
+
+    function _tier(string memory toLedger, uint8 tier) internal returns (bytes32) {
+        return _apply(reg, A_TRUST_TIER, abi.encode(CH, toLedger, tier));
+    }
+
+    function _tierOf(string memory toLedger) internal view returns (bool labelled, uint8 tier) {
+        return reg.trustTier(Caip.edgeKey(CH, toLedger));
+    }
+
+    function test_trustTier_needsKSignatures_andAdvancesVersion() public {
+        assertEq(reg.requiredSignatures(A_TRUST_TIER), K);
+        IProviderRegistry.Decision memory d = _decision(reg, A_TRUST_TIER, abi.encode(CH, HEDERA, uint8(2)));
+        bytes[] memory few = _sign(d, K - 1);
+        vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.InsufficientSignatures.selector, K - 1, K));
+        reg.submit(d, few);
+        bytes32 digest = reg.decisionDigest(d);
+        vm.expectEmit(true, true, true, true, address(reg));
+        emit ProviderRegistry.TrustTierScheduled(
+            Caip.edgeKey(CH, HEDERA), CH, HEDERA, 2, uint64(block.timestamp + CERT_NOTICE), EVIDENCE, digest
+        );
+        reg.submit(d, _sign(d, K));
+        assertEq(reg.version(), 1);
+    }
+
+    function test_trustTier_raisingWaitsForCertNotice() public {
+        (bool labelled,) = _tierOf(HEDERA);
+        assertFalse(labelled, "unlabelled by default");
+        _tier(HEDERA, 2);
+        vm.warp(block.timestamp + CERT_NOTICE - 1);
+        (labelled,) = _tierOf(HEDERA);
+        assertFalse(labelled);
+        vm.warp(block.timestamp + 1);
+        uint8 tier;
+        (labelled, tier) = _tierOf(HEDERA);
+        assertTrue(labelled);
+        assertEq(tier, 2);
+        // The label is per direction: the opposite direction of the same Channel stays unlabelled.
+        (labelled,) = _tierOf("eip155:1");
+        assertFalse(labelled);
+    }
+
+    function test_trustTier_attestedIsALabelToo() public {
+        _tier(HEDERA, 0);
+        vm.warp(block.timestamp + CERT_NOTICE);
+        (bool labelled, uint8 tier) = _tierOf(HEDERA);
+        assertTrue(labelled);
+        assertEq(tier, 0);
+    }
+
+    function test_trustTier_loweringAndRemovalWaitForRemovalNotice() public {
+        _tier(HEDERA, 3);
+        vm.warp(block.timestamp + CERT_NOTICE);
+        _tier(HEDERA, 1);
+        vm.warp(block.timestamp + REMOVAL_NOTICE - 1);
+        (, uint8 tier) = _tierOf(HEDERA);
+        assertEq(tier, 3, "still the old tier during the notice");
+        vm.warp(block.timestamp + 1);
+        (, tier) = _tierOf(HEDERA);
+        assertEq(tier, 1);
+
+        _tier(HEDERA, 255); // TIER_NONE
+        vm.warp(block.timestamp + REMOVAL_NOTICE);
+        (bool labelled,) = _tierOf(HEDERA);
+        assertFalse(labelled);
+    }
+
+    function test_trustTier_laterDecisionSupersedesPendingOne() public {
+        _tier(HEDERA, 3);
+        _tier(HEDERA, 255); // withdrawn before it took effect
+        vm.warp(block.timestamp + CERT_NOTICE);
+        (bool labelled,) = _tierOf(HEDERA);
+        assertFalse(labelled);
+    }
+
+    function test_trustTier_rejectsInvalidTierAndTarget() public {
+        IProviderRegistry.Decision memory d = _decision(reg, A_TRUST_TIER, abi.encode(CH, HEDERA, uint8(4)));
+        bytes[] memory sigs = _sign(d, K);
+        vm.expectRevert(ProviderRegistry.InvalidTier.selector);
+        reg.submit(d, sigs);
+        d.payload = abi.encode(bytes32(0), HEDERA, uint8(1));
+        sigs = _sign(d, K);
+        vm.expectRevert(ProviderRegistry.InvalidTarget.selector);
+        reg.submit(d, sigs);
+        d.payload = abi.encode(CH, "", uint8(1));
+        sigs = _sign(d, K);
+        vm.expectRevert(ProviderRegistry.InvalidTarget.selector);
+        reg.submit(d, sigs);
+        d.action = 12; // no action beyond TRUST_TIER
+        d.payload = abi.encode(CH, HEDERA, uint8(1));
+        sigs = _sign(d, K);
+        vm.expectRevert(ProviderRegistry.UnsupportedAction.selector);
+        reg.submit(d, sigs);
+    }
+
+    function test_vaultNameRecoveryStillNotAcceptedHere() public {
+        IProviderRegistry.Decision memory d = _decision(reg, A_VAULT_NAME_RECOVERY, abi.encode(uint256(1)));
+        bytes[] memory sigs = _sign(d, K);
+        vm.expectRevert(ProviderRegistry.UnsupportedAction.selector);
+        reg.submit(d, sigs);
+    }
 }

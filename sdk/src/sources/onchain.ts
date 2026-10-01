@@ -9,7 +9,8 @@ import {
   sliceHex,
 } from "viem";
 import { RouteGraph, edgeId } from "../graph.js";
-import type { Caip2, Certification, ChannelStatus, Edge, FilterLabel, RouteGraphData } from "../types.js";
+import type { Caip2, Certification, ChannelStatus, Edge, FilterLabel, RouteGraphData, TrustTier } from "../types.js";
+import { TRUST_TIER_ORDER } from "../types.js";
 import { ugToKg } from "../filters.js";
 import type { GraphSource } from "./static.js";
 
@@ -37,6 +38,11 @@ export interface RegistryState {
   /** Edge ids (see `edgeId`). */
   disabledEdges: string[];
   disabledRouterVersions: number[];
+  /**
+   * Trust tiers the provider labelled Channel directions with, by edge id. Routers enforce a route's trust floor
+   * against these labels (an unlabelled edge fails any floor above `attested`), so they replace the snapshot's tier.
+   */
+  edgeTrustTiers?: Record<string, TrustTier>;
 }
 
 /**
@@ -93,7 +99,11 @@ export class OnChainGraphSource implements GraphSource {
         if (reg.disabledLedgers.includes(l.id)) l.disabled = true;
       }
       const disabled = new Set(reg.disabledEdges);
-      for (const e of data.edges) if (disabled.has(edgeId(e))) e.disabled = true;
+      for (const e of data.edges) {
+        if (disabled.has(edgeId(e))) e.disabled = true;
+        const tier = reg.edgeTrustTiers?.[edgeId(e)];
+        if (tier) e.trustTier = tier;
+      }
       data.disabledRouterVersions = [...new Set([...(data.disabledRouterVersions ?? []), ...reg.disabledRouterVersions])];
       if (reg.version !== undefined) data.registryVersion = Number(reg.version);
     }
@@ -151,6 +161,16 @@ export const REGISTRY_ABI = [
     stateMutability: "view",
     inputs: [{ name: "key", type: "bytes32" }],
     outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "trustTier",
+    stateMutability: "view",
+    inputs: [{ name: "edgeKey", type: "bytes32" }],
+    outputs: [
+      { name: "labelled", type: "bool" },
+      { name: "tier", type: "uint8" },
+    ],
   },
   {
     type: "function",
@@ -305,13 +325,23 @@ export class ViemOnChainReader implements OnChainReader {
       if (await disabled(registryKeys.ledger(id))) disabledLedgers.push(id);
     }
     const disabledEdges: string[] = [];
+    const edgeTrustTiers: Record<string, TrustTier> = {};
     for (const e of this.cfg.edges ?? []) {
-      if (await disabled(registryKeys.edge(e.channelId as Hex, e.to))) disabledEdges.push(edgeId(e));
+      const key = registryKeys.edge(e.channelId as Hex, e.to);
+      if (await disabled(key)) disabledEdges.push(edgeId(e));
+      const [labelled, tier] = await client.readContract({
+        address: r.address,
+        abi: REGISTRY_ABI,
+        functionName: "trustTier",
+        args: [key],
+      });
+      const t = TRUST_TIER_ORDER[tier];
+      if (labelled && t) edgeTrustTiers[edgeId(e)] = t;
     }
     const disabledRouterVersions: number[] = [];
     for (const v of this.cfg.routerVersions ?? []) {
       if (await disabled(registryKeys.routerVersion(v))) disabledRouterVersions.push(v);
     }
-    return { version, certifications, disabledLedgers, disabledEdges, disabledRouterVersions };
+    return { version, certifications, disabledLedgers, disabledEdges, disabledRouterVersions, edgeTrustTiers };
   }
 }

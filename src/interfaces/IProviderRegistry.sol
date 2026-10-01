@@ -38,6 +38,12 @@ interface IProviderRegistry {
         view
         returns (bool certified, uint64 emissionsUg);
 
+    /// @notice Verifier trust tier the provider labelled the Channel direction `edgeKey` with
+    ///         (`Caip.edgeKey(channelId, toLedgerId)`), as in effect now.
+    /// @return labelled False if the edge carries no label (a trust floor above zero then fails closed).
+    /// @return tier 0 attested, 1 committee, 2 light client, 3 validity proof (the envelope's `trust_floor` scale).
+    function trustTier(bytes32 edgeKey) external view returns (bool labelled, uint8 tier);
+
     /// @notice Registry version: number of committee decisions applied so far (monotonically increasing).
     function version() external view returns (uint64);
 

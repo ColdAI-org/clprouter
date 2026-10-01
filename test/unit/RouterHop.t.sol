@@ -218,6 +218,36 @@ contract RouterHopTest is Committee {
         assertEq(uint8(_sentReceipt(0).reason), uint8(RouteTypes.Reason.FEE_BUDGET));
     }
 
+    function test_trustFloor_nextEdgeBelowFloor_failureReceipt() public {
+        _apply(reg, 11, abi.encode(CH_BC, ID_C, uint8(1)));
+        vm.warp(block.timestamp + CERT_NOTICE);
+        RouteTypes.Envelope memory e = _env(false);
+        e.constraints.deadline = uint64(block.timestamp + 1 hours);
+        e.constraints.trustFloor = 2;
+        (, bytes memory resp) = _deliver(e);
+        assertEq(resp, abi.encodePacked(uint8(2), uint8(RouteTypes.Reason.TRUST_FLOOR)));
+        assertEq(svc.sentCount(), 1, "only the receipt");
+        assertEq(uint8(_sentReceipt(0).reason), uint8(RouteTypes.Reason.TRUST_FLOOR));
+    }
+
+    function test_trustFloor_unlabelledNextEdge_failsClosed() public {
+        RouteTypes.Envelope memory e = _env(false);
+        e.constraints.trustFloor = 1;
+        _deliver(e);
+        assertEq(uint8(_sentReceipt(0).reason), uint8(RouteTypes.Reason.TRUST_FLOOR));
+    }
+
+    function test_trustFloor_nextEdgeAtFloor_forwards() public {
+        _apply(reg, 11, abi.encode(CH_BC, ID_C, uint8(2)));
+        vm.warp(block.timestamp + CERT_NOTICE);
+        RouteTypes.Envelope memory e = _env(false);
+        e.constraints.deadline = uint64(block.timestamp + 1 hours);
+        e.constraints.trustFloor = 2;
+        (, bytes memory resp) = _deliver(e);
+        assertEq(resp, abi.encodePacked(uint8(1), uint8(0)));
+        assertEq(svc.sent(0).channelId, CH_BC);
+    }
+
     function test_nextChannelGoesToAnotherLedger_failureReceipt() public {
         RouteTypes.Envelope memory e = _env(false);
         e.hops[1].channelId = CH_BD; // goes to D, but the route says C

@@ -44,7 +44,8 @@ library RouteTypes {
         BLACKLIST,
         NEXT_HOP_ERROR,
         SEND_FAILED,
-        BAD_ROUTE
+        BAD_ROUTE,
+        TRUST_FLOOR
     }
 
     // ── Filter bits (RouteFilter) ───────────────────────────────────────────
@@ -81,7 +82,7 @@ library RouteTypes {
         uint64 deadline;
         uint64 maxFee;
         uint64 remainingFeeBudget;
-        uint32 trustFloor;
+        uint32 trustFloor; // minimum verifier tier of every edge (0 attested … 3 validity proof); 0 = no floor
         uint32 maxHops;
         bool loose;
         uint64 energyCap; // Energy filter: max certified µgCO2e per transaction (0 = no cap)
