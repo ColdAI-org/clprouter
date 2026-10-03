@@ -14,5 +14,5 @@
       "@clprouter/sdk": ["../sdk/src/index.ts"]
     }
   },
-  "include": ["src", "test", "scripts/**/*.ts"]
+  "include": ["src", "test", "scripts/**/*.ts", "connector"]
 }

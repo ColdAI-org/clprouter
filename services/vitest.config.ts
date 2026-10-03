@@ -7,7 +7,7 @@ export default defineConfig({
     alias: { "@clprouter/sdk": fileURLToPath(new URL("../sdk/src/index.ts", import.meta.url)) },
   },
   test: {
-    include: ["test/**/*.test.ts"],
+    include: ["test/**/*.test.ts", "connector/test/**/*.test.ts"],
     testTimeout: 60_000,
     hookTimeout: 120_000,
     // The integration test owns a single anvil; never run test files in parallel against it.

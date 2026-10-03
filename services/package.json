@@ -14,7 +14,8 @@
     "test:integration": "vitest run test/integration",
     "build": "node scripts/build.mjs",
     "start:dist": "node dist/main.js",
-    "loadtest": "tsx scripts/loadtest.ts"
+    "loadtest": "tsx scripts/loadtest.ts",
+    "connector": "tsx connector/src/main.ts"
   },
   "engines": {
     "node": ">=22.13"
