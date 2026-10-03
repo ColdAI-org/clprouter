@@ -1,7 +1,8 @@
 # Threat model
 
 This document covers CLPRouter phase 1: `ClprRouter`, `ProviderRegistry`, `QuarantineVault`, the libraries they
-link (`RouteCodec`, `RouteLogic`, `Caip`), the planner SDK (`sdk/`) and the optional services (`services/`). The
+link (`RouteCodec`, `RouteLogic`, `Caip`), the planner SDK (`sdk/`) and the optional services (`services/`), and
+settle on Hedera (`src/settle/`, `services/connector`, section 8). The
 CLPR layer under it (ClprService, verifiers, Connectors, endpoints) is out of scope except where CLPRouter depends on
 its behaviour. Everything here refers to the code at the commit this file was last changed in.
 
@@ -325,7 +326,64 @@ settlement, send construction and receipt reporting live in external libraries. 
 CLPR gives integrity, not confidentiality. A payload without the ISO 20022 or MiCA filter is plaintext on every ledger
 the route crosses, not only the two ends.
 
-## 8. Out of scope
+## 8. Settle on Hedera
+
+Covers `src/settle/` (`SettleOrderBook` on Hedera, `SettleDeposit` and `SettleDelivery` on other chains) and the
+reference Connector service in `services/connector`. Design and measurements: [settle-on-hedera.md](settle-on-hedera.md).
+
+### 8.1 Assets and actors
+
+| Asset | Where | What protects it |
+| --- | --- | --- |
+| Connector bonds (HBAR, HTS tokens) | `SettleOrderBook.bonds` on Hedera | Only the Connector withdraws, after `WITHDRAW_DELAY`, and only bond not reserved by open orders; an order's reservation leaves only on delivery (back to free) or on default / cancel (to the user) |
+| The user's cover on default | The order's reservation | Paid at most once, only to the order's `refundTo`, after `deadline + PROOF_GRACE` or on the Connector's cancel |
+| The user's payment on chain Y | Goes straight to the Connector's `payTo` | The signed quote, checked on Y (signature, expiry, user, chain, contract, exact amount) and on Hedera (signer is the Connector's) |
+| Credited payouts | `SettleOrderBook.owed` | Only the account itself pulls them |
+
+| Actor | Can | Cannot |
+| --- | --- | --- |
+| User | Deposit against a quote; claim a default; pull credits | Open an order the Connector did not sign; change a quote after signing (the order id changes and the order is `REJECTED`) |
+| Connector | Quote, deliver, cancel (paying the user at once), post and withdraw free bond, rotate its signer | Withdraw reserved bond; void signed quotes by rotating; close an order without a matching proven delivery |
+| Anyone | Relay bundles, claim defaults, close orders with recorded deliveries, deliver for any order id | Redirect a payout; reopen or pay an order twice |
+| Order book admin | Add a source or payment prover for a ledger that has none, after `SOURCE_NOTICE` | Replace or remove one; touch bonds, orders or payouts |
+| Channel verifier of a source | Attest DEPOSIT and DELIVERY messages of its ledger | Affect orders of other ledgers |
+
+### 8.2 Threats and mitigations
+
+| # | Threat | Mitigation | Residual |
+| --- | --- | --- | --- |
+| ST1 | Forged or edited quote | EIP-712 signature checked on Y and, against the Connector's registered signer, on Hedera; any edit changes the order id; wrong signer → `REJECTED` | A user who deposits against an unverified quote pays the named `payTo` without cover: the client must check the quote first (Clip Wallet does) |
+| ST2 | Connector voids its quotes (rotation, cover asset outside the bond assets) | The previous signer stays valid for quotes issued before the rotation within `MAX_QUOTE_TTL`; one rotation per `MAX_QUOTE_TTL`; a signed quote with a non-bond cover asset still opens (as a counted shortfall) | A shortfall order pays only what was reserved (ST4) |
+| ST3 | Connector withdraws the bond behind signed quotes | Withdrawals wait `WITHDRAW_DELAY`; pending withdrawals back no new order but are drawn by orders that arrive before they execute | A deposit proof that reaches Hedera after the delay finds less bond; size `WITHDRAW_DELAY` above quote lifetime plus relay time; clients relay their own deposit bundle |
+| ST4 | Connector signs more quotes than its bond covers | Each order reserves `owedOnDefault`; shortfalls are counted on-chain (`shortfalls`, `CoverShortfall`); the reference service subtracts outstanding quotes from capacity | Not prevented on-chain: quote-time capacity is not reserved; clients check `freeCapacity` just before depositing |
+| ST5 | Settling an order twice, or replayed messages | One `used` flag per quote on Y; statuses only move forward and payouts happen only on the move to `DEFAULTED` / `CANCELLED`; a repeated or conflicting DEPOSIT for an order id is ignored; payment proofs spend `(ledger, txId)` once (invariant tests) | None known |
+| ST6 | Connector delivers short, late, to another recipient, in another asset or on another ledger | Delivery must match the order's ledger, asset, recipient, amount and deadline; otherwise the order stays open and defaults | None known |
+| ST7 | Delivery proof reaches Hedera before the deposit proof | Recorded as a hash; anyone closes the order with `closeWithRecordedDelivery` once it is open; a recorded delivery is checked against the order like any other | The Connector (or anyone) must close it before `deadline + PROOF_GRACE`, or the order can be defaulted |
+| ST8 | Honest delivery proven after the default | `LateDelivery` is recorded; nothing moves | The user keeps both the delivery and the cover; the Connector loses. Size `PROOF_GRACE` above the worst delivery-proof latency; Connectors relay their own bundles |
+| ST9 | Message lost to a revert in the order book | Message processing makes no external call and does not revert for a well-formed message from a registered sender: bad content is recorded (`REJECTED`, `DuplicateDeposit`, `DeliveryMismatch`) | Messages from unregistered Channels or senders revert by design |
+| ST10 | A deposit on chain Y that does not stand | The order book takes the deposit as its Channel's verifier attests it; the reference Connector delivers only after `confirmations` on Y | A Connector that delivers before the deposit is settled on Y under the verifier's rules carries that risk itself |
+| ST11 | A source's verifier attests false messages | Each source speaks only for its own ledger; its DEPOSITs need a real Connector signature, its DELIVERYs only match orders to that ledger | False deposits can default orders of Connectors who quote that ledger; false deliveries can close users' orders to that ledger. Bounded by that Channel's verifier tier (section 4.1); Connectors cap exposure per ledger |
+| ST12 | Admin adds a hostile source | Add-only, one per ledger, after `SOURCE_NOTICE`, public event; no quote is affected unless a Connector signs for that ledger | Connectors and clients watch `SourceProposed`; the admin can be renounced |
+| ST13 | Spam deliveries for an order id | Deliveries are recorded only as hashes and must match the order to close it | They cost the Delivery contract's CLPR connector execution on Hedera; its `authorizeOutboundMessage` decides who may send |
+| ST14 | Payout to an account that cannot receive (HTS association, reverting contract, gas-heavy receiver) | Push with a fixed stipend, otherwise credit `owed` for `withdrawOwed` | None |
+| ST15 | Hedera trace-size cap fails a bundle after execution | Messages are small; the measured trace is about 22 KB for one deposit and 12 KB per extra deposit; the service caps bundles at 12 messages | Relayers that build larger bundles to Hedera can fail; run `script/deploy/trace-size.mjs` on new message shapes |
+| ST16 | Quote-service or relay key misuse (services/connector) | Local test keys only against local RPC URLs (as the forward trigger); the test relay refuses non-local RPC URLs | Production signing of quotes needs its own key handling |
+
+### 8.3 Residual risks
+
+- **SR1. One-way Channels (Medium, liveness).** Settle needs messages only chain → Hedera, but the reference
+  ClprService on a chain stops accepting messages for a Channel once `maxQueueDepth` of them wait for Hedera's
+  acknowledgement. Until a Hedera → chain verifier or a receive-only Channel mode exists, each chain-side Settle
+  contract can send only that many messages. Deposits then revert on chain Y (no funds move), so users are not
+  harmed, but the route stops.
+- **SR2. Payment provers do not exist yet (High for live use of non-EVM chains).** The order-book paths for
+  Bitcoin, XRPL and Stellar are built and tested with a test prover only.
+- **SR3. Cover is a Connector promise in a bond asset.** No oracle checks that the cover is worth the deposit; the
+  client shows it and the user accepts it.
+- **SR4. Test-only components** (`E2EVerifier`, the service's `e2e-test-only` relay, `TestPaymentProver`) must never
+  be wired on a live network.
+
+## 9. Out of scope
 
 - The CLPR Service, verifiers, Connectors and endpoints (`lib/clpr-smart-contracts`), beyond the reentrancy-lock
   behaviour in R1.

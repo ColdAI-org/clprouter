@@ -148,9 +148,10 @@ flowchart TB
 | Path | What |
 |---|---|
 | [`src/`](src) | Solidity: `ClprRouter`, `ProviderRegistry`, `QuarantineVault`, the envelope codec |
+| [`src/settle/`](src/settle) | Settle on Hedera: bonded Connectors, an order book on Hedera, Deposit and Delivery contracts ([doc](docs/settle-on-hedera.md)) |
 | [`proto/`](proto) | `ClprRouteEnvelope` protobuf schema |
 | [`sdk/`](sdk) | TypeScript planner, envelope builder, ISO&nbsp;20022 module, measured route-graph data |
-| [`services/`](services) | Indexer, route status API, quote service, public forward trigger |
+| [`services/`](services) | Indexer, route status API, quote service, public forward trigger; reference settle Connector (`services/connector`) |
 | [`registry-data/`](registry-data) | ISO&nbsp;20022, MiCA and Energy evidence and draft provider decisions |
 | [`docs/`](docs) | Technical reference, threat model, integrator, operator and committee guides, audit pack |
 | [`test/`](test) | Unit, fuzz, invariant, security and end-to-end tests (three EVM ledgers, and through Hiero) |

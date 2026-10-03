@@ -6,6 +6,7 @@
 | [Operator guide](operator-guide.md) | Pumpers, Connector and endpoint operators, services operators, regulated operators | Roles, running the services and the container, pumping pending hops, keys |
 | [Provider committee runbook](provider-committee-runbook.md) | Committee members | Signing format, HSM key ceremony, k-of-n decisions, rotation, emergency disable, blacklist and vault releases, legal review gate |
 | [Deployment guide](deployment.md) | Maintainers | Contracts and parameters per ledger, networks and addresses, upgrades by deploying a new version |
+| [Settle on Hedera](settle-on-hedera.md) | Integrators, Connector operators, auditors | Bonded Connectors with the guarantee on Hedera: contracts, quote format, order states, bonds, Hedera limits, gas, tests, gaps |
 | [Threat model](threat-model.md) | Everyone, auditors | Assets, actors, trust tiers, attack surfaces, mitigations, residual risks |
 | [Audit-readiness pack](audit-readiness.md) | Auditors | Scope, invariants, known issues, test counts and coverage |
 

@@ -6,6 +6,15 @@ Contract versions are also named by `ClprRouter.VERSION`; a new value is a new o
 
 ## [Unreleased]
 
+### Added
+
+- **Settle on Hedera** (`src/settle/`): `SettleOrderBook` on Hedera holds Connector bonds (HBAR or HTS tokens),
+  opens orders from proven deposits, closes them on proven deliveries and pays the user cover + penalty from the
+  bond on a missed deadline; `SettleDeposit` and `SettleDelivery` prove payments chain → Hedera over CLPR;
+  `ISettlePaymentProver` for chains without a CLPR Service. Unit, fuzz, invariant and three-ledger tests
+  (`test/settle/`), the anvil end-to-end run `script/settle-e2e/run.sh` with Hedera trace-size checks, the reference
+  Connector service (`services/connector`), `docs/settle-on-hedera.md` and threat-model section 8.
+
 ## [0.2.0-pre] - 2026-10-01
 
 Fixes every finding of the two internal audits (`docs/audit/router-findings.md`,
