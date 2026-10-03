@@ -407,14 +407,31 @@
       "valueWei": "0",
       "costEth": "0.000046557",
       "explorerUrl": "https://sepolia.etherscan.io/tx/0x97987f6ee65d4ab02fa35cdd1944919b275077c1ba5407a41e4d8c33ef957724"
+    },
+    {
+      "step": "send",
+      "hash": "0x8a08f19922f6a265f2900b218db01510c4dc21e50ed80b68ae8756faddff0d6c",
+      "block": 11835669,
+      "status": "success",
+      "contract": "ClprRouter",
+      "function": "send(((string,bytes),string,(string,bytes,bytes32,bytes32,uint64,bytes)[],uint8,(uint32,uint64,uint64,uint64,uint32,uint32,bool,uint64),uint8,bytes,(string,bytes,bytes32,bytes32,uint64,bytes)[],bytes,bytes16,uint256,address))",
+      "to": "0x3ec8a28f6ad20fe1070819f56b29be120700a653",
+      "createdAddress": "0x3ec8a28f6ad20fe1070819f56b29be120700a653",
+      "gasUsed": "1131414",
+      "gasLimit": "1562765",
+      "effectiveGasPriceWei": "1026092542",
+      "feeWei": "1160935467314388",
+      "valueWei": "0",
+      "costEth": "0.001160935",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x8a08f19922f6a265f2900b218db01510c4dc21e50ed80b68ae8756faddff0d6c"
     }
   ],
   "totals": {
-    "transactions": 18,
-    "gasUsed": "22782109",
-    "costEth": "0.024528182"
+    "transactions": 19,
+    "gasUsed": "23913523",
+    "costEth": "0.025689117"
   },
-  "updatedAt": "2026-10-01T11:29:14.788Z",
+  "updatedAt": "2026-10-03T12:15:00.851Z",
   "channel": {
     "channelId": "0x8a15fe9f8ea6a20841a9983e2e6176b4bcf1e01530348632d9488be92a4145e0",
     "peer": "296 (Hedera testnet)",
@@ -465,13 +482,17 @@
     "note": "initialize + setClprEnabled sent by the Service owner (CLPR testnet key) in step init-sepolia"
   },
   "route": {
-    "status": "NOT RUN",
-    "reason": "the Hedera side of the Sepolia <-> Hedera Channel could not be opened (completeChannel with the 67,365-byte EthMainnetVerifier bootstrap config ends INSUFFICIENT_GAS on Hedera testnet at any gas limit), so Router.send on Sepolia was not sent: its message could never be delivered."
+    "status": "SENT; delivered on Hedera; origin PENDING (the DELIVERED receipt cannot be proven to Sepolia: TestOnlyStubVerifier accepts no bundles), settles via reclaim after the deadline",
+    "routeId": "0x03c51452a41f4867d5bd8f5774baa110",
+    "send": "0x8a08f19922f6a265f2900b218db01510c4dc21e50ed80b68ae8756faddff0d6c",
+    "deadline": 1791036828
   },
   "spend": {
     "balanceBefore": "0.032948720871596586 ETH",
     "balanceAfter": "0.008420540590449166 ETH",
     "spentEth": "0.024528180281146720",
-    "budgetEth": "0.5 (balance-limited: keep >= 0.003)"
+    "budgetEth": "0.5 (balance-limited: keep >= 0.003)",
+    "balanceAfterRoute": "0.007259605123134778 ETH",
+    "spentEthRoute": "0.001160935467314388"
   }
 }

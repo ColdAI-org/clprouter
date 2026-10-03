@@ -40,7 +40,7 @@ const dep = existsSync(outFile)
 
 // ── contracts from the forge log ─────────────────────────────────────────────
 const lines = readFileSync(logFile, "utf8").split("\n").map((l) => l.trim());
-const FIXTURES = new Set(["TestnetConnector", "TestOnlyStubVerifier", "TestnetRouteApp", "EthMainnetVerifier"]);
+const FIXTURES = new Set(["TestnetConnector", "TestOnlyStubVerifier", "TestnetRouteApp", "EthMainnetVerifier", "StagedEthConfigVerifier"]);
 const bucket = (name) => (FIXTURES.has(name) ? dep.fixtures : dep.contracts);
 for (let i = 0; i < lines.length; i++) {
     const l = lines[i];

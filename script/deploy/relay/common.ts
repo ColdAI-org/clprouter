@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Shared helpers for the Sepolia -> Hedera testnet relay (EthMainnetVerifier).
-import {readFileSync, writeFileSync, mkdirSync} from "node:fs";
+import {existsSync, readFileSync, writeFileSync, mkdirSync} from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {createPublicClient, http, type Abi, type Hex, type PublicClient} from "viem";
@@ -66,7 +66,13 @@ export function client(url: string): PublicClient {
 }
 
 export function abiOf(contract: string, file = `${contract}.sol`): Abi {
-    const p = path.join(BUILD, "out", file, `${contract}.json`);
+    // A source compiled under several foundry profiles (foundry.toml additional_compiler_profiles) gets one
+    // artifact per profile, `<contract>.<profile>.json`; the ABI is the same in each.
+    const dir = path.join(BUILD, "out", file);
+    const p = [`${contract}.json`, `${contract}.default.json`, `${contract}.small.json`]
+        .map((f) => path.join(dir, f))
+        .find((f) => existsSync(f));
+    if (!p) throw new Error(`no artifact for ${contract} in ${dir} (build the deploy scripts first)`);
     return (JSON.parse(readFileSync(p, "utf8")) as {abi: Abi}).abi;
 }
 

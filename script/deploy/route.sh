@@ -8,10 +8,12 @@
 #   init-sepolia | init-hedera          initialize + enable the CLPR Service (owner, once)
 #   fixtures-sepolia | fixtures-hedera  TestnetConnector (both), TestOnlyStubVerifier (Sepolia)
 #   eth-verifier                        reuse/deploy EthMainnetVerifier on Hedera (byte-identical check)
+#   staged-verifier                     StagedEthConfigVerifier on Hedera in front of it (staged bootstrap committee)
 #   channel-sepolia                     open the Channel on Sepolia (TestOnlyStubVerifier)
-#   channel-hedera                      fetch the current Sepolia sync committee, open the Channel on Hedera
-#                                       (EthMainnetVerifier); the route must then run within the same
-#                                       sync-committee period (printed)
+#   channel-hedera                      fetch the current Sepolia sync committee, stage it on the
+#                                       StagedEthConfigVerifier (16 chunk transactions), open the Channel on
+#                                       Hedera; the route must then run within the same sync-committee period
+#                                       (printed)
 #   connector-sepolia | connector-hedera
 #   route-fixtures-sepolia | route-fixtures-hedera   (after deploy.sh) allow the Router on the Connector,
 #                                       destination app on Hedera
@@ -89,6 +91,10 @@ fs() {
     fi
 }
 
+eth_verifier() {
+    python3 -c "import json; print(json.load(open('$DEP/hedera-testnet.json'))['fixtures']['EthMainnetVerifier']['address'])"
+}
+
 case "$STEP" in
     init-sepolia) fs sepolia "initService()" ;;
     init-hedera) fs hedera-testnet "initService()" ;;
@@ -107,12 +113,20 @@ case "$STEP" in
                 "$ROOT/broadcast/DeployEthVerifier.s.sol/296/run-latest.json"
         fi
         ;;
+    staged-verifier)
+        ETH_VERIFIER="$(eth_verifier)"; export ETH_VERIFIER
+        fs hedera-testnet "deployStagedVerifier()"
+        ;;
     channel-sepolia) fs sepolia "openChannel()" ;;
     channel-hedera)
-        (cd "$D" && npx tsx relay/eth-config.ts --out "$D/.build/eth-config.env")
+        # Reuse the fetched committee while it is still the current period's (staging and opening may be re-run).
+        if [[ -z "${ETH_CONFIG_REUSE:-}" || ! -f "$D/.build/eth-config.env" ]]; then
+            (cd "$D" && npx tsx relay/eth-config.ts --out "$D/.build/eth-config.env")
+        fi
         set -a; . "$D/.build/eth-config.env"; set +a
-        ETH_VERIFIER="$(python3 -c "import json; print(json.load(open('$DEP/hedera-testnet.json'))['fixtures']['EthMainnetVerifier']['address'])")"
-        export ETH_VERIFIER
+        ETH_VERIFIER="$(eth_verifier)"; export ETH_VERIFIER
+        # Hedera rejects the single 67 KB completeChannel (contract trace-size limit): stage the committee first.
+        STEP=channel-hedera-stage fs hedera-testnet "stageCommittee()"
         fs hedera-testnet "openChannel()"
         ;;
     connector-sepolia) fs sepolia "registerConnector()" ;;
@@ -131,6 +145,8 @@ case "$STEP" in
 import json
 t=[x for x in json.load(open('$DEP/sepolia.json'))['transactions'] if x['step']=='send']
 print(t[-1]['block'])")"
+        # The relay reads the IClprService and EthMainnetVerifier ABIs from the deploy build.
+        forge build "$D/SetupRoute.s.sol" "$D/DeployEthVerifier.s.sol" "${BUILD[@]}" > /dev/null
         (cd "$D" && npx tsx relay/eth-bundle.ts --channel "$CH" --min-block "$SEND_BLOCK" --out "$D/.build/bundle.env")
         set -a; . "$D/.build/bundle.env"; set +a
         export FLUSH_RECEIPT="${FLUSH_RECEIPT:-true}"

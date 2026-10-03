@@ -13,6 +13,7 @@ import {IClprRouter} from "@clprouter/interfaces/IClprRouter.sol";
 import {RouteTypes} from "@clprouter/libraries/RouteTypes.sol";
 import {Caip} from "@clprouter/libraries/Caip.sol";
 import {TestOnlyStubVerifier, TestnetConnector, TestnetRouteApp} from "./TestnetFixtures.sol";
+import {StagedEthConfigVerifier} from "./StagedEthConfigVerifier.sol";
 
 /// @notice Wires a CLPR Channel Sepolia ↔ Hedera testnet on the already deployed reference ClprService (same
 ///         address on both), and runs one CLPRouter route Sepolia → Hedera over it. Driven by
@@ -27,7 +28,9 @@ import {TestOnlyStubVerifier, TestnetConnector, TestnetRouteApp} from "./Testnet
 ///           CHANNEL_PK, CONNECTOR_PK  throwaway Channel and Connector operator keys (deployments/.local/)
 ///
 ///         Verification per direction:
-///           Sepolia → Hedera: EthMainnetVerifier (real sync-committee light client) on Hedera.
+///           Sepolia → Hedera: EthMainnetVerifier (real sync-committee light client) on Hedera, behind
+///           StagedEthConfigVerifier, which takes the 512-key bootstrap committee in 16 staged chunks (the
+///           single 67 KB completeChannel exceeds Hedera's contract trace-size limit) and forwards every bundle.
 ///           Hedera → Sepolia: TestOnlyStubVerifier on Sepolia, which accepts no bundles (no Hiero proof source
 ///           exists yet), so the route ends at delivery on Hedera and its receipt cannot reach Sepolia.
 contract SetupRoute is Script {
@@ -93,13 +96,57 @@ contract SetupRoute is Script {
             vm.stopBroadcast();
             console.log("CONNECTOR_ALLOWS", router);
         }
+        // The destination Connector pays for inbound execution (BundleLib: affordable gas = balance / (gas price
+        // x margin)); with a zero balance the message is answered CONNECTOR_UNDERFUNDED and never reaches the
+        // Router. Top it up to `.econ.<net>.connectorFunding` (wei; 1 HBAR = 1e18 in Hedera EVM units).
+        uint256 target =
+            vm.parseJsonUint(vm.envString("ROUTE_CONFIG"), string.concat(".econ.", _netKey(), ".connectorFunding"));
+        if (address(conn).balance < target) {
+            uint256 topUp = target - address(conn).balance;
+            vm.startBroadcast(_ownerPk());
+            (bool ok,) = payable(address(conn)).call{value: topUp}("");
+            vm.stopBroadcast();
+            require(ok, "connector funding failed");
+            console.log("CONNECTOR_FUNDED wei", topUp);
+        }
     }
 
     // ═════════════════════════════════════════════════════════════════════
-    // 3. Channel (commit-reveal). On Hedera the EthMainnetVerifier bootstrap config is built here from the
-    //    sync committee passed in ETH_* (fetched from the beacon API by relay/eth-config.ts) and Sepolia's
-    //    live ledger configuration and ClprService code hash (read through a Sepolia fork).
+    // 3. Channel (commit-reveal). On Hedera the EthMainnetVerifier bootstrap committee (passed in ETH_*,
+    //    fetched from the beacon API by relay/eth-config.ts) is staged in 16 chunks of 32 keys on the
+    //    StagedEthConfigVerifier, and the config then names the 16 chunk roots; Sepolia's live ledger
+    //    configuration and ClprService code hash are read through a Sepolia fork.
     // ═════════════════════════════════════════════════════════════════════
+
+    /// @notice CREATE2-deploy StagedEthConfigVerifier on Hedera in front of ETH_VERIFIER (EthMainnetVerifier).
+    function deployStagedVerifier() external {
+        require(block.chainid == HEDERA, "staged verifier runs on Hedera");
+        address eth = vm.envAddress("ETH_VERIFIER");
+        require(eth.code.length > 0, "EthMainnetVerifier not deployed");
+        address a = _create2("StagedEthConfigVerifier", _stagedInit());
+        require(address(StagedEthConfigVerifier(a).ETH_VERIFIER()) == eth, "staged verifier: wrong EthMainnetVerifier");
+        console.log("CODEHASH StagedEthConfigVerifier");
+        console.logBytes32(a.codehash);
+    }
+
+    /// @notice Stage the committee in ETH_COMMITTEE_PUBKEYS: one stageChunk transaction per 32-key chunk not
+    ///         staged yet (each well under Hedera's 6 KB non-jumbo transaction size and its trace limit).
+    function stageCommittee() external {
+        require(block.chainid == HEDERA, "staging runs on Hedera");
+        StagedEthConfigVerifier v = StagedEthConfigVerifier(_fixture("StagedEthConfigVerifier", HEDERA));
+        require(address(v).code.length > 0, "staged verifier not deployed");
+        bytes[] memory chunks = _committeeChunks();
+        uint256 sent;
+        for (uint256 c = 0; c < chunks.length; c++) {
+            bytes32 root = v.chunkRoot(chunks[c]);
+            if (v.stagedChunk(root)) continue;
+            vm.startBroadcast(_ownerPk());
+            v.stageChunk(chunks[c]);
+            vm.stopBroadcast();
+            sent++;
+        }
+        console.log("COMMITTEE_STAGED chunks sent", sent);
+    }
 
     function openChannel() external {
         IClprService svc = _service();
@@ -115,8 +162,8 @@ contract SetupRoute is Script {
             verifier = _fixture("TestOnlyStubVerifier", block.chainid);
             configProof = hex"00";
         } else {
-            verifier = vm.envAddress("ETH_VERIFIER");
-            configProof = _ethConfigProof();
+            verifier = _fixture("StagedEthConfigVerifier", HEDERA);
+            configProof = _stagedEthConfigProof(StagedEthConfigVerifier(verifier));
         }
         require(verifier.code.length > 0, "verifier not deployed");
         bytes memory sig = _sign(vm.envUint("CHANNEL_PK"), keccak256(abi.encodePacked(ch, address(svc))));
@@ -128,8 +175,10 @@ contract SetupRoute is Script {
         console.logBytes32(ch);
     }
 
-    /// @dev EthMainnetVerifier config: RLP [slot, [pubkeys[512], aggregate], gvr, forkVersion, ledgerConfig, codeHash].
-    function _ethConfigProof() internal returns (bytes memory) {
+    /// @dev StagedEthConfigVerifier config: RLP [slot, [[chunkRoot × 16], aggregate], gvr, forkVersion,
+    ///      ledgerConfig, codeHash]. Same fields as the EthMainnetVerifier config except that the committee's
+    ///      512 keys are replaced by the roots of their 16 staged 32-key chunks (all must be staged).
+    function _stagedEthConfigProof(StagedEthConfigVerifier v) internal returns (bytes memory) {
         uint256 here = vm.activeFork();
         vm.createSelectFork(vm.envString("SEPOLIA_RPC_URL"));
         IClprService s = IClprService(_cfgAddress(".sepolia.service"));
@@ -139,18 +188,15 @@ contract SetupRoute is Script {
         require(keccak256(bytes(lc.chainId)) == keccak256(bytes(_peerLedger())), "sepolia chain id");
         require(lc.serviceAddress.length == 20, "sepolia service not initialized");
 
-        bytes memory keys = vm.envBytes("ETH_COMMITTEE_PUBKEYS"); // 512 x 128-byte uncompressed G1, concatenated
-        require(keys.length == 512 * 128, "committee size");
-        bytes[] memory items = new bytes[](512);
-        for (uint256 i = 0; i < 512; i++) {
-            bytes memory pk = new bytes(128);
-            for (uint256 j = 0; j < 128; j++) {
-                pk[j] = keys[i * 128 + j];
-            }
-            items[i] = RLP.encode(pk);
+        bytes[] memory chunks = _committeeChunks();
+        bytes[] memory roots = new bytes[](chunks.length);
+        for (uint256 c = 0; c < chunks.length; c++) {
+            bytes32 root = v.chunkRoot(chunks[c]);
+            require(v.stagedChunk(root), "committee chunk not staged (run stageCommittee)");
+            roots[c] = RLP.encode(abi.encodePacked(root));
         }
         bytes[] memory committee = new bytes[](2);
-        committee[0] = RLP.encode(items);
+        committee[0] = RLP.encode(roots);
         committee[1] = RLP.encode(vm.envBytes("ETH_COMMITTEE_AGGREGATE"));
 
         bytes[] memory cfg = new bytes[](6);
@@ -163,6 +209,25 @@ contract SetupRoute is Script {
         console.log("SEPOLIA_SERVICE_CODEHASH");
         console.logBytes32(codeHash);
         return RLP.encode(cfg);
+    }
+
+    /// @dev ETH_COMMITTEE_PUBKEYS (512 x 128-byte uncompressed G1, concatenated) as 16 chunks of 32 keys.
+    function _committeeChunks() internal view returns (bytes[] memory chunks) {
+        bytes memory keys = vm.envBytes("ETH_COMMITTEE_PUBKEYS");
+        require(keys.length == 512 * 128, "committee size");
+        uint256 len = 32 * 128;
+        chunks = new bytes[](16);
+        for (uint256 c = 0; c < 16; c++) {
+            bytes memory chunk = new bytes(len);
+            assembly ("memory-safe") {
+                mcopy(add(chunk, 32), add(add(keys, 32), mul(c, len)), len)
+            }
+            chunks[c] = chunk;
+        }
+    }
+
+    function _stagedInit() internal view returns (bytes memory) {
+        return abi.encodePacked(type(StagedEthConfigVerifier).creationCode, abi.encode(vm.envAddress("ETH_VERIFIER")));
     }
 
     // ═════════════════════════════════════════════════════════════════════
@@ -180,7 +245,8 @@ contract SetupRoute is Script {
         }
         address conn = _fixture("TestnetConnector", block.chainid);
         bytes memory sig = _sign(vm.envUint("CONNECTOR_PK"), keccak256(abi.encodePacked(id, address(svc))));
-        uint256 stake = vm.parseJsonUint(vm.envString("ROUTE_CONFIG"), string.concat(".econ.", _netKey(), ".minLockedStake"));
+        uint256 stake =
+            vm.parseJsonUint(vm.envString("ROUTE_CONFIG"), string.concat(".econ.", _netKey(), ".minLockedStake"));
         vm.startBroadcast(_ownerPk());
         svc.registerConnector(keccak256(abi.encodePacked(id, pubKey)));
         svc.completeConnector{value: stake}(id, pubKey, sig, bytes32(0), ch, conn, vm.addr(_ownerPk()));
@@ -328,7 +394,10 @@ contract SetupRoute is Script {
     }
 
     function _ledger(uint256 chain) internal view returns (string memory) {
-        return vm.parseJsonString(vm.envString("ROUTE_CONFIG"), chain == SEPOLIA ? ".sepolia.ledgerId" : ".hedera.ledgerId");
+        return
+            vm.parseJsonString(
+                vm.envString("ROUTE_CONFIG"), chain == SEPOLIA ? ".sepolia.ledgerId" : ".hedera.ledgerId"
+            );
     }
 
     /// @dev CAIP-2 ledger id used by the Router and in envelopes ("eip155:<chain id>").
@@ -419,7 +488,9 @@ contract SetupRoute is Script {
     }
 
     function _salt(string memory name) internal view returns (bytes32) {
-        return keccak256(abi.encodePacked(keccak256(bytes(vm.parseJsonString(vm.envString("ROUTE_CONFIG"), ".fixtureSalt"))), name));
+        return keccak256(
+            abi.encodePacked(keccak256(bytes(vm.parseJsonString(vm.envString("ROUTE_CONFIG"), ".fixtureSalt"))), name)
+        );
     }
 
     /// @dev CREATE2 address of a fixture as deployed by {deployFixtures} on `chain` (constructor args recomputed).
@@ -429,6 +500,8 @@ contract SetupRoute is Script {
         bytes memory init;
         if (keccak256(bytes(name)) == keccak256("TestnetConnector")) {
             init = abi.encodePacked(type(TestnetConnector).creationCode, abi.encode(svc, owner));
+        } else if (keccak256(bytes(name)) == keccak256("StagedEthConfigVerifier")) {
+            init = _stagedInit();
         } else if (keccak256(bytes(name)) == keccak256("TestOnlyStubVerifier")) {
             init = abi.encodePacked(
                 type(TestOnlyStubVerifier).creationCode,
