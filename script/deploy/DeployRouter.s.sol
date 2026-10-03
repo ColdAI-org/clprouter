@@ -72,7 +72,8 @@ contract DeployRouter is Script {
         require(block.chainid == vm.parseJsonUint(vm.envString("DEPLOY_CONFIG"), ".chainId"), "wrong chain");
         require(CREATE2_FACTORY.code.length > 0, "CREATE2 factory missing on this chain");
         require(
-            RouteLogic.ledgerHash(IClprService(c.service).getLedgerConfiguration().chainId) == keccak256(bytes(c.ledgerId)),
+            RouteLogic.ledgerHash(IClprService(c.service).getLedgerConfiguration().chainId)
+                == keccak256(bytes(c.ledgerId)),
             "CLPR Service chain id != ledgerId"
         );
 
@@ -83,9 +84,8 @@ contract DeployRouter is Script {
         address reg = _deploy("ProviderRegistry", _salt(c, "ProviderRegistry"), regInit);
 
         // ── QuarantineVault ─────────────────────────────────────────────────
-        bytes memory vaultInit = abi.encodePacked(
-            type(QuarantineVault).creationCode, abi.encode(reg, c.recoveryNotice, c.challengeWindow)
-        );
+        bytes memory vaultInit =
+            abi.encodePacked(type(QuarantineVault).creationCode, abi.encode(reg, c.recoveryNotice, c.challengeWindow));
         address vault = _deploy("QuarantineVault", _salt(c, "QuarantineVault"), vaultInit);
 
         // ── ClprRouterDeployer (same owner, salt and init-code hash everywhere → same address) ──
@@ -241,7 +241,9 @@ contract DeployRouter is Script {
         require(r.DEPLOYER() == dep, "router: DEPLOYER");
         require(r.DEPLOYMENT_SALT() == c.routerSalt, "router: DEPLOYMENT_SALT");
         ClprTypes.LedgerConfiguration memory lc = IClprService(c.service).getLedgerConfiguration();
-        require(RouteLogic.ledgerHash(lc.chainId) == keccak256(bytes(r.ledgerId())), "router: ledger != service chain id");
+        require(
+            RouteLogic.ledgerHash(lc.chainId) == keccak256(bytes(r.ledgerId())), "router: ledger != service chain id"
+        );
     }
 
     // ═════════════════════════════════════════════════════════════════════
@@ -253,8 +255,11 @@ contract DeployRouter is Script {
         string memory j = vm.envString("CANONICAL_CONFIG");
         string memory cm = vm.envString("COMMITTEE");
         // Per-network files must not carry constructor inputs: those live only in canonical.json.
-        require(!vm.keyExistsJson(n, ".salt") && !vm.keyExistsJson(n, ".registry") && !vm.keyExistsJson(n, ".router")
-            && !vm.keyExistsJson(n, ".vault") && !vm.keyExistsJson(n, ".clprService"), "network config overrides canonical");
+        require(
+            !vm.keyExistsJson(n, ".salt") && !vm.keyExistsJson(n, ".registry") && !vm.keyExistsJson(n, ".router")
+                && !vm.keyExistsJson(n, ".vault") && !vm.keyExistsJson(n, ".clprService"),
+            "network config overrides canonical"
+        );
         require(vm.parseJsonAddress(j, ".create2Factory") == CREATE2_FACTORY, "factory");
         c.network = vm.parseJsonString(n, ".network");
         c.ledgerId = vm.parseJsonString(n, ".ledgerId");
