@@ -42,6 +42,9 @@ contract RouterFindingsUnitTest is OriginHarness {
     function _router(string memory id) internal returns (SecMockService s, ClprRouter r) {
         s = new SecMockService(id);
         ProviderRegistry reg = _deployRegistry();
+        _approveBoth(reg, CH_AB, ID_A, ID_B, address(s));
+        _approveBoth(reg, CH_BC, ID_B, ID_C, address(s));
+        vm.warp(block.timestamp + CERT_NOTICE);
         QuarantineVault v = new QuarantineVault(IProviderRegistry(address(reg)), 3 days, 7 days);
         r = _deployRouter(
             IClprService(address(s)),
@@ -123,12 +126,12 @@ contract RouterFindingsUnitTest is OriginHarness {
         vm.recordLogs();
         svcB.deliver(hopB, CH_BC, abi.encodePacked(address(destC)), data);
         (bytes32 ch, bytes32 conn, bytes memory target, bytes memory out) = _queued(vm.getRecordedLogs());
-        assertTrue(hopB.outbox(keccak256(abi.encode(ch, conn, target, out))));
+        assertTrue(hopB.outbox(keccak256(abi.encode(ch, target, out))));
 
         svcB.setFailChannel(CH_AB, true);
         try hopB.flush(ch, conn, target, out) {} catch {}
         assertEq(svcB.sentCount(), 0);
-        assertTrue(hopB.outbox(keccak256(abi.encode(ch, conn, target, out))), "still queued");
+        assertTrue(hopB.outbox(keccak256(abi.encode(ch, target, out))), "still queued");
         svcB.setFailChannel(CH_AB, false);
         hopB.flush(ch, conn, target, out);
 
@@ -263,6 +266,10 @@ contract RouterFindingsUnitTest is OriginHarness {
             req.hops[i] = _hop(id, r, ch, i + 1 < n ? 1 : 0, i + 1 < n ? address(new ReturnBomb(BOMB)) : address(0));
         }
         req.hops[1].ledgerId = ID_B;
+        for (uint256 i = 1; i + 1 < n; i++) {
+            _approveBoth(regA, req.hops[i].channelId, req.hops[i].ledgerId, req.hops[i + 1].ledgerId, address(svcA));
+        }
+        vm.warp(block.timestamp + CERT_NOTICE);
         req.destination = RouteTypes.Endpoint(req.hops[n - 1].ledgerId, abi.encodePacked(makeAddr("dest")));
         req.recipient = "x";
         req.constraints.deadline = uint64(block.timestamp + 1 hours);

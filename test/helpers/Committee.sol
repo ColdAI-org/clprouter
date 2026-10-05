@@ -34,6 +34,7 @@ abstract contract Committee is Test {
     uint8 internal constant A_CONTACT = 8;
     uint8 internal constant A_VAULT_RELEASE = 9;
     uint8 internal constant A_VAULT_NAME_RECOVERY = 10;
+    uint8 internal constant A_TRUST_TIER = 11;
 
     uint256[] internal memberPks; // sorted by address
     address[] internal memberAddrs;
@@ -137,6 +138,15 @@ abstract contract Committee is Test {
         returns (bytes memory)
     {
         return abi.encode(ledger, label, expiry, emissionsUg, emissionsUg == 0 ? "" : "MiCA white paper 2025");
+    }
+
+    /// @dev Label (and so approve) the direction of `ch` into `toLedger`, checked there by `verifier`.
+    function _trustPayload(bytes32 ch, string memory toLedger, uint8 tier, address verifier)
+        internal
+        view
+        returns (bytes memory)
+    {
+        return abi.encode(ch, toLedger, tier, verifier, verifier.codehash);
     }
 
     function _disablePayload(uint8 kind, bytes32 subject) internal pure returns (bytes memory) {

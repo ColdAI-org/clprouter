@@ -126,12 +126,20 @@ flowchart LR
   value.
 - **Canonical Routers.** Every Router is deployed by `ClprRouterDeployer` at the CREATE2 address
   `CREATE2(deployer, keccak256(abi.encode(salt, keccak256(ledgerId))), initCodeHash)` and knows the canonical
-  address of every EVM ledger. Every hop, receipt-path hop and loose re-routing tail must name canonical Routers, so
-  every envelope on the wire was built by Router code. Non-EVM ledgers fail closed until the registry can certify
-  their Router.
+  address of every EVM ledger. Every hop, receipt-path hop and loose re-routing tail must name canonical Routers.
+  The deployer's constructor pins every Router's `RECLAIM_GRACE`, `APP_GAS` and `MIN_SEND_GAS` (range-checked) and
+  the code of its registry (and the registry's initial committee) and vault. Non-EVM ledgers fail closed until the
+  registry can certify their Router.
+- **Approved Channels only.** CLPR Channels are permissionless and each brings its own verifier, so a Router carries
+  nothing over a Channel direction the provider registry does not approve (`TRUST_TIER` label,
+  `channelApproval(edgeKey)`): inbound, the label must also name the verifier (address and code hash) this ledger's
+  CLPR Service uses for the Channel; outbound, `send` checks both directions of every edge and each hop the next
+  edge and its way back. With canonical Routers this means every envelope on the wire was built by Router code and
+  carried by an approved Channel.
 - **Intermediate hops** run inside CLPR application delivery. The Router checks that the envelope is addressed to
-  it, that it came over the named Channel from the Router named for the previous hop, and that the Channel's peer
-  is the ledger the envelope claims; it rejects replays (keyed by the envelope's origin `hops[0]` and its id) and
+  it, that it came over the named Channel from the Router named for the previous hop, that the Channel's peer
+  is the ledger the envelope claims and that the registry approves the Channel's direction into this ledger with its
+  verifier here; it rejects replays (keyed by the envelope's origin `hops[0]` and its id) and
   route-version mismatches.
   It then re-checks route safety, the deadline, the blacklist, the filters at the pinned version and the fee
   budget, takes its hop's fee from the budget and calls `sendMessage` on the next Channel. Its CLPR Response to
@@ -224,10 +232,11 @@ is visible as differing `headAt` values but cannot be undone on-chain.
   ones, and each envelope names the version every hop must run. Forwarding needs no one's permission: inside
   delivery, or through the permissionless `forward` and `flush`.
 - **The provider's role is limited, and the contracts enforce the limits.** The committee can only certify and
-  uncertify networks for filters, switch routes off and on, and blacklist accounts. It cannot change Router code,
-  fees, Connectors, Channels or verifiers. The only place it can send funds is the quarantine vault, and the vault
-  only pays the original parties, or a recovery address after a public notice and challenge window, never a
-  committee account. Certification changes cannot reach routes already under way, because routes pin the registry
+  uncertify networks for filters, approve Channel directions (naming their verifier) and label their trust tier,
+  switch routes off and on, and blacklist accounts. It cannot change Router code, fees, Connectors, Channels or
+  verifiers. The only place it can send funds is the quarantine vault, and the vault
+  only pays the original parties, or a recovery address after a public notice and a challenge window that each
+  deposit gets in full, never a committee account. Certification changes cannot reach routes already under way, because routes pin the registry
   version. Disables and blacklist entries are temporary unless renewed. Every decision needs k (certifications),
   k + 1 (disables, blacklist, delist, recovery naming) or a supermajority (committee changes) and is public.
 - **Worst case.** If committee keys were compromised, filtered routes could carry false labels, and routes could be
@@ -240,8 +249,14 @@ is visible as differing `headAt` values but cannot be undone on-chain.
   decision. Such a fork is visible as differing `headAt` values but cannot be undone on-chain.
 - **Fake Routers.** Routers are deployed only by the deployment's `ClprRouterDeployer`, at each ledger's
   canonical CREATE2 address, and every Router a route, receipt path or loose tail names must be canonical. A
-  Router deployed any other way is refused on every hop, so every envelope on the wire was built by this code. The
-  provider can disable a Router deployment or version.
+  Router deployed any other way is refused on every hop. The provider can disable a Router deployment or version.
+- **Unapproved Channels.** A Channel anyone opens, with a verifier that vouches for any sender, carries nothing: every
+  Router refuses an envelope over a Channel direction the registry does not approve with that verifier, before
+  recording anything about it.
+- **Receipts and Connectors.** A receipt's content does not depend on the Connector that carries it, so a queued
+  receipt can be flushed over any Connector of its Channel; one whose CLPR reply never reached the Router can be put
+  back in the outbox with `requeue`. Hooks (`onRouteReceipt`, `onRouteNotice`) get exactly `APP_GAS` or the calling
+  transaction reverts.
 
 ## Running the tests
 
@@ -250,7 +265,7 @@ Requires Foundry (tested with forge 1.5.1).
 ```sh
 git submodule update --init --recursive
 forge build --sizes --skip 'test/**' --skip 'script/**'   # contract sizes (all under 24,576 B)
-forge test                                                # 278 unit, security and in-process integration tests
+forge test                                                # 379 unit, fuzz, invariant, security and in-process integration tests
 script/e2e/run.sh                                         # three anvil chains, five routes (~9 minutes)
 ```
 
@@ -397,8 +412,8 @@ Load test (`pnpm loadtest`, Apple M1 Max, 50 connections, 15 s, SQLite, 2,000 in
 
 - **Forwarding inside delivery** needs a CLPR Service that permits `sendMessage` during application delivery. On
   the reference Solidity Service each hop takes a second, permissionless transaction.
-- **Trust floor** is carried in the envelope but enforced only by the planner: no on-chain source of verifier
-  trust tiers exists yet.
+- **Trust floor** is enforced on-chain against the registry's Channel labels when a route sets one above 0; tier
+  labels are committee decisions, not measured from the verifiers.
 - **Loose routes** do not have their receipts checked against a stored hop list, because the tail may change. Their
   fee payouts trust the Routers on the route. Value routes are strict.
 - **Per-hop escrow and asset routing** are phase 4. In phase 1, only the origin holds funds, so a blacklist hit

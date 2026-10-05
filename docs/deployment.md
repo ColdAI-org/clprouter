@@ -11,7 +11,8 @@ contract is immutable.
 | `RouteLogic` (external library) | — | Linked into `ClprRouter` |
 | `ProviderRegistry` | `(address[] members, uint8 k, string contact, uint64[5] notices)` | `members` sorted ascending; `notices = [CERT_NOTICE, REMOVAL_NOTICE, REENABLE_NOTICE, DISABLE_LAPSE, BLACKLIST_LAPSE]` |
 | `QuarantineVault` | `(IProviderRegistry registry, uint64 recoveryNotice, uint64 challengeWindow)` | One per ledger |
-| `ClprRouter` | `(IClprService service, IProviderRegistry registry, IQuarantineVault vault, string ledgerId, uint64 reclaimGrace, uint64 appGas, uint64 minSendGas)` | Reverts `LedgerMismatch` unless `ledgerId` equals the Service's configured chain id |
+| `ClprRouterDeployer` | `(address owner, bytes32 deploymentSalt, bytes32 routerInitCodeHash, Pins pins)` | Same address on every ledger (deterministic-deployment proxy, same arguments). `pins` = `(reclaimGrace, appGas, minSendGas, registryCodeHash, registryGenesis, vaultCodeHash)`, range-checked; every Router it deploys uses these parameters and only a registry and vault with this code (and this initial committee) |
+| `ClprRouter` | none: `ClprRouterDeployer.deploy(initCode, (service, registry, vault, ledgerId, reclaimGrace, appGas, minSendGas))` | Lands at the ledger's canonical CREATE2 address. Reverts `LedgerMismatch` unless `ledgerId` equals the Service's configured chain id, and `InvalidParameters` unless the parameters, registry and vault match the deployer's pins |
 
 The CLPR Service, its verifiers and Connectors are deployed by CLPR, not here. CLPRouter needs the Service's address
 and live Channels to the neighbouring ledgers, each with a real verifier.
@@ -36,11 +37,13 @@ flowchart LR
 | `contact` | test string | Provider contact quoted in quarantine notices (URL, e-mail or CAIP-10) |
 | `notices` | 7 days, 72 hours, 7 days, 7 days, 30 days | Identical on every ledger |
 | `recoveryNotice`, `challengeWindow` | 3 days, 7 days | Identical on every ledger |
-| `reclaimGrace` | 1 hour | Above the worst-case time for a receipt to return from the farthest destination, including pumping (threat model R4) |
-| `appGas` | 300,000 | Gas for destination apps and callbacks; publish it, integrators design to it |
+| `reclaimGrace` | 1 hour (6 hours on the testnets) | Above the worst-case time for one receipt edge, including proof generation and pumping (threat model R4); 1 hour .. 30 days. One value for the whole deployment (deployer pin) |
+| `appGas` | 300,000 | Gas for destination apps and callbacks; publish it, integrators design to it; 50,000 .. 10,000,000 |
 | `minSendGas` | 1,500,000 | The measured gas of `ClprService.sendMessage` on this ledger with its Connector, plus margin. On the reference Service with the mock Connector it is about 1.2M |
 
-Every number here is immutable once deployed.
+Every number here is immutable once deployed. The Router's three gas and grace parameters are fixed for the whole
+deployment by the deployer's constructor, and the registry and vault must be built with the same arguments on every
+ledger (their code hashes and the registry's genesis head are pinned too).
 
 ## 3. Deploy
 
@@ -71,7 +74,10 @@ forge create src/ClprRouter.sol:ClprRouter "${LIBS[@]}" --constructor-args "$SER
 
 `$CODEC` and `$LOGIC` are the libraries' predicted addresses (CREATE2, or `cast compute-address` from the deployer's
 nonces as in `script/e2e/run.sh`). Use a hardware wallet or KMS-backed account for anything beyond a testnet; never a
-private key on the command line. The deployer has no power after deployment: none of these contracts has an owner.
+private key on the command line. None of these contracts has an owner, except `ClprRouterDeployer.OWNER`, which can
+only deploy the canonical Router of a ledger that has none yet, with the pinned parameters, registry code and vault
+code; it still chooses that ledger's CLPR Service, so keep the owner key offline (or make it a multisig in the
+constructor) and retire it once every planned ledger is deployed.
 
 **Checks after deploying, on every ledger:**
 
@@ -83,7 +89,17 @@ private key on the command line. The deployer has no power after deployment: non
    from the release's `build-info/`.
 4. Relay every registry decision already applied on the other ledgers, in nonce order, until `version()` matches
    (section 5).
-5. A data route from and to this ledger over a test Channel, on its testnet.
+5. **Approve the Channels.** Routers carry nothing over a Channel direction the registry does not label. For each
+   Channel the ledger will use, the committee signs `TRUST_TIER(channelId, toLedgerId, tier, verifier, codeHash)` for
+   both directions, where `verifier` is `getChannel(channelId).verifier` on the receiving ledger and `codeHash` its
+   `EXTCODEHASH`, and relays it to every ledger; it takes effect after `CERT_NOTICE`
+   (`docs/provider-committee-runbook.md` section 6). Testnets: `script/deploy/route.sh approve-sepolia` and
+   `approve-hedera`.
+6. **Hiero ledgers, sending side.** Before approving a Hiero → chain direction, send one message from the Hiero
+   Router and check on the receiving side that the CLPR sender stamped for it equals its canonical address
+   (`ClprRouterDeployer.routerAddress(ledgerId)`): a different stamped sender would make every message from it fail
+   previous-hop authentication.
+7. A data route from and to this ledger over a test Channel, on its testnet.
 
 ## 4. Networks
 

@@ -16,6 +16,12 @@ public addresses only; the private keys never leave a git-excluded local file). 
 **Status: pre-audit (re-audit in progress).** Deployed from `e74a3f4` (registry/vault fixes RV-01..RV-10, Router and
 codec fixes). Do not route value through it.
 
+**This deployment runs older contract code.** The current sources accept messages only over Channels the registry
+approves, pin every Router's parameters and its registry and vault code in the deployer, and change the vault's and
+the deployer's code; they need a new deployment (new addresses, `script/deploy/config/canonical.json` salt `v2`,
+`RECLAIM_GRACE` 6 hours) plus a committee approval of both directions of the Channel (`route.sh approve-sepolia`,
+`approve-hedera`) before a route can run. The records below describe the deployment from `e74a3f4`.
+
 ## Result
 
 | | Sepolia | Hedera testnet |

@@ -62,11 +62,15 @@ as fuzzed properties.
 | RT-11 | Nothing is forwarded over, or out of a message that arrived over, a disabled edge, ledger, Router deployment or version | `test_disabled*` (10 tests), `test_messageOverDisabledInboundEdge_isNotForwarded` |
 | RT-12 | With a blacklisted sender, recipient or payee, no value leaves the origin except into the vault; a listing added before settlement still catches a `DELIVERED` route | `test_blacklisted*`, `test_blacklistAddedBeforeReceipt_lateCatchAtOrigin` |
 | RT-13 | Filters are checked at the pinned registry version; a registry behind the pin fails closed; unfiltered routes never read certifications | `test_filter*` (7 tests) |
-| RT-14 | A trust floor above 0 fails closed on an unlabelled or lower-labelled edge; floor 0 never reads labels | `test_trustFloor_*` (10 tests) |
+| RT-14 | A trust floor above 0 fails closed on a lower-labelled edge; floor 0 accepts every approved edge | `test_trustFloor_*` (10 tests) |
 | RT-15 | Strict-route receipts are accepted only from the first-hop Router over the first Channel, with the stored hop-list commitment, along the exact reverse path; `DELIVERED` only from the destination | `test_forgedReceipt_*` (4 tests) |
 | RT-16 | Receipts never trigger receipts | `test_receiptOverDisabledEdge_isDropped`, `test_receiptInTransit_isForwardedTowardsOrigin` |
 | RT-17 | `onClprMessage` reverts only for malformed, misaddressed, unauthenticated or replayed envelopes; every other outcome returns normally | `test_malformedEnvelope_reverts`, `test_destinationAppReverts_failureReceiptRefundsEscrow` |
 | RT-18 | The destination never delivers after the deadline | `test_deadlinePassesBeforeDestination_expiryReceipt` |
+| RT-19 | A Router accepts an envelope only over a Channel direction the registry approves with the verifier (address and code hash) its CLPR Service uses for that Channel, and records nothing about one that is not; `send` requires both directions of every edge, each hop its next edge and the way back | `test_rejectsMessageFromUnapprovedChannel`, `test_rejectsApprovedChannelWithAnotherVerifier`, `test_sendRejectsUnapprovedChannel`, `test_sendRejectsEdgeWithoutApprovedWayBack`, `test_unapprovedChannelCannotSettleRoute`, `test_thirdPartyCannotConsumeReceiptReplayKey`, `invariant_onlyApprovedChannelsCarryMessages` |
+| RT-20 | No single Connector can hold a receipt back: a queued receipt goes over any Connector of its Channel, and one whose reply never reached the Router can be requeued once the Service has processed that reply | `test_receiptTravelsOverAnyConnectorOfItsChannel`, `test_receiptWithLostReplyCanBeRequeued`, `test_receiptRejectedByClpr_isRequeued` |
+| RT-21 | `onRouteReceipt` and `onRouteNotice` get exactly `APP_GAS`, or the calling transaction reverts | `test_permissionlessCallerCannotStarveReceiptHook` |
+| RT-22 | Every canonical Router has the deployer's pinned gas and grace parameters and a registry and vault with the pinned code and initial committee; the pinned numbers are range-checked | `test_deployerRejectsUnpinnedRouterParameters`, `test_deployerRejectsOutOfRangeParameters` |
 
 ### 2.2 ProviderRegistry
 
@@ -82,6 +86,8 @@ as fuzzed properties.
 | PR-8 | `isProviderAccount` is monotone: once a member, always a provider account | `test_recovery_neverToProviderAccounts` |
 | PR-9 | Vault actions are never accepted by `submit` | `test_submit_vaultActionsAreNotAcceptedHere`, `test_vaultNameRecoveryStillNotAcceptedHere` |
 | PR-10 | The same signed decision produces the same state on every ledger | `test_sameDecisionAppliesOnEveryLedger` |
+| PR-11 | A Channel label names a verifier and its code hash; approving, raising or naming another verifier waits `CERT_NOTICE`, lowering or removing `REMOVAL_NOTICE` | `test_channelApproval_*` (3 tests), `test_trustTier_*` (6 tests) |
+| PR-12 | Once a scheduled committee's notice has passed, `requiredSignatures` is at least the supermajority for every action (the vault uses it) | `check_requiredSignatures_supermajorityAfterNotice` (halmos), `test_vaultActionsNeedSupermajorityAfterCommitteeNotice` |
 
 ### 2.3 QuarantineVault
 
@@ -91,6 +97,7 @@ as fuzzed properties.
 | QV-2 | A deposit is released at most once, in full | `test_release_onlyOnce` |
 | QV-3 | The beneficiary is the deposit's sender, its recipient, or the case's unchallenged recovery address after `releasableAt`; never zero, the vault, the registry or a provider account | `test_release_toOriginalSender`, `test_release_toOriginalRecipient_falsePositive`, `test_recovery_*` (5 tests), `test_release_neverToProviderEvenIfOriginalParty` |
 | QV-4 | The vault balance equals the sum of unreleased deposits (absent forced ether) | `invariant_vaultBalanceConservation` (`test/security/`) |
+| QV-5 | A deposit goes to its case's recovery address only `RECOVERY_NOTICE + CHALLENGE_WINDOW` after the naming and after the deposit itself; its parties can challenge until then | `test_lateDepositGetsItsOwnChallengeWindow`, `test_depositWindowIsTheLaterOfNamingAndDeposit`, `check_recoveryRelease_waitsForDepositWindow` (halmos), `invariant_releasesFollowRules` |
 
 ### 2.4 Codec
 
@@ -123,8 +130,6 @@ tracked there; the last column names the related finding where the two overlap o
 
 Also known, not security issues:
 
-- The README "Open issues" says the trust floor is enforced only by the planner. The Router now enforces a floor above
-  0 against `TRUST_TIER` labels (`_checkNext`, `RouteLogic.edgeTrusted`); the default floor is 0.
 - Three Router tests assert exact gas behaviour and fail under `forge coverage` instrumentation (section 4).
 - The ISO 20022 screening hook named in the spec is not implemented in phase 1.
 

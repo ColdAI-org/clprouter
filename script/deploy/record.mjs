@@ -62,6 +62,8 @@ for (let i = 0; i < lines.length; i++) {
         dep.canonicalRouters = {...(dep.canonicalRouters ?? {}), [m[1]]: m[2]};
     } else if (l === "ROUTER_INIT_CODE_HASH") {
         dep.routerInitCodeHash = lines[i + 1];
+    } else if (l === "REGISTRY_GENESIS") {
+        dep.registryGenesis = lines[i + 1];
     } else if (l === "ROUTE_SENT") {
         dep.route = {...(dep.route ?? {}), routeId: lines[i + 1]};
     } else if ((m = l.match(/^ROUTE_DELIVERED app (0x[0-9a-fA-F]{40})$/))) {
@@ -107,10 +109,15 @@ if (step === "deploy-router") {
     if (c.ClprRouterDeployer) c.ClprRouterDeployer.constructorArgs = {
         owner: cfg.routerDeployerOwner,
         deploymentSalt: "keccak256(abi.encodePacked(keccak256(salt), \"ClprRouter\", deploymentId))",
-        initCodeHash: dep.routerInitCodeHash
+        initCodeHash: dep.routerInitCodeHash,
+        pins: {
+            reclaimGrace: cfg.router.reclaimGrace, appGas: cfg.router.appGas, minSendGas: cfg.router.minSendGas,
+            registryCodeHash: c.ProviderRegistry?.runtimeCodeHash, registryGenesis: dep.registryGenesis,
+            vaultCodeHash: c.QuarantineVault?.runtimeCodeHash
+        }
     };
     if (c.ClprRouter) c.ClprRouter.deployParams = {
-        note: "no constructor arguments; read from ClprRouterDeployer.parameters() during deploy()",
+        note: "no constructor arguments; read from ClprRouterDeployer.parameters() during deploy(); the deployer checks them against its pins",
         service: cfg.clprService, registry: c.ProviderRegistry?.address, vault: c.QuarantineVault?.address,
         ledgerId: cfg.ledgerId, reclaimGrace: cfg.router.reclaimGrace, appGas: cfg.router.appGas,
         minSendGas: cfg.router.minSendGas

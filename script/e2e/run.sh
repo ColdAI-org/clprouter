@@ -97,6 +97,14 @@ fs 0 'wireConnector(uint8,uint8)' 0 1 >/dev/null
 fs 1 'wireConnector(uint8,uint8)' 1 0 >/dev/null
 fs 1 'wireConnector(uint8,uint8)' 1 2 >/dev/null
 fs 2 'wireConnector(uint8,uint8)' 2 1 >/dev/null
+# The committee approves both directions of both Channels on every ledger; Routers carry nothing over a
+# Channel direction before its approval takes effect (the registry's certification notice, 7 days here).
+for i in 0 1 2; do fs "$i" 'approveChannels(uint8)' "$i" >/dev/null; done
+for i in 0 1 2; do
+  cast rpc evm_increaseTime 604800 --rpc-url "${RPCS[$i]}" >/dev/null
+  cast rpc evm_mine --rpc-url "${RPCS[$i]}" >/dev/null
+done
+echo "   Channels A<->B and B<->C approved in every registry; certification notice passed"
 DIRS=("0 1" "1 2" "2 1" "1 0")
 
 for n in 1 2 3 4 5; do

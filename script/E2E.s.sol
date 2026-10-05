@@ -34,13 +34,16 @@ import {RouteApp} from "../test/helpers/RouteApp.sol";
 ///
 ///         Every step broadcasts to exactly one chain — the one given with --rpc-url, passed as `here` — and
 ///         only reads the other chains through forks (multi-chain broadcasts cannot link libraries).
-///         Steps: deployStack · wireChannel · wireConnector · setAppRevert · send · decide · relay · check.
+///         Steps: deployStack · wireChannel · wireConnector · approveChannels · setAppRevert · send · decide ·
+///         relay · check.
 ///
 ///         Every Router is deployed by one ClprRouterDeployer at its canonical CREATE2 address. The deployer
 ///         itself is created through the deterministic-deployment proxy (0x4e59b448…, installed by run.sh with
 ///         anvil_setCode if anvil lacks it) with the same owner, salt and Router init-code hash on every chain, so
-///         it has one address on A, B and C. Each vault is bound to its ledger's Router by a k + 1 committee
-///         decision before the first route is sent.
+///         it has one address on A, B and C (its constructor pins the Routers' gas and grace parameters and the
+///         code of the registry and vault, identical on every chain). Each vault is bound to its ledger's Router
+///         by a k + 1 committee decision before the first route is sent, and the committee approves both
+///         directions of both Channels on every ledger (run.sh then lets the certification notice pass).
 ///         relay() plays the CLPR endpoint (copies the source queue into a bundle and submits it on the
 ///         destination) and the permissionless pumper (completes Router hops deferred inside delivery).
 contract E2E is Script {
@@ -58,6 +61,11 @@ contract E2E is Script {
     bytes32 internal constant ROUTER_SALT = keccak256("clprouter-e2e.routers");
     uint8 internal constant K = 3;
     uint8 internal constant ACTION_VAULT_BIND_ROUTER = 12;
+    uint8 internal constant ACTION_TRUST_TIER = 11;
+    /// @dev Router parameters of the e2e deployment (pinned by the deployer).
+    uint64 internal constant RECLAIM_GRACE = 1 hours;
+    uint64 internal constant APP_GAS = 300_000;
+    uint64 internal constant MIN_SEND_GAS = 1_500_000;
 
     struct Ledger {
         string id;
@@ -113,9 +121,17 @@ contract E2E is Script {
         );
         QuarantineVault vault = new QuarantineVault(IProviderRegistry(address(reg)), 3 days, 7 days);
         bytes memory routerInit = type(ClprRouter).creationCode;
-        // Same owner, salt and init-code hash on every chain → the same deployer address on A, B and C.
+        // Same owner, salt, init-code hash and pins on every chain → the same deployer address on A, B and C.
+        IClprRouterDeployer.Pins memory pins = IClprRouterDeployer.Pins({
+            reclaimGrace: RECLAIM_GRACE,
+            appGas: APP_GAS,
+            minSendGas: MIN_SEND_GAS,
+            registryCodeHash: address(reg).codehash,
+            registryGenesis: reg.headAt(0),
+            vaultCodeHash: address(vault).codehash
+        });
         ClprRouterDeployer deployer =
-            new ClprRouterDeployer{salt: DEPLOYER_SALT}(vm.addr(DEPLOYER_PK), ROUTER_SALT, keccak256(routerInit));
+            new ClprRouterDeployer{salt: DEPLOYER_SALT}(vm.addr(DEPLOYER_PK), ROUTER_SALT, keccak256(routerInit), pins);
         ClprRouter router = ClprRouter(
             deployer.deploy(
                 routerInit,
@@ -124,9 +140,9 @@ contract E2E is Script {
                     registry: IProviderRegistry(address(reg)),
                     vault: IQuarantineVault(address(vault)),
                     ledgerId: L[here].id,
-                    reclaimGrace: 1 hours,
-                    appGas: 300_000,
-                    minSendGas: 1_500_000
+                    reclaimGrace: RECLAIM_GRACE,
+                    appGas: APP_GAS,
+                    minSendGas: MIN_SEND_GAS
                 })
             )
         );
@@ -210,6 +226,24 @@ contract E2E is Script {
             id, pubKey, abi.encodePacked(r, s, v), bytes32(0), ch, address(c), vm.addr(DEPLOYER_PK)
         );
         vm.stopBroadcast();
+    }
+
+    /// @notice On `here`: relay the committee's approval of both directions of both Channels (k signatures each),
+    ///         each naming the verifier the receiving ledger's Service uses for that Channel. They take effect after
+    ///         the registry's certification notice.
+    function approveChannels(uint8 here) external {
+        _load(here);
+        _approve(here, chAB, 1); // A -> B
+        _approve(here, chAB, 0); // B -> A
+        _approve(here, chBC, 2); // B -> C
+        _approve(here, chBC, 1); // C -> B
+    }
+
+    function _approve(uint8 here, bytes32 ch, uint8 to) internal {
+        vm.selectFork(L[to].fork);
+        address verifier = L[to].service.getChannel(ch).verifier;
+        bytes32 codeHash = verifier.codehash;
+        _decideWith(here, ACTION_TRUST_TIER, abi.encode(ch, L[to].id, uint8(0), verifier, codeHash));
     }
 
     // ═════════════════════════════════════════════════════════════════════
@@ -413,8 +447,12 @@ contract E2E is Script {
         return address(uint160(uint256(keccak256(abi.encodePacked("e2e-fee", i)))));
     }
 
-    /// @dev Relay a committee decision (k + 1 signatures) to the registry on ledger `i`.
+    /// @dev Relay a committee decision (with the signatures its action needs) to the registry on ledger `i`.
     function _decide(uint256 i, uint8 action, bytes memory payload) internal {
+        _decideWith(i, action, payload);
+    }
+
+    function _decideWith(uint256 i, uint8 action, bytes memory payload) internal {
         vm.selectFork(L[i].fork);
         ProviderRegistry reg = L[i].registry;
         IProviderRegistry.Decision memory d = IProviderRegistry.Decision({

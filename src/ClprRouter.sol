@@ -23,10 +23,12 @@ import {Caip} from "./libraries/Caip.sol";
 ///         A CLPR application on top of an unchanged CLPR Service: it only calls `sendMessage` and implements
 ///         `IClprApplication`.
 /// @dev Immutable, no admin key, no pause. Deployed by {ClprRouterDeployer} at the canonical CREATE2 address of its
-///      ledger; it accepts envelopes only from, and forwards only to, the canonical Routers of the deployment, so
-///      every envelope on the wire was built by this code. The only outside inputs that change behaviour are the
-///      provider registry (route disables, blacklist, filter certifications, edge trust tiers) whose address is
-///      fixed at deployment.
+///      ledger; it accepts envelopes only from, and forwards only to, the canonical Routers of the deployment, and
+///      only over Channel directions the provider registry approves (with, on the receiving side, exactly the
+///      verifier the approval names), so every envelope on the wire was built by this code and carried by an
+///      approved Channel. The only outside inputs that change behaviour are the provider registry (Channel
+///      approvals and trust tiers, route disables, blacklist, filter certifications) whose address is fixed at
+///      deployment.
 ///
 ///      Flow: `send` on the origin → forward inside CLPR application delivery on each intermediate ledger →
 ///      deliver to the destination application → receipt back to the origin as a new routed message → origin
@@ -99,7 +101,8 @@ contract ClprRouter is IClprApplication, IClprRouter, ReentrancyGuardTransient {
     mapping(bytes32 => bytes32) public pendingHash;
     /// @notice keccak256(channelId, messageId) of an outbound CLPR message → what it carries.
     mapping(bytes32 => Outbound) public outbound;
-    /// @notice Receipt messages waiting to be sent, by keccak256(abi.encode(channel, connector, target, data)).
+    /// @notice Receipt messages waiting to be sent, by keccak256(abi.encode(channel, target, data)). The Connector
+    ///         is not part of the key: {flush} may send a queued receipt over any Connector of its Channel.
     mapping(bytes32 => bool) public outbox;
     /// @notice Pull payments that could not be pushed.
     mapping(address => uint256) public owed;
@@ -218,7 +221,8 @@ contract ClprRouter is IClprApplication, IClprRouter, ReentrancyGuardTransient {
     /// @notice CLPR delivery of an envelope from the previous hop's Router.
     /// @dev Reverts (CLPR APPLICATION_ERROR to the previous hop) only if the envelope is malformed, names a
     ///      non-canonical Router, is not addressed to this hop, not from the Router named for the previous hop,
-    ///      or a replay (or if too little gas was given to run the destination application). Every other
+    ///      arrived over a Channel direction the registry does not approve ({ChannelNotApproved}), or is a replay
+    ///      (or if too little gas was given to run the destination application or a hook). Every other
     ///      outcome — forwarded, pending, held, delivered, or stopped with a receipt — returns normally.
     /// @return response `abi.encodePacked(uint8 accepted|rejected, uint8 reason)`.
     function onClprMessage(bytes32 channelId, bytes calldata sender, bytes calldata messageData)
@@ -303,12 +307,14 @@ contract ClprRouter is IClprApplication, IClprRouter, ReentrancyGuardTransient {
     }
 
     /// @notice Send a receipt message from the outbox. Anyone may call; reverts (and the message stays queued)
-    ///         while its outgoing edge is disabled or `sendMessage` fails.
+    ///         while its outgoing edge is blocked or `sendMessage` fails.
+    /// @param connectorId Any Connector registered on `channelId`: the receipt's content (and so what the origin
+    ///        checks) does not depend on the Connector that carries it, so no single Connector can hold it back.
     function flush(bytes32 channelId, bytes32 connectorId, bytes calldata target, bytes calldata data)
         external
         nonReentrant
     {
-        bytes32 k = keccak256(abi.encode(channelId, connectorId, target, data));
+        bytes32 k = keccak256(abi.encode(channelId, target, data));
         if (!outbox[k]) revert NothingPending();
         delete outbox[k];
         RouteTypes.Envelope memory re = RouteCodec.decodeEnvelope(data);
@@ -318,6 +324,18 @@ contract ClprRouter is IClprApplication, IClprRouter, ReentrancyGuardTransient {
         uint64 messageId = SERVICE.sendMessage(channelId, connectorId, target, data);
         outbound[_msgKey(channelId, messageId)] = Outbound(re.routeId, idx, KIND_RECEIPT, k);
         emit RouteForwarded(re.routeId, idx, channelId, messageId, k, "");
+    }
+
+    /// @notice Put a receipt message back in the outbox when this ledger's CLPR Service has processed its reply
+    ///         but the Router never received it (a Response callback that ran out of gas, or a redacted message).
+    ///         Anyone may call. A duplicate that reaches the next hop is refused there as a replay.
+    function requeue(bytes32 channelId, uint64 messageId) external nonReentrant {
+        bytes32 mk = _msgKey(channelId, messageId);
+        Outbound memory out = outbound[mk];
+        if (out.kind != KIND_RECEIPT || !RouteLogic.replied(SERVICE, channelId, messageId)) revert NothingPending();
+        delete outbound[mk];
+        outbox[out.key] = true;
+        emit ReceiptRequeued(out.key, type(uint8).max);
     }
 
     // ═════════════════════════════════════════════════════════════════════
@@ -477,7 +495,7 @@ contract ClprRouter is IClprApplication, IClprRouter, ReentrancyGuardTransient {
         uint32 idx,
         bool open
     ) private {
-        bytes32 k = keccak256(abi.encode(h.channelId, h.connectorId, target, data));
+        bytes32 k = keccak256(abi.encode(h.channelId, target, data));
         if (open) {
             (SendResult r, uint64 messageId) = _trySend(h.channelId, h.connectorId, target, data, false);
             if (r == SendResult.SENT) {
@@ -532,7 +550,11 @@ contract ClprRouter is IClprApplication, IClprRouter, ReentrancyGuardTransient {
             revert NotForThisHop();
         }
         if (prev.channelId != channelId || keccak256(prev.router) != keccak256(sender)) revert UnexpectedSender();
-        if (_peerLedgerHash(channelId) != keccak256(bytes(prev.ledgerId))) revert UnexpectedSender();
+        // The Channel must lead to the previous hop's ledger, and its direction into this ledger must be approved
+        // with the verifier this ledger's Service uses for it: a Channel anyone opened proves nothing.
+        (bytes32 peer, bool approved) = RouteLogic.inboundChannel(SERVICE, REGISTRY, channelId, ledgerId);
+        if (peer != keccak256(bytes(prev.ledgerId))) revert UnexpectedSender();
+        if (!approved) revert ChannelNotApproved(channelId);
         if (e.payloadType == RouteTypes.PayloadType.RECEIPT) {
             // A receipt is reported by the Router that built it: its origin is its first hop.
             if (

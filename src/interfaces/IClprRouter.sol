@@ -20,6 +20,22 @@ interface IClprRouterDeployer {
         uint64 minSendGas;
     }
 
+    /// @notice What a deployer fixes for every Router of the deployment (its constructor arguments).
+    /// @param reclaimGrace Router RECLAIM_GRACE (seconds per edge of the way back).
+    /// @param appGas Router APP_GAS (gas for destination applications and hooks).
+    /// @param minSendGas Router MIN_SEND_GAS.
+    /// @param registryCodeHash Runtime code hash of the provider registry.
+    /// @param registryGenesis The registry's genesis head `headAt(0)` (deployment id, initial committee, notices).
+    /// @param vaultCodeHash Runtime code hash of the quarantine vault.
+    struct Pins {
+        uint64 reclaimGrace;
+        uint64 appGas;
+        uint64 minSendGas;
+        bytes32 registryCodeHash;
+        bytes32 registryGenesis;
+        bytes32 vaultCodeHash;
+    }
+
     function parameters() external view returns (Params memory);
 
     /// @notice Deployment-wide salt; the Router of ledger L is at CREATE2(deployer, keccak256(abi.encode(
@@ -135,6 +151,9 @@ interface IClprRouter {
     error WithdrawFailed();
     /// @notice A held receipt is still blocked by a disable; retry {ClprRouter.forward} once it lapses.
     error ReceiptHeld(RouteTypes.Reason reason);
+    /// @notice An envelope arrived over a Channel whose direction into this ledger the provider registry does not
+    ///         approve (or approves with another verifier than the one this ledger's CLPR Service uses for it).
+    error ChannelNotApproved(bytes32 channelId);
 
     // ── Events ──────────────────────────────────────────────────────────────
 
@@ -170,10 +189,12 @@ interface IClprRouter {
         RouteTypes.Reason reason,
         bytes envelope
     );
-    /// @notice A receipt message waits in the outbox; anyone sends it with {ClprRouter.flush}.
+    /// @notice A receipt message waits in the outbox; anyone sends it with {ClprRouter.flush}, over `connectorId` (the
+    ///         Connector the route named) or any other Connector of `channelId`.
     event OutboxQueued(bytes32 indexed key, bytes32 channelId, bytes32 connectorId, bytes target, bytes data);
-    /// @notice A receipt message was rejected by CLPR (`clprStatus`); it is back in the outbox under `key` (its data
-    ///         is in the earlier {OutboxQueued} or {RouteForwarded} with that key). Receipts are never dropped.
+    /// @notice A receipt message was rejected by CLPR (`clprStatus`), or its reply never reached the Router
+    ///         (`clprStatus` 255, {ClprRouter.requeue}); it is back in the outbox under `key` (its data is in the
+    ///         earlier {OutboxQueued} or {RouteForwarded} with that key). Receipts are never dropped.
     event ReceiptRequeued(bytes32 indexed key, uint8 clprStatus);
     event RouteDelivered(bytes16 indexed routeId, address indexed application, bytes32 responseHash);
     event RouteStopped(

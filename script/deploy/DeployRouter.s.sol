@@ -28,7 +28,9 @@ import {RouteLogic} from "@clprouter/libraries/RouteLogic.sol";
 ///         one address on every network. The Router's external libraries are linked and deployed by forge
 ///         through the same proxy (salt 0), so they too have one address everywhere and the Router's init code
 ///         (which takes no constructor arguments) hashes the same on every network. The deployer (owner = the
-///         deployer key, DEPLOYMENT_SALT = keccak256(salt, "ClprRouter", deployment id), INIT_CODE_HASH) puts
+///         deployer key, DEPLOYMENT_SALT = keccak256(salt, "ClprRouter", deployment id), INIT_CODE_HASH, and the
+///         pins: the Router's gas and grace parameters and the registry's and vault's code hashes and the registry's
+///         genesis head, all canonical, so it too has one address everywhere) puts
 ///         the Router of ledger L at CREATE2(deployer, keccak256(abi.encode(DEPLOYMENT_SALT, keccak256(L))),
 ///         INIT_CODE_HASH): one canonical address per ledger, computable from any ledger. A contract whose
 ///         address already has code is not deployed again; the checks below then run against it.
@@ -91,7 +93,8 @@ contract DeployRouter is Script {
         // ── ClprRouterDeployer (same owner, salt and init-code hash everywhere → same address) ──
         bytes memory routerInit = type(ClprRouter).creationCode; // libraries linked by forge (CREATE2, salt 0)
         bytes memory deployerInit = abi.encodePacked(
-            type(ClprRouterDeployer).creationCode, abi.encode(c.owner, c.routerSalt, keccak256(routerInit))
+            type(ClprRouterDeployer).creationCode,
+            abi.encode(c.owner, c.routerSalt, keccak256(routerInit), _pins(c, reg, vault))
         );
         ClprRouterDeployer dep =
             ClprRouterDeployer(_deploy("ClprRouterDeployer", _salt(c, "ClprRouterDeployer"), deployerInit));
@@ -137,6 +140,8 @@ contract DeployRouter is Script {
         }
         console.log("ROUTER_INIT_CODE_HASH");
         console.logBytes32(keccak256(routerInit));
+        console.log("REGISTRY_GENESIS");
+        console.logBytes32(ProviderRegistry(reg).headAt(0));
     }
 
     /// @dev Re-deploy the Router through the deployer in a reverted snapshot (as its owner) and compare runtime hashes.
@@ -224,8 +229,24 @@ contract DeployRouter is Script {
         require(v.CHALLENGE_WINDOW() == c.challengeWindow, "vault: CHALLENGE_WINDOW");
     }
 
+    /// @dev What the deployer pins: the configured Router parameters and this registry's and vault's code (the
+    ///         same on every network: their constructor inputs are canonical).
+    function _pins(Cfg memory c, address reg, address vault) internal view returns (IClprRouterDeployer.Pins memory) {
+        return IClprRouterDeployer.Pins({
+            reclaimGrace: c.reclaimGrace,
+            appGas: c.appGas,
+            minSendGas: c.minSendGas,
+            registryCodeHash: reg.codehash,
+            registryGenesis: ProviderRegistry(reg).headAt(0),
+            vaultCodeHash: vault.codehash
+        });
+    }
+
     function _checkDeployer(ClprRouterDeployer d, bytes memory routerInit, Cfg memory c) internal view {
         require(d.OWNER() == c.owner, "deployer: owner");
+        require(d.RECLAIM_GRACE() == c.reclaimGrace, "deployer: RECLAIM_GRACE");
+        require(d.APP_GAS() == c.appGas, "deployer: APP_GAS");
+        require(d.MIN_SEND_GAS() == c.minSendGas, "deployer: MIN_SEND_GAS");
         require(d.DEPLOYMENT_SALT() == c.routerSalt, "deployer: salt");
         require(d.INIT_CODE_HASH() == keccak256(routerInit), "deployer: init code hash (libraries or bytecode differ)");
     }

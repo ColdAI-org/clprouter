@@ -61,6 +61,7 @@ contract MockRouteService {
         if (bytes(peerOf[ch]).length == 0) revert ClprTypes.ClprChannelNotFound();
         c.channelId = ch;
         c.chainId = peerOf[ch];
+        c.verifier = address(this); // the mock stands in for every Channel's verifier
     }
 
     function sendMessage(bytes32 ch, bytes32 conn, bytes calldata target, bytes calldata data)

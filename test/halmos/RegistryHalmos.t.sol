@@ -132,3 +132,43 @@ contract RegistryHalmos is Test, SymTest {
         }
     }
 }
+
+/// @title Symbolic proof: during a committee hand-over the outgoing committee needs a supermajority
+/// @notice Its own contract: the take-over time is written into the registry's storage, which other proofs never see.
+contract RegistryHandOverHalmos is Test, SymTest {
+    uint64[6] internal NOTICES = [uint64(7 days), 72 hours, 7 days, 7 days, 30 days, 7 days];
+
+    function _committee(uint256 n) internal pure returns (address[] memory m) {
+        m = new address[](n);
+        for (uint256 i = 0; i < n; i++) {
+            m[i] = address(uint160(0x1000 + i));
+        }
+    }
+
+    /// @notice Once a scheduled committee's notice has passed, every action of the outgoing committee needs at
+    ///         least the supermajority max(k + 1, ceil(2n/3)), registry and vault actions alike (the vault asks
+    ///         `requiredSignatures`); before it, the quorum table above applies unchanged. For every committee
+    ///         shape with n in 3..7, every k, every action id and every scheduled take-over time, before or after
+    ///         `now` (the clock stays concrete, so no symbolic time leaks into the other proofs).
+    function check_requiredSignatures_supermajorityAfterNotice(uint8 k, uint8 action, uint64 from) public {
+        vm.assume(from != 0);
+        vm.warp(1_800_000_000);
+        for (uint256 n = 3; n <= 7; n++) {
+            if (!(k >= 2 && 2 * uint256(k) > n && uint256(k) + 1 <= n)) continue;
+            ProviderRegistry r = new ProviderRegistry(bytes32(uint256(1)), _committee(n), k, "c", NOTICES);
+            uint256 base = r.requiredSignatures(action);
+            // Schedule a take-over at `from` (slot 6: pendingEpoch | pendingThreshold << 64 | pendingFrom << 72).
+            vm.store(address(r), bytes32(uint256(6)), bytes32((uint256(from) << 72) | (uint256(2) << 64) | 1));
+            uint256 t = block.timestamp;
+            uint256 req = r.requiredSignatures(action);
+            uint256 supermajority = uint256(k) + 1 > (2 * n + 2) / 3 ? uint256(k) + 1 : (2 * n + 2) / 3;
+            if (t >= from) {
+                assert(req >= supermajority);
+                assert(req == (base > supermajority ? base : supermajority));
+            } else {
+                assert(req == base);
+            }
+            assert(req <= n);
+        }
+    }
+}

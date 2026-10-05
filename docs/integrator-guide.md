@@ -165,13 +165,14 @@ contract MyApp is IClprRouteApplication {
 | --- | --- |
 | `RouteSettled(routeId, status, reason, hopIndex, caseId, contact, feesPaid)` | Final outcome. `status`: 2 DELIVERED, 3 FAILED, 4 EXPIRED, 5 QUARANTINED |
 | `routes(routeId)` | Stored route: sender, deadline, status (1 PENDING until settled), escrow, budget |
-| `IClprRouteSender.onRouteReceipt(routeId, status, reason, caseId, responseHash)` | Optional callback if the sender is a contract; best effort with `APP_GAS` |
+| `IClprRouteSender.onRouteReceipt(routeId, status, reason, caseId, responseHash)` | Optional callback if the sender is a contract. It gets exactly `APP_GAS` (a settling call with less gas left reverts, so a route never settles without its callback); a revert in the callback is ignored |
 | `ReceiptIgnored(routeId)` | A receipt that failed authentication, or arrived after the route settled |
 | `owed(account)` + `withdraw()` | Payments the Router could not push (30,000 gas stipend) |
 
 Reasons (`RouteTypes.Reason`): 1 APPLICATION_ERROR, 2 DEADLINE, 3 DISABLED_EDGE, 4 DISABLED_LEDGER, 5 DISABLED_ROUTER,
 6 DISABLED_INBOUND, 7 FILTER, 8 FEE_BUDGET, 9 BLACKLIST, 10 NEXT_HOP_ERROR, 11 SEND_FAILED, 12 BAD_ROUTE,
-13 TRUST_FLOOR.
+13 TRUST_FLOOR. `DISABLED_EDGE` also covers a Channel direction the provider registry does not approve (at `send`, in
+either direction of an edge).
 
 Settlement pays the fee of each hop that forwarded (to its `fee_payee` on the origin ledger) and then:
 
@@ -212,7 +213,8 @@ What to do:
    `DELIST` and a vault release to the original sender or recipient.
 4. Watch the vault for `RecoveryNamed(caseId, to, releasableAt, …)`. If you are the deposit's sender or recipient
    and object to the recovery address, call `QuarantineVault.challengeRecovery(depositId, evidenceHash)` before
-   `releasableAt`. A challenge blocks that address.
+   `releasableAt(depositId)`: the notice and challenge window run from the naming or from your deposit, whichever is
+   later. A challenge blocks that address.
 5. Funds are released only by a committee decision, and only to the original sender, the original recipient, or an
    unchallenged recovery address; never to a committee member.
 
@@ -259,11 +261,15 @@ MiCA-authorised e-money or asset-referenced tokens (a USDT transfer is refused).
 ## 7. Checklist before mainnet use
 
 - [ ] Every Channel on your routes has a real verifier. Routes cannot leave Hiero on live networks yet (threat model R6).
+- [ ] Both directions of every Channel on your routes are approved in the provider registry
+      (`ProviderRegistry.channelApproval(edgeKey(channelId, toLedgerId))`), naming the verifier you expect; Routers
+      carry nothing over a direction without an approval, and `send` refuses such a route.
 - [ ] You pick Router deployments you recognise (the published addresses of a released version), and your destination
       application accepts only its own ledger's Router.
-- [ ] Someone pumps `forward` / `flush` on every intermediate ledger before your deadline.
+- [ ] Someone pumps `forward` / `flush` on every intermediate ledger before your deadline, and can flush a queued
+      receipt over another Connector of its Channel if the route's own Connector refuses it.
 - [ ] `deadline` leaves room for every hop's finality, bundle cadence and pumping; `RECLAIM_GRACE` on your origin
       Router covers the receipt's return.
 - [ ] Value routes are strict (the Router enforces it) and have a `payee`.
-- [ ] If you set an on-chain `trust_floor` above 0, every edge on the route carries a `TRUST_TIER` label.
+- [ ] If you set an on-chain `trust_floor` above 0, every edge on the route is labelled at or above it.
 - [ ] Without a filter, your payload is public on every ledger crossed.

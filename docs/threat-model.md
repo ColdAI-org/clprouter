@@ -17,9 +17,9 @@ Severity labels in this document: **High** (loss or theft of funds, or forged de
 | Escrow and fee budget of a route | `ClprRouter` on the origin ledger, `routes[routeId]` | Settled once, only on an authenticated receipt or a two-phase `reclaim` after the deadline plus `RECLAIM_GRACE` per edge of the way back |
 | Quarantined funds | `QuarantineVault` on the ledger that held them | Deposits only from the bound Router; committee decision per release, bound to this vault; fixed beneficiaries; k + 1 to name a recovery address, notice, challenge window and supermajority override |
 | Unpushed payments | `ClprRouter.owed[account]` | Only the account itself can `withdraw` |
-| Integrity of a routed message (payload, origin, sender, recipient) | Envelope on every hop | Each Channel's CLPR verifier, plus each Router's previous-hop authentication |
+| Integrity of a routed message (payload, origin, sender, recipient) | Envelope on every hop | Each Channel's CLPR verifier, which the provider registry must approve for that Channel direction, plus each Router's previous-hop authentication |
 | Integrity of a receipt | Receipt envelope on the way back | Same as above, plus the origin's hop-list commitment check (strict routes) |
-| Registry state (certifications, trust-tier labels, disables, blacklist, committee, contact) | `ProviderRegistry` on every ledger | k, k + 1 or supermajority committee signatures; decisions form a hash chain bound to the deployment id; notice and lapse periods |
+| Registry state (certifications, Channel approvals and trust-tier labels, disables, blacklist, committee, contact) | `ProviderRegistry` on every ledger | k, k + 1 or supermajority committee signatures; decisions form a hash chain bound to the deployment id; notice and lapse periods |
 | Committee signing keys | Members' HSMs (off-chain) | Key ceremony and custody (`docs/provider-committee-runbook.md`) |
 | Forward-trigger key (services) | Environment of the services process | Test keys only; the trigger refuses non-local RPC URLs |
 | Off-chain personal data under the ISO 20022 and MiCA filters | Never on-chain in clear; ciphertext or hashes in the payload | SDK encryption to the destination institution's key; `assertNoClearPersonalData` |
@@ -28,16 +28,18 @@ Severity labels in this document: **High** (loss or theft of funds, or forged de
 
 | Actor | Trusted for | Can do | Cannot do |
 | --- | --- | --- | --- |
-| Sender (origin application or account) | Its own funds and choice of route | Pick any route, Routers, mode, filters and constraints; `reclaim` | Make another ledger's Router accept an envelope not addressed to it |
+| Sender (origin application or account) | Its own funds and choice of route | Pick any route over approved Channels, its Connectors, mode, filters and constraints; `reclaim` | Make another ledger's Router accept an envelope not addressed to it; route over a Channel the registry does not approve in both directions |
 | Recipient / destination application | Its own logic | Accept or revert a delivery (revert gives `FAILED`) | Change the route |
 | Router (honest, any version) | Executing the published code | Forward, deliver, stop, send receipts | Anything outside its code; it has no admin key |
 | Router (non-canonical deployment) | Nothing | Nothing on CLPRouter routes: every hop, receipt path and loose tail must name each ledger's canonical Router | Be named in a route (`NonCanonicalRouter`) |
-| CLPR verifier of a Channel | The integrity of messages over that Channel, at its trust tier | Accept a forged bundle if broken or below its claimed tier | Affect other Channels |
-| Connector operator | Paying execution of messages | Refuse to pay (the hop's `sendMessage` fails or is NACKed) | Change message content |
+| Channel operator (anyone may open a CLPR Channel, with a verifier of its choice) | Nothing, until the registry approves the Channel | Open a Channel to any ledger and stamp any sender through its own verifier | Make a Router accept, forward or settle anything over a Channel direction the registry does not approve with exactly that verifier |
+| CLPR verifier of an approved Channel | The integrity of messages over that Channel, at its trust tier | Accept a forged bundle if broken or below its claimed tier | Affect other Channels; keep its approval if replaced (the label names its address and code hash) |
+| Connector operator | Paying execution of messages | Refuse to carry a message (the hop's `sendMessage` fails or is NACKed; a refused receipt waits in the outbox) | Change message content; hold a receipt back while any other Connector of its Channel carries it |
 | Endpoint / relayer | Liveness of bundles | Delay or withhold bundles | Forge bundles that the verifier accepts |
-| Pumper (anyone calling `forward` / `flush`) | Nothing | Complete a pending hop at a time of its choosing; on a loose route after a NACK, choose the new tail (canonical Routers only) | Complete a hop with a different envelope; fail a hop by under-funding gas (`MIN_SEND_GAS`) |
+| Pumper (anyone calling `forward` / `flush` / `requeue`) | Nothing | Complete a pending hop at a time of its choosing; pick which Connector of the Channel carries a queued receipt; on a loose route after a NACK, choose the new tail (canonical Routers only) | Complete a hop with a different envelope; fail a hop by under-funding gas (`MIN_SEND_GAS`); settle a route without its `onRouteReceipt` callback (`APP_GAS` or the call reverts) |
 | Decision relayer (anyone calling `ProviderRegistry.submit`) | Nothing | Choose when a signed decision lands on each ledger | Change a decision; skip a nonce; apply a decision that does not extend the ledger's head |
-| Provider committee (k of n) | Certifications, trust-tier labels, disables, blacklist, vault releases, its own membership | See section 4 | Change Router code, fees, Channels, Connectors or verifiers; send funds to its members |
+| Provider committee (k of n) | Certifications, Channel approvals and trust-tier labels, disables, blacklist, vault releases, its own membership | See section 4 | Change Router code, fees, Channels, Connectors or verifiers; approve a Channel direction with a verifier other than the one the receiving ledger uses; send funds to its members |
+| Router deployer owner | Deploying each ledger's canonical Router once | For a ledger without a Router yet: deploy it, choosing its CLPR Service (which must report that ledger's chain id) and registry and vault instances (which must carry the code and initial committee the deployer pins) | Choose the Router's code, gas or grace parameters; replace or administer a deployed Router |
 | Regulated operator (operated Router, ISO 20022 / MiCA hops) | Identity and screening at its hop | Reject a forward after screening | Redirect a route (same Router code) |
 | Services operator (indexer, status API, quote service, trigger) | Nothing on-chain | Serve wrong quotes or status | Change on-chain state other than completing pending hops |
 
@@ -93,20 +95,32 @@ client, 3 validity proof.
 | 2 light client | The source chain's consensus (e.g. the sync committee signs the header) | Same |
 | 3 validity proof | A sound proof system and correct circuit | Same |
 
-- **The on-chain floor is off by default.** The SDK sets `trust_floor = 0`, at which Routers never read
-  trust-tier labels. A route then depends on no provider decision for trust, and the planner's floor is advisory
-  (shown as `effectiveTrustTier` in every quote). A sender who sets a floor above 0 depends on the committee's
-  labels, and an unlabelled edge fails closed.
+- **Every Channel direction must be approved.** A Router accepts an envelope only over a Channel direction into its
+  ledger that the registry labels, and only if the label names exactly the verifier (address and runtime code hash)
+  its CLPR Service uses for that Channel. It forwards and sends receipts only over labelled directions, and `send`
+  requires both directions of every edge (the receipt comes back the other way). CLPR Channels are permissionless and
+  each carries its own verifier, so without this a Channel anyone opened could stamp any Router as the sender. The
+  committee's label is therefore part of every route's trust: a Channel is as strong as its verifier and as the
+  committee's decision to approve it.
+- **The trust floor is off by default.** The SDK sets `trust_floor = 0`, which every approved direction meets, so the
+  planner's floor is advisory (shown as `effectiveTrustTier` in every quote). A floor above 0 also compares the
+  labels' tiers.
 - **Hiero → chain edges have no verifier yet** (section 7.2). No tier can be claimed for them, and no route can leave
   Hiero on a live network today.
 
 ### 4.2 Router tier
 
 - Every Router of a deployment sits at its ledger's canonical CREATE2 address (`ClprRouterDeployer`), and every
-  Router a route, receipt path or loose tail names must be canonical. So every envelope on the wire was built by this
-  code. Non-EVM ledgers fail closed until a registry-certified Router hook exists.
+  Router a route, receipt path or loose tail names must be canonical. Together with the Channel approvals above, every
+  envelope on the wire was built by this code and carried over an approved Channel. Non-EVM ledgers fail closed until
+  a registry-certified Router hook exists.
+- The deployer's constructor fixes, for every Router it deploys, `RECLAIM_GRACE`, `APP_GAS` and `MIN_SEND_GAS`
+  (range-checked) and the runtime code hash and genesis head of the registry and the code hash of the vault, and its
+  address (the same on every ledger) commits to them. The owner still picks a not-yet-deployed ledger's CLPR Service
+  and its registry and vault instances (T11).
 - A hop accepts an envelope only from the Router named for the previous hop, over the named Channel, whose CLPR peer
-  is the named ledger (`ClprRouter._validateInbound`).
+  is the named ledger and whose direction into this ledger the registry approves with this ledger's verifier for it
+  (`ClprRouter._validateInbound`). Nothing about an envelope over another Channel is recorded: it reverts first.
 - The origin, sender and payload the destination sees are as good as every verifier on the route.
 - Routers are immutable. A buggy version is switched off by a `DISABLE` of `TARGET_ROUTER_VERSION`, and a new version
   is deployed beside it (`docs/deployment.md`).
@@ -115,7 +129,8 @@ client, 3 validity proof.
 
 | Action | Signatures | Takes effect | Bound |
 | --- | --- | --- | --- |
-| `CERTIFY`, `UNCERTIFY`, `TRUST_TIER` | k | After `CERT_NOTICE` (raise) or `REMOVAL_NOTICE` (lower, remove) | Pinned versions protect routes in flight (certifications only) |
+| `CERTIFY`, `UNCERTIFY` | k | After `CERT_NOTICE` (certify) or `REMOVAL_NOTICE` (uncertify) | Pinned versions protect routes in flight |
+| `TRUST_TIER` (Channel approval) | k | After `CERT_NOTICE` (approve, raise the tier, or name another verifier) or `REMOVAL_NOTICE` (lower, remove) | The label names the receiving ledger's verifier (address and code hash); removing it stops the direction like a disable (R14) |
 | `DISABLE` | k + 1 | Immediately | Lapses after `DISABLE_LAPSE` unless renewed |
 | `ENABLE` | k | After `REENABLE_NOTICE` | — |
 | `BLACKLIST` | k + 1 | Immediately | Lapses after `BLACKLIST_LAPSE` unless renewed |
@@ -123,23 +138,29 @@ client, 3 validity proof.
 | `CONTACT` | k | Immediately | — |
 | `COMMITTEE` | Supermajority, max(k + 1, ⌈2n/3⌉) | Scheduled; the new committee takes over with its first decision after `COMMITTEE_NOTICE` | n ≥ 3, 2 ≤ k, k > n/2, k + 1 ≤ n; after the notice the outgoing committee needs a supermajority for everything |
 | Vault `bindRouter` | k + 1 | Immediately, once | Afterwards only that Router can deposit |
-| Vault `nameRecovery` | k + 1 | Releasable after `RECOVERY_NOTICE + CHALLENGE_WINDOW` | The deposit's sender or recipient may challenge; a challenge is never cleared |
+| Vault `nameRecovery` | k + 1 | A deposit is releasable `RECOVERY_NOTICE + CHALLENGE_WINDOW` after the naming or after the deposit, whichever is later | The deposit's sender or recipient may challenge until then; a challenge is never cleared |
 | Vault `release` | k (supermajority over a challenge) | Immediately (recovery: after the window; over a challenge: one more `CHALLENGE_WINDOW`) | Only to the deposit's sender, recipient or recovery address; never a provider account |
 
 Registry decisions are EIP-712 digests over a domain whose salt is the deployment id, and each one commits to the
 registry head it extends (`prevHead`), so the applied decisions form a hash chain (`headAt`). Vault decisions use their
-own domain with the chain id and the vault address, so they act on one vault only.
+own domain with the chain id and the vault address, so they act on one vault only. The vault takes its quorums from
+the registry (`requiredSignatures`), so once a scheduled committee's notice has passed on a ledger the outgoing
+committee needs a supermajority there for vault actions too.
 
-Naming a vault recovery address needs k+1 committee signatures and waits `RECOVERY_NOTICE` + `CHALLENGE_WINDOW`.
-During that time the deposit's original sender or recipient can challenge, and a challenged deposit is paid out only
-by a supermajority override after a further `CHALLENGE_WINDOW`. So k+1 compromised keys can redirect an unchallenged
+Naming a vault recovery address needs k+1 committee signatures. Each deposit then waits `RECOVERY_NOTICE` +
+`CHALLENGE_WINDOW` from the naming or from its own arrival, whichever is later, so a deposit that joins a case after
+the naming gets a full window of its own. During that time the deposit's original sender or recipient can challenge,
+and a challenged deposit is paid out only by a supermajority override after a further `CHALLENGE_WINDOW`. So k+1 compromised keys can redirect an unchallenged
 deposit, and a supermajority can redirect any deposit. Separately, a supermajority can install any committee after
 `COMMITTEE_NOTICE`, and k compromised keys can fork a ledger that hasn't yet received the next decision. Such a fork
 is visible as differing `headAt` values but cannot be undone on-chain.
 
 Recommended values (spec and tests): k ≥ 3, `CERT_NOTICE` 7 days, `REMOVAL_NOTICE` 72 hours, `REENABLE_NOTICE`
 7 days, `DISABLE_LAPSE` 7 days, `BLACKLIST_LAPSE` 30 days, `COMMITTEE_NOTICE` 7 days, `RECOVERY_NOTICE` 3 days,
-`CHALLENGE_WINDOW` 7 days. The constructors enforce floors (`MIN_*`), so no notice or window can be zero.
+`CHALLENGE_WINDOW` 7 days. The constructors enforce floors (`MIN_*`), so no notice or window can be zero. The Router
+deployer bounds `RECLAIM_GRACE` to 1 hour .. 30 days, `APP_GAS` to 50,000 .. 10,000,000 and `MIN_SEND_GAS` to
+100,000 .. 30,000,000; set `RECLAIM_GRACE` above the worst-case latency of one receipt edge including pumping (the
+testnet configuration uses 6 hours).
 
 ### 4.4 Off-chain components
 
@@ -152,15 +173,15 @@ versions each answer is built from, so a client can re-check it against an RPC n
 | # | Surface | Entry point | Main checks |
 | --- | --- | --- | --- |
 | S1 | Route submission | `ClprRouter.send` | Structure, deadline, fees vs budget and `max_fee`, safety of every edge, ledger and Router, filters at the current registry version, blacklist (sender, recipient, payee), loose routes carry no value |
-| S2 | Inbound envelope | `onClprMessage` (only the Service) | Version, structure, addressed to this Router, previous Router and Channel, Channel peer ledger, replay, deadline |
+| S2 | Inbound envelope | `onClprMessage` (only the Service) | Version, structure, addressed to this Router, previous Router and Channel, Channel peer ledger, Channel direction approved with the Service's verifier for it, replay, deadline |
 | S3 | Inbound CLPR Response | `onClprResponse` (only the Service) | Known outbound message; NACK marks the hop for completion |
-| S4 | Pending hop completion | `forward(envelope, newTail)`, `flush(...)` | Exact envelope hash; all checks re-run; `MIN_SEND_GAS`; tail only on loose routes |
+| S4 | Pending hop completion | `forward(envelope, newTail)`, `flush(...)`, `requeue(channel, messageId)` | Exact envelope hash; all checks re-run (edge approved and not disabled); `MIN_SEND_GAS`; tail only on loose routes; a queued receipt over any Connector of its Channel; requeue only once the Service has processed the receipt message's reply without the Router receiving it |
 | S5 | Receipt at the origin | `_settle` via `onClprMessage` | First-hop Router and Channel, hop-list commitment (strict), exact reverse path (strict, no explicit receipt path) |
 | S6 | Refund without receipt | `reclaim` (two calls) | Status `PENDING`, no receipt held; request after `deadline + RECLAIM_GRACE × edges`, refund `RECLAIM_GRACE` later |
 | S7 | Pull payments | `withdraw` | Caller's own balance |
 | S8 | Committee decisions | `ProviderRegistry.submit` | Action, evidence hash, nonce = version + 1, digest extends the current head, `effectiveAt` within `MAX_NOTICE`, epoch (or the scheduled committee after its notice), sorted distinct member signatures, threshold |
 | S9 | Vault | `bindRouter`, `deposit`, `nameRecovery`, `challengeRecovery`, `release` | Bound Router; case id; vault-bound committee approval, `effectiveAt` and `validUntil`; beneficiary rules; window; per-deposit challenges; one release per deposit |
-| S10 | Application callbacks | `onRouteMessage`, `onRouteNotice`, `onRouteReceipt` | Fixed gas stipend `APP_GAS`; notices and receipt callbacks are best effort |
+| S10 | Application callbacks | `onRouteMessage`, `onRouteNotice`, `onRouteReceipt` | Exactly `APP_GAS`: if that much is not left the whole call reverts, so no caller can settle or stop a route while starving its callback; a reverting notice or receipt callback is ignored |
 | S11 | Envelope bytes | `RouteCodec.decodeEnvelope` / `decodeReceipt` | Strict proto3 decoding; fuzzed (`testFuzz_decode_neverPanics`) |
 | S12 | Services HTTP API | `GET /routes/:id`, `/accounts/:caip10/notices`, `/registry`, `/stream`, `/pending`, `POST /quote` | Read-only on-chain; unauthenticated; bind to localhost by default |
 | S13 | Forward trigger | `services/src/trigger.ts` | Key from env only; refuses non-local RPC; simulates before sending |
@@ -172,15 +193,15 @@ versions each answer is built from, so a client can re-check it against an RPC n
 | --- | --- | --- | --- |
 | T1 | Replay of an envelope on the same Router | Route ids are derived by the origin Router (ledger, Router, sender, nonce); hop state and replay are keyed by (origin ledger, origin Router, id); a repeat reverts `RouteReplayed` | None known (audit H-01, M-01 fixed) |
 | T2 | Loop or unbounded route | No ledger twice; at most `max_hops` (default 3, cap 8); receipts never trigger receipts | None known |
-| T3 | Envelope injected by a non-Router | Only the Service may call `onClprMessage`; previous Router, Channel and peer ledger must match the envelope | Bounded by the Channel's verifier (4.1) |
+| T3 | Envelope injected by a non-Router | Only the Service may call `onClprMessage`; previous Router, Channel and peer ledger must match the envelope; the Channel direction must be approved with this ledger's verifier for it | Bounded by the approved Channel's verifier (4.1) |
 | T4 | Forged receipt to release escrow | Canonical Routers only; strict routes: commitment to the hop list and the exact reverse path, first hop authenticated; `receipt_path` receipts must travel exactly the stored path; DELIVERED only from the destination | Bounded by the verifiers on the way back (4.1) |
 | T5 | Fee exhaustion or overcharge | Fees checked against the budget and `max_fee` at send and at every hop; payouts only for hops before the reporting one and never above the budget | None known |
 | T6 | Griefing a hop by under-funding gas | `MIN_SEND_GAS`: a permissionless `forward` below it reverts with `InsufficientGas`; inside delivery the hop stays pending; out-of-gas inside `sendMessage` is not treated as a verdict | `MIN_SEND_GAS` must be set per ledger from measurement (R9) |
-| T7 | Funds stranded when the way back is cut | Receipts are never dropped (outbox, held receipts); two-phase `reclaim` refunds escrow and budget | Late-receipt ordering (R4) |
+| T7 | Funds stranded when the way back is cut | Receipts are never dropped (outbox, held receipts, `requeue` when a reply never reached the Router); a queued receipt can go over any Connector of its Channel, so no single Connector holds it back; two-phase `reclaim` refunds escrow and budget | Late-receipt ordering (R4); someone must flush within the reclaim window |
 | T8 | Reentrancy | `ReentrancyGuardTransient` on every external entry; state written before `sendMessage`, app calls and vault deposits; pushes capped at 30,000 gas with fallback to `owed` | None known |
 | T9 | Exploiter moves funds through CLPRouter | Blacklist (k + 1) checked at the origin, at every hop and again at settlement; funds go to the vault | Covers only CLPRouter; fresh addresses evade it |
 | T10 | Compromised verifier or ledger | `DISABLE` of the edge or ledger (k + 1, immediate); messages already over a disabled inbound edge are not forwarded | Messages delivered before the disable stand |
-| T11 | Malicious Router deployment | Only canonical Routers (`ClprRouterDeployer`, owner-only, pinned init code) are accepted on any hop; previous-hop authentication; `DISABLE` of `TARGET_ROUTER` or `TARGET_ROUTER_VERSION` | The deployer owner could take a not-yet-deployed ledger's canonical address with a Router wired to a fake Service |
+| T11 | Malicious Router deployment | Only canonical Routers (`ClprRouterDeployer`, owner-only, pinned init code, pinned gas and grace parameters, pinned registry and vault code and initial committee) are accepted on any hop; previous-hop authentication; `DISABLE` of `TARGET_ROUTER` or `TARGET_ROUTER_VERSION` | For a ledger without a Router yet, the deployer owner chooses its CLPR Service (it must report that ledger's chain id): a wrong one leaves that ledger's Router unusable; keep the owner key offline or behind a multisig once every ledger is deployed |
 | T12 | Certification change on routes in flight | Routes pin the registry version; a registry behind the pin fails closed | Disables and blacklist entries are deliberately not pinned |
 | T13 | Registry state diverges between ledgers | Strict nonce order; each decision extends the head (hash chain); `headAt` comparable across ledgers (SDK `checkRegistryHeads`) | Relaying lag (R7); a k-key fork of a lagging ledger (R8) |
 | T14 | Committee key compromise | k / k + 1 / supermajority thresholds; scheduled committee changes; epochs; notices; lapse; vault beneficiary rules and challenges; all actions public | R2, R3, R8 |
@@ -188,6 +209,8 @@ versions each answer is built from, so a client can re-check it against an RPC n
 | T16 | Wrong quote or status from services | Every answer carries block numbers and registry versions; every hop re-checks | None on-chain |
 | T17 | Trigger key misuse | Test key from env; refuses to sign against non-local RPC; no key in config, image or logs | Production pumping needs its own key handling (R1) |
 | T18 | Malicious dependency or CI action | Lockfiles, SHA-pinned actions, Dependabot, audits, SBOM and provenance attestations | Upstream compromise before pinning |
+| T19 | Channel opened by anyone, with a verifier that accepts anything | Routers carry nothing over a Channel direction the registry does not label, and check on arrival that the label names the verifier the receiving Service uses (address and code hash) | The committee's approval decision (R14) |
+| T20 | A Connector chosen by the sender refuses to carry the receipt | The receipt waits in the outbox; anyone flushes it over another Connector of the same Channel (its content, and so the origin's checks, do not depend on the Connector); the services trigger falls back to configured Connectors | Someone must flush before the reclaim window ends (R4) |
 
 ## 7. Residual risks
 
@@ -234,12 +257,14 @@ sequenceDiagram
 
 ### R2. Committee keys can redirect quarantined funds or replace the committee (Medium)
 
-Naming a vault recovery address needs k+1 committee signatures and waits `RECOVERY_NOTICE` + `CHALLENGE_WINDOW`.
-During that time the deposit's original sender or recipient can challenge, and a challenged deposit is paid out only
-by a supermajority override after a further `CHALLENGE_WINDOW`. So k+1 compromised keys can redirect an unchallenged
-deposit, and a supermajority can redirect any deposit. Separately, a supermajority can install any committee after
-`COMMITTEE_NOTICE`, and k compromised keys can fork a ledger that hasn't yet received the next decision. Such a fork
-is visible as differing `headAt` values but cannot be undone on-chain.
+Naming a vault recovery address needs k+1 committee signatures, and each deposit then waits `RECOVERY_NOTICE` +
+`CHALLENGE_WINDOW` from the naming or from its own arrival, whichever is later. During that time the deposit's
+original sender or recipient can challenge, and a challenged deposit is paid out only by a supermajority override
+after a further `CHALLENGE_WINDOW`. So k+1 compromised keys can redirect an unchallenged deposit, and a supermajority
+can redirect any deposit. With the reference committee (n = 5, k = 3) the supermajority is k + 1, the naming quorum:
+there a challenge buys one more window and public attention, not a larger quorum. Separately, a supermajority can
+install any committee after `COMMITTEE_NOTICE`, and k compromised keys can fork a ledger that hasn't yet received the
+next decision. Such a fork is visible as differing `headAt` values but cannot be undone on-chain.
 
 A recovery address may be any address that has never been a committee member (past, present or scheduled), the
 registry or the vault. Mitigations: namings, challenges and committee schedules are public events (`RecoveryNamed`,
@@ -262,7 +287,11 @@ refund another `RECLAIM_GRACE` later; any authentic receipt in between settles t
 blocked while a receipt for the route is held at the origin. A `DELIVERED` receipt that still arrives after the
 refund is recorded (`routes(id).late`, `LateReceipt`) but moves no funds: the escrow is already back with the sender
 while the destination application acted, and the parties settle off-chain. Set `RECLAIM_GRACE` above the worst-case
-receipt latency per edge, including pumping, and keep pumpers running.
+receipt latency per edge, including pumping, and keep pumpers running. Nobody can push a receipt past that window on
+purpose: receipts arrive only over approved Channels from canonical Routers, a queued receipt can go over any
+Connector of its Channel, and a receipt whose CLPR reply never reached the Router can be put back in the outbox
+(`requeue`). What remains is liveness: someone has to flush in time, which the services trigger does (with fallback
+Connectors when configured).
 
 ### R5. Loose routes after a NACK: anyone chooses the new tail (Low, data routes)
 
@@ -292,8 +321,10 @@ Hiero → chain edges `projected`. This closes when a block node serves state pr
 ### R7. Registry lag between ledgers (Low)
 
 A decision applies on a ledger only when someone relays it there. Until then that ledger's Router does not see a
-new disable or blacklist entry, and a filtered route pinned to a newer version fails closed there. Mitigation: the
-runbook relays every decision to every ledger at once and checks `version()` everywhere.
+new disable or blacklist entry, and a filtered route pinned to a newer version fails closed there. A scheduled
+committee's notice also runs from the time its decision is relayed on each ledger, so the hand-over (and the outgoing
+committee's supermajority rule) starts at different times on different ledgers. Mitigation: the runbook relays every
+decision, and `COMMITTEE` decisions first of all, to every ledger at once and checks `version()` everywhere.
 
 ### R8. k keys can fork a lagging ledger (Low)
 
@@ -301,8 +332,9 @@ Decisions form a hash chain: each one commits to the head it extends, so a ledge
 extends its own head, and two different decisions for one nonce can never both apply on one ledger. A ledger that
 has not yet received decision N can still be given a different decision N signed by k keys (a k-threshold action).
 Such a fork is visible as differing `headAt` values but cannot be undone on-chain; the forked ledger accepts no
-later decision of the others. Mitigation: relay every decision to every ledger at once,
-and compare `headAt` (SDK `checkRegistryHeads`, services) before trusting a pinned version.
+later decision of the others. Routes pin a registry version, not a head, so on a forked ledger a pinned version names
+another history. Mitigation: relay every decision to every ledger at once, and compare `headAt` (SDK
+`checkRegistryHeads`, services) before trusting a pinned version.
 
 ### R9. Gas parameters are per-ledger constants (Low)
 
@@ -318,13 +350,32 @@ each vault keeps its own deposits.
 
 ### R11. Contract size margin (Low, engineering)
 
-`ClprRouter` is 22,417 B against the EIP-170 limit of 24,576 B (2,159 B margin), built with `optimizer_runs = 200`;
+`ClprRouter` is 23,175 B against the EIP-170 limit of 24,576 B (1,401 B margin), built with `optimizer_runs = 200`;
 settlement, send construction and receipt reporting live in external libraries. CI fails a build over the limit.
 
 ### R12. No confidentiality without filters (Low, by design)
 
 CLPR gives integrity, not confidentiality. A payload without the ISO 20022 or MiCA filter is plaintext on every ledger
 the route crosses, not only the two ends.
+
+### R13. Held receipts and renewed disables (Low)
+
+A receipt that arrives over a disabled edge, ledger or Router is held, not dropped, and `reclaim` waits while a
+receipt for the route is held at the origin. A disable of the origin Router (or its version) that k + 1 keys keep
+renewing every `DISABLE_LAPSE` therefore keeps every route with a held receipt frozen for as long as they renew it.
+Nothing moves to anyone; the funds are released when the disable lapses or is lifted and the held receipt is
+forwarded.
+
+### R14. Channel approvals are a committee decision (Medium)
+
+The registry's Channel labels decide which Channels every Router listens to. k keys approve a direction (after
+`CERT_NOTICE`, naming its verifier) or remove one (after `REMOVAL_NOTICE`). Approving a Channel whose verifier is weak
+or whose operator controls its configuration gives that verifier the reach of an approved Channel; removing the label
+of a direction stops it like a disable, including receipts on their way back, so a route in flight over it waits and
+its sender can reclaim after the window, even if the destination already acted. Mitigations: approvals are public,
+scheduled events (`TrustTierScheduled`); the runbook asks for the verifier's code, configuration and operator to be
+reviewed before approving, for labels to be removed only from directions without routes in flight (or after a disable
+has drained them), and for `REMOVAL_NOTICE` to exceed the longest route window in use.
 
 ## 8. Settle on Hedera
 

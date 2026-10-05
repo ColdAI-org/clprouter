@@ -226,18 +226,32 @@ describe.skipIf(!hasAnvil || !hasArtefacts)("services against a local anvil", ()
     await waitFor("anvil", async () => (await pub.getBlockNumber().catch(() => undefined)) !== undefined ? true : undefined, 20_000);
     wallet = createWalletClient({ account: privateKeyToAccount(DEPLOYER), transport: http(rpc) });
 
-    // Routers live at their canonical CREATE2 addresses, deployed through one ClprRouterDeployer.
+    // Routers live at their canonical CREATE2 addresses, deployed through one ClprRouterDeployer, which pins the
+    // Routers' gas and grace parameters and the code (and initial committee) of their registry and vault.
     const routerCode = await link(router);
-    const deployer = await deploy(routerDeployer, [wallet.account!.address, keccak256(toHex("clprouter-anvil")), keccak256(routerCode)]);
-    for (const id of IDS) {
-      const service = await deploy(mock, [id]);
-      const reg = await deploy(registry, [
+    const newRegistry = () =>
+      deploy(registry, [
         keccak256(toHex("clprouter-anvil-deployment")),
         COMMITTEE.map((m) => m.address),
         K,
         CONTACT,
         [86400n, 3600n, 86400n, 7n * 86400n, 30n * 86400n, 7n * 86400n],
       ]);
+    const codeHash = async (a: Address) => keccak256((await pub.getCode({ address: a }))!);
+    const reg0 = await newRegistry();
+    const vault0 = await deploy(vault, [reg0, 3n * 86400n, 7n * 86400n]);
+    const pins = {
+      reclaimGrace: 3600n,
+      appGas: 300_000n,
+      minSendGas: MIN_SEND_GAS,
+      registryCodeHash: await codeHash(reg0),
+      registryGenesis: await read<Hex>(reg0, registry.abi, "headAt", [0n]),
+      vaultCodeHash: await codeHash(vault0),
+    };
+    const deployer = await deploy(routerDeployer, [wallet.account!.address, keccak256(toHex("clprouter-anvil")), keccak256(routerCode), pins]);
+    for (const id of IDS) {
+      const service = await deploy(mock, [id]);
+      const reg = await newRegistry();
       const v = await deploy(vault, [reg, 3n * 86400n, 7n * 86400n]);
       await write(deployer, routerDeployer.abi, "deploy", [
         routerCode,
@@ -253,6 +267,20 @@ describe.skipIf(!hasAnvil || !hasArtefacts)("services against a local anvil", ()
     await write(B().service, mock.abi, "setPeer", [CH_AB, A().id]);
     await write(B().service, mock.abi, "setPeer", [CH_BC, C().id]);
     await write(C().service, mock.abi, "setPeer", [CH_BC, B().id]);
+    // The committee approves both directions of both Channels on every ledger (each label names the verifier the
+    // receiving ledger uses: the mock service stands in for it), then the certification notice (1 day) passes.
+    const directions: [Hex, Ledger][] = [[CH_AB, B()], [CH_AB, A()], [CH_BC, C()], [CH_BC, B()]];
+    for (const l of L) {
+      for (const [ch, to] of directions) {
+        const payload = encodeAbiParameters(
+          [{ type: "bytes32" }, { type: "string" }, { type: "uint8" }, { type: "address" }, { type: "bytes32" }],
+          [ch, to.id, 0, to.service, await codeHash(to.service)],
+        );
+        await decide(l, 11, payload, K);
+      }
+    }
+    await pub.request({ method: "evm_increaseTime", params: [86_401] } as never);
+    await pub.request({ method: "evm_mine", params: [] } as never);
 
     process.env.CLPROUTER_TRIGGER_KEY_TEST = TRIGGER;
     const cfg: ServicesConfig = {

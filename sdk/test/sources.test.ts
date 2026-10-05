@@ -105,6 +105,16 @@ describe("OnChainGraphSource", () => {
     expect(iso.ok && iso.route.ledgers).toEqual([A, "test:y", B]); // the hub lost its ISO listing
   });
 
+  it("overlays Channel approvals: an edge the registry does not approve drops out of planning", async () => {
+    const reader = new MockReader();
+    reader.registry = { ...emptyRegistry(), edgeApproved: { [ID(A, X)]: false, [ID(A, H)]: true } };
+    const g = await new OnChainGraphSource(base, reader).load();
+    expect(g.edge(ID(A, X)).approved).toBe(false);
+    expect(g.edge(ID(A, H)).approved).toBe(true);
+    const r = plan(g, { origin: A, destination: B, mode: "cheapest", now: NOW });
+    expect(r.ok && r.route.ledgers).toEqual([A, H, B]);
+  });
+
   it("keeps the snapshot when the reader knows nothing", async () => {
     const g = await new OnChainGraphSource(base, new MockReader()).load();
     expect(g.edges().map((e) => e.status)).toEqual(fixtureGraph().edges.map((e) => e.status));
@@ -145,6 +155,7 @@ describe("ViemOnChainReader", () => {
     },
     async readContract({ functionName, args }: { functionName: string; args: [Hex] }) {
       if (functionName === "version") return 6n;
+      // Only CH into H is labelled; the way back (CH into the edge's `from`) is not, so the edge is not approved.
       if (functionName === "trustTier") return args[0] === registryKeys.edge(CH, H) ? [true, 1] : [false, 0];
       if (functionName === "isDisabled") {
         return [registryKeys.ledger(X), registryKeys.edge(CH, H), registryKeys.routerVersion(2)].includes(args[0]);
@@ -202,6 +213,7 @@ describe("ViemOnChainReader", () => {
     expect(s.disabledRouterVersions).toEqual([2]);
     expect(s.version).toBe(6n);
     expect(s.edgeTrustTiers).toEqual({ [edgeId(edge)]: "committee" });
+    expect(s.edgeApproved).toEqual({ [edgeId(edge)]: false }); // labelled one way only
   });
 
   it("derives the same keys as Caip.sol", () => {

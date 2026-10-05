@@ -13,16 +13,21 @@ import {IProviderRegistry} from "./interfaces/IProviderRegistry.sol";
 ///          acted on before its `effectiveAt` nor after its `validUntil`;
 ///        - deposits come only from the Router this vault is bound to, once bound (a one-time k + 1 decision);
 ///        - a release to the deposit's original sender or recipient needs k signatures;
-///        - a recovery address for a case needs k + 1 signatures to name, and a recovery release waits
-///          `RECOVERY_NOTICE` + `CHALLENGE_WINDOW` after the naming. Until then, the deposit's own sender or
+///        - a recovery address for a case needs k + 1 signatures to name, and a recovery release of a deposit
+///          waits `RECOVERY_NOTICE` + `CHALLENGE_WINDOW` after the naming or after the deposit, whichever is later
+///          (so a deposit that joins a case late gets its own full window). Until then, the deposit's own sender or
 ///          recipient can challenge it. A challenge is per deposit and per address and is never cleared: naming the
 ///          same address again does not lift it. A challenged recovery is paid only by an override decision
 ///          signed by a supermajority of the committee (the quorum for committee changes) after one more
 ///          `CHALLENGE_WINDOW`;
 ///        - nothing goes to a provider account (any past, present or scheduled committee member), the registry or
 ///          the vault itself, and nothing moves without a case id;
-///        - every deposit, naming, challenge and release is an event.
-///      Native value only (no ERC-20 path).
+///        - every deposit, naming, challenge and release is an event;
+///        - the quorums are the registry's ({IProviderRegistry.requiredSignatures}), including its rule that the
+///          outgoing committee needs a supermajority for everything once a scheduled committee's notice has passed.
+///      Native value only (no ERC-20 path). The registry is kept in storage (written once, in the constructor), not
+///      as an immutable, so the vault's runtime code is the same whichever registry it serves and its code hash can
+///      be pinned by the Router deployer.
 contract QuarantineVault {
     uint8 internal constant ACTION_COMMITTEE = 7;
     uint8 internal constant ACTION_VAULT_RELEASE = 9;
@@ -110,7 +115,8 @@ contract QuarantineVault {
         bytes32 digest
     );
 
-    IProviderRegistry public immutable REGISTRY;
+    // slither-disable-next-line immutable-states,naming-convention
+    IProviderRegistry public REGISTRY;
     uint64 public immutable RECOVERY_NOTICE;
     uint64 public immutable CHALLENGE_WINDOW;
 
@@ -122,6 +128,8 @@ contract QuarantineVault {
     /// @notice depositId => recovery address => time a party of that deposit challenged it (0 = never).
     mapping(uint256 => mapping(address => uint64)) public challengedAt;
     mapping(bytes32 => bool) public used;
+    /// @notice depositId => time the deposit was made.
+    mapping(uint256 => uint64) public depositedAt;
 
     constructor(IProviderRegistry registry, uint64 recoveryNotice, uint64 challengeWindow) {
         if (
@@ -198,6 +206,7 @@ contract QuarantineVault {
             amount: msg.value,
             released: false
         });
+        depositedAt[depositId] = uint64(block.timestamp);
         emit Deposited(depositId, routeId, caseId, msg.sender, sender, recipient, msg.value);
     }
 
@@ -209,9 +218,9 @@ contract QuarantineVault {
         (bytes32 caseId, address to) = abi.decode(d.payload, (bytes32, address));
         if (caseId == bytes32(0)) revert NoCase();
         _checkBeneficiary(to);
-        uint64 releasableAt = uint64(block.timestamp) + RECOVERY_NOTICE + CHALLENGE_WINDOW;
-        recoveries[caseId] = Recovery({to: to, namedAt: uint64(block.timestamp), releasableAt: releasableAt});
-        emit RecoveryNamed(caseId, to, releasableAt, d.evidenceHash, digest);
+        uint64 at = uint64(block.timestamp) + RECOVERY_NOTICE + CHALLENGE_WINDOW;
+        recoveries[caseId] = Recovery({to: to, namedAt: uint64(block.timestamp), releasableAt: at});
+        emit RecoveryNamed(caseId, to, at, d.evidenceHash, digest);
     }
 
     /// @notice Challenge paying deposit `depositId` to the recovery address named for its case. Only the deposit's
@@ -223,7 +232,7 @@ contract QuarantineVault {
         if (msg.sender != dep.sender && msg.sender != dep.recipient) revert NotAParty();
         if (dep.released) revert AlreadyReleased();
         Recovery storage r = recoveries[dep.caseId];
-        if (r.to == address(0) || block.timestamp >= r.releasableAt) revert ChallengeClosed();
+        if (r.to == address(0) || block.timestamp >= releasableAt(depositId)) revert ChallengeClosed();
         if (challengedAt[depositId][r.to] == 0) challengedAt[depositId][r.to] = uint64(block.timestamp);
         emit RecoveryChallenged(dep.caseId, depositId, msg.sender, r.to, evidenceHash);
     }
@@ -252,15 +261,15 @@ contract QuarantineVault {
         } else if (kind == Beneficiary.RECIPIENT) {
             to = dep.recipient;
         } else {
-            Recovery storage r = recoveries[caseId];
-            to = r.to;
+            to = recoveries[caseId].to;
             uint64 challenged = challengedAt[depositId][to];
-            if (to == address(0) || block.timestamp < r.releasableAt) revert RecoveryNotReady();
+            uint64 at = releasableAt(depositId);
+            if (to == address(0) || block.timestamp < at) revert RecoveryNotReady();
             if (kind == Beneficiary.RECOVERY) {
                 if (challenged != 0) revert RecoveryNotReady();
             } else {
                 if (challenged == 0) revert NotChallenged();
-                if (block.timestamp < uint256(r.releasableAt) + CHALLENGE_WINDOW) revert RecoveryNotReady();
+                if (block.timestamp < uint256(at) + CHALLENGE_WINDOW) revert RecoveryNotReady();
             }
         }
         _checkBeneficiary(to);
@@ -270,6 +279,16 @@ contract QuarantineVault {
         emit Released(depositId, caseId, to, kind, amount, d.evidenceHash, digest);
         (bool ok,) = to.call{value: amount}("");
         if (!ok) revert TransferFailed();
+    }
+
+    /// @notice Earliest time deposit `depositId` may be released to its case's recovery address (0 = none named):
+    ///         `RECOVERY_NOTICE` + `CHALLENGE_WINDOW` after the naming or after the deposit, whichever is later.
+    ///         Its parties can challenge until then.
+    function releasableAt(uint256 depositId) public view returns (uint64) {
+        Recovery storage r = recoveries[deposits[depositId].caseId];
+        if (r.to == address(0)) return 0;
+        uint64 own = depositedAt[depositId] + RECOVERY_NOTICE + CHALLENGE_WINDOW;
+        return own > r.releasableAt ? own : r.releasableAt;
     }
 
     function _consume(IProviderRegistry.Decision calldata d, bytes[] calldata sigs, uint8 action, uint256 required)

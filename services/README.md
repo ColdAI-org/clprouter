@@ -90,6 +90,24 @@ The trigger never needs a production key in its environment.
 Every signature from a remote signer is recovered and checked against the configured address. The signed
 transaction is checked against the one requested (to, data, nonce, chain id, value, gas) before it is sent.
 
+## Trigger: receipts over other Connectors
+
+A queued receipt (`OutboxQueued`) is flushed over the Connector the route named; if that Connector refuses it, the
+trigger tries the Connectors listed for the Channel in `trigger.receiptConnectors` (Routers accept a receipt over any
+Connector of its Channel, so a refusing Connector cannot hold it back):
+
+```json
+"trigger": {
+  "enabled": true,
+  "signer": { "kind": "web3signer", "url": "https://...", "address": "0x..." },
+  "receiptConnectors": { "0x<channel id>": ["0x<connector id>", "0x<another connector id>"] }
+}
+```
+
+Each job is attempted at most `trigger.maxAttempts` times (default 3), so a receipt that CLPR keeps refusing does not
+cost gas for ever. A receipt message whose CLPR reply never reached its Router (a failed Response callback, a redacted
+message) can be put back in the outbox with the Router's permissionless `requeue(channelId, messageId)`.
+
 ## HTTP API
 
 The contract is [`openapi.json`](openapi.json) (OpenAPI 3.1, also served at `GET /openapi.json`). Tests check every

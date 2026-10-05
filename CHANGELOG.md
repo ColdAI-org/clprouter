@@ -6,6 +6,35 @@ Contract versions are also named by `ClprRouter.VERSION`; a new value is a new o
 
 ## [Unreleased]
 
+### Breaking changes (new on-chain deployment)
+
+- **Routers use only approved Channels.** A Router accepts an envelope only over a Channel direction that the
+  provider registry approves, and only if the approval names the verifier (address and runtime code hash) this
+  ledger's CLPR Service uses for that Channel; otherwise `onClprMessage` reverts with `ChannelNotApproved` before
+  recording anything. `send` requires both directions of every edge to be approved, and every hop requires its next
+  edge and the way back (`DISABLED_EDGE` otherwise). The approval is the existing `TRUST_TIER` label, whose payload
+  is now `(bytes32 channelId, string toLedgerId, uint8 tier, address verifier, bytes32 verifierCodeHash)`; new
+  view `ProviderRegistry.channelApproval(edgeKey)`; `TrustTierScheduled` carries the verifier fields. Naming another
+  verifier waits `CERT_NOTICE`.
+- **Receipts over any Connector of their Channel.** The outbox key is `keccak256(abi.encode(channelId, target,
+  data))` (no Connector); `flush(channelId, connectorId, target, data)` accepts any Connector of the Channel. New
+  permissionless `ClprRouter.requeue(channelId, messageId)` puts a receipt message back in the outbox once the CLPR
+  Service has processed its reply without the Router receiving it (`ReceiptRequeued` with status 255).
+- **Hooks get their gas.** `onRouteReceipt` and `onRouteNotice` are called with exactly `APP_GAS`; if that much is not
+  left the call reverts with `InsufficientGas`, so no caller can settle a route while starving its callback.
+- **`ClprRouterDeployer` pins the deployment.** New constructor argument `Pins` (`RECLAIM_GRACE`, `APP_GAS`,
+  `MIN_SEND_GAS`, the registry's runtime code hash and genesis head, the vault's runtime code hash), range-checked
+  (`RECLAIM_GRACE` 1 hour .. 30 days, `APP_GAS` 50,000 .. 10,000,000, `MIN_SEND_GAS` 100,000 .. 30,000,000); `deploy`
+  refuses other parameters, registries or vaults (`InvalidParameters`). The deployer's address, and so every canonical
+  Router address, commits to them.
+- **Vault: a challenge window per deposit.** A deposit is releasable to its case's recovery address
+  `RECOVERY_NOTICE + CHALLENGE_WINDOW` after the naming or after the deposit, whichever is later (new view
+  `releasableAt(depositId)`, new `depositedAt`); its parties can challenge until then. The vault keeps its registry
+  in storage instead of an immutable, so its code hash is the same for every registry.
+- **Hand-over quorum everywhere.** `ProviderRegistry.requiredSignatures(action)` includes the rule that, once a
+  scheduled committee's notice has passed, the outgoing committee needs a supermajority for every action; the vault
+  takes its quorums from it, so the rule now covers vault decisions too.
+
 ### Added
 
 - **Settle on Hedera** (`src/settle/`): `SettleOrderBook` on Hedera holds Connector bonds (HBAR or HTS tokens),
@@ -14,6 +43,11 @@ Contract versions are also named by `ClprRouter.VERSION`; a new value is a new o
   `ISettlePaymentProver` for chains without a CLPR Service. Unit, fuzz, invariant and three-ledger tests
   (`test/settle/`), the anvil end-to-end run `script/settle-e2e/run.sh` with Hedera trace-size checks, the reference
   Connector service (`services/connector`), `docs/settle-on-hedera.md` and threat-model section 8.
+- **Tooling for the above.** SDK: `Edge.approved` and `RegistryState.edgeApproved` (both labels of an edge), and the
+  planner skips unapproved edges. Services: `trigger.receiptConnectors` (fallback Connectors for queued receipts),
+  per-deposit `recoveryReleasableAt` in the registry state, regenerated ABI. Scripts: the e2e runs approve their
+  Channels and let the notice pass; `route.sh approve-sepolia | approve-hedera`; `foundry.toml` profile `deep` runs
+  every fuzz test and invariant at 10,000 runs. Testnet config: `RECLAIM_GRACE` 6 hours, deployment salt v2.
 - **Docs for the project and the CLPR community:** README rewritten around the testnet evidence (transaction links,
   diagrams, modes and filters, audit status, roadmap); `docs/lfdt/briefing.md` (briefing and demo script for the CLPR
   maintainers), `docs/lfdt/hedera-trace-cap.md` (Hedera's contract trace-size cap: evidence, reproduction, impact on

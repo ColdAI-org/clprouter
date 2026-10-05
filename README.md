@@ -19,7 +19,7 @@
   <a href="https://github.com/ColdAI-org/clprouter/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ColdAI-org/clprouter/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/ColdAI-org/clprouter/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/ColdAI-org/clprouter/actions/workflows/codeql.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/ColdAI-org/clprouter/actions/workflows/nightly-e2e.yml"><img alt="Nightly e2e" src="https://github.com/ColdAI-org/clprouter/actions/workflows/nightly-e2e.yml/badge.svg?branch=main"></a>
-  <img alt="Tests: 743 passing" src="https://img.shields.io/badge/tests-743%20passing-2ea44f">
+  <img alt="Tests: 767 passing" src="https://img.shields.io/badge/tests-767%20passing-2ea44f">
   <br>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-black"></a>
   <img alt="Solidity 0.8.30" src="https://img.shields.io/badge/Solidity-0.8.30-363636?logo=solidity">
@@ -116,7 +116,7 @@ flowchart LR
 
 | Component | What it is |
 | --- | --- |
-| [`ClprRouter`](src/ClprRouter.sol) | One per ledger, deployed at a canonical CREATE2 address. Immutable: no admin key, no pause, no upgrade. 22,417 B runtime (EIP-170 limit 24,576 B). |
+| [`ClprRouter`](src/ClprRouter.sol) | One per ledger, deployed at a canonical CREATE2 address. Immutable: no admin key, no pause, no upgrade. 23,175 B runtime (EIP-170 limit 24,576 B). |
 | [`ProviderRegistry`](src/ProviderRegistry.sol) | Append-only, hash-chained register of k-of-n committee decisions: certifications, disables, blacklist. |
 | [`QuarantineVault`](src/QuarantineVault.sol) | Per-ledger vault for funds diverted by the blacklist, with fixed release rules. |
 | [`ClprRouterDeployer`](src/ClprRouterDeployer.sol) | Deploys each ledger's Router at its canonical address; every hop refuses non-canonical Routers. |
@@ -196,20 +196,21 @@ flowchart TB
         c2["Disable a Channel direction, ledger, Router deployment<br/>or version (k + 1, lapses after 7 days); re-enable (k, after notice)"]
         c3["Blacklist an account after an exploit (k + 1, lapses after 30 days):<br/>its routed funds go to the quarantine vault"]
         c4["Change the committee<br/>(supermajority, after notice)"]
+        c5["Approve Channel directions, naming their verifier<br/>(k, after 7 days' notice): Routers use no other Channel"]
     end
     subgraph CANNOT["Cannot (no code path exists)"]
         n1["Change, pause or upgrade Routers"]
         n2["Change fees, Channels, verifiers or Connectors"]
         n3["Move funds anywhere but the quarantine vault"]
         n4["Release vault funds to any committee account"]
-        n5["Affect routes in flight: they pin the registry version"]
+        n5["Change certifications under routes in flight: they pin the registry version"]
     end
 ```
 
 The vault pays only the original sender, the original recipient, or a recovery address named by k + 1 members after
-a public notice and challenge window. Worst case with compromised committee keys: false filter labels, stopped
-routes, funds parked in the vault until the committee is replaced. CLPR verification is unaffected. Full analysis:
-[threat model](docs/threat-model.md).
+a public notice and a challenge window that every deposit gets in full. Worst case with compromised committee keys:
+false filter labels, a weak Channel approved after a week's public notice, stopped routes, funds parked in the vault
+until the committee is replaced. Full analysis: [threat model](docs/threat-model.md).
 
 ## Modes and filters
 
@@ -257,10 +258,10 @@ jq.
 ```sh
 git clone --recurse-submodules https://github.com/ColdAI-org/clprouter && cd clprouter
 
-forge test --skip 'script/**'                # 359 contract tests in 22 suites: unit, fuzz, invariant, security, three-ledger
-(cd sdk && pnpm install && pnpm test)        # 212 tests: planner, envelope codec, ISO 20022
+forge test --skip 'script/**'                # 379 contract tests in 24 suites: unit, fuzz, invariant, security, three-ledger
+(cd sdk && pnpm install && pnpm test)        # 213 tests: planner, envelope codec, ISO 20022
 forge build                                  # artefacts for the services' anvil integration test
-(cd services && pnpm install && pnpm test)   # 172 tests: services, Settle Connector, anvil integration
+(cd services && pnpm install && pnpm test)   # 175 tests: services, Settle Connector, anvil integration
 
 make demo                  # three anvil chains, five routes A → B → C and back, summary table (about 9 minutes)
 script/settle-e2e/run.sh   # Settle on Hedera on three anvil chains, four scenarios, with Hedera trace-size checks

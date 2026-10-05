@@ -30,16 +30,28 @@ class MockRouter implements RouterChain {
     for (const [id, s] of this.state) if (s.hash === keccak256(envelope)) this.state.set(id, { hop: 3, hash: s.hash });
     return h32(`tx${this.calls.length}`);
   }
-  async flush(_c: Hex, _k: Hex, _t: Hex, data: Hex) {
+  /** Connectors that refuse receipts (their flush reverts). */
+  refusing = new Set<string>();
+  async flush(_c: Hex, conn: Hex, _t: Hex, data: Hex) {
+    if (this.refusing.has(conn)) throw new Error("ClprConnectorUnauthorized");
     this.calls.push(`flush:${data}`);
+    this.connectors.push(conn);
     return h32(`tx${this.calls.length}`);
   }
+  connectors: Hex[] = [];
 }
 
-function setup(chain?: MockRouter, completeRejected = false) {
+function setup(chain?: MockRouter, completeRejected = false, receiptConnectors?: Record<string, Hex[]>) {
   const store = new Store();
   const bus = new EventBus();
-  const t = new ForwardTrigger({ store, bus, routers: { [B]: ADDR.router }, chains: chain ? { [B]: chain } : {}, completeRejected });
+  const t = new ForwardTrigger({
+    store,
+    bus,
+    routers: { [B]: ADDR.router },
+    chains: chain ? { [B]: chain } : {},
+    completeRejected,
+    receiptConnectors,
+  });
   t.start();
   return { store, bus, t };
 }
@@ -79,6 +91,30 @@ describe("forward trigger", () => {
     await settle();
     expect(chain.calls).toEqual(["flush:0xcafe"]);
     expect(store.jobs()).toHaveLength(1);
+  });
+
+  it("sends a refused receipt over another Connector of its Channel", async () => {
+    const chain = new MockRouter();
+    const key = h32("outbox-2");
+    chain.outboxKeys.add(key);
+    chain.refusing.add(h32("conn")); // the Connector the route named
+    const other = h32("provider-conn");
+    const { bus, store } = setup(chain, false, { [h32("BC").toLowerCase()]: [other] });
+    bus.emitEvent(ev(B, R.outbox(key, "0xbeef"), { block: 5 }));
+    await settle();
+    expect(chain.connectors).toEqual([other]);
+    expect(store.jobs()[0]).toMatchObject({ kind: "flush", status: "done", attempts: 1 });
+  });
+
+  it("leaves a refused receipt failed when no other Connector is configured", async () => {
+    const chain = new MockRouter();
+    const key = h32("outbox-3");
+    chain.outboxKeys.add(key);
+    chain.refusing.add(h32("conn"));
+    const { bus, store } = setup(chain);
+    bus.emitEvent(ev(B, R.outbox(key, "0xbeef"), { block: 5 }));
+    await settle();
+    expect(store.jobs()[0]).toMatchObject({ kind: "flush", status: "failed", error: "ClprConnectorUnauthorized" });
   });
 
   it("records a failure and retries on the next pass, up to a limit", async () => {

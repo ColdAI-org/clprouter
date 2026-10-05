@@ -1,7 +1,7 @@
 import { StaticJsonSource, sampleGraph, type GraphSource } from "@clprouter/sdk";
 import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import { createPublicClient, createWalletClient, type PublicClient } from "viem";
+import { createPublicClient, createWalletClient, type Hex, type PublicClient } from "viem";
 import { createApi, type ApiServer, type ReadinessReport } from "./api.js";
 import { ConfigError, loadConfig, resolveConfig, type DatabaseTarget, type ResolvedConfig, type ServicesConfig } from "./config.js";
 import { PgStore } from "./db/pg.js";
@@ -152,6 +152,7 @@ async function wire(cfg: ResolvedConfig, logger: Logger, metrics: Metrics, store
     chains,
     completeRejected: cfg.trigger.completeRejected,
     maxAttempts: cfg.trigger.maxAttempts,
+    receiptConnectors: cfg.trigger.receiptConnectors as Record<string, Hex[]>,
     log: logger.child({ component: "trigger" }).fn("info"),
     onResult: (j, result) => metrics.triggerTx.inc({ ledger: j.ledger, kind: j.kind, result }),
   });

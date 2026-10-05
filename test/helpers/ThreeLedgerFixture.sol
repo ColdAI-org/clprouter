@@ -98,7 +98,28 @@ abstract contract ThreeLedgerFixture is Committee, RouterDeploy {
         chBC = _channel(B, C, bytes32("BC"));
         connAB = _connector(A, B, chAB, bytes32("conn-AB"));
         connBC = _connector(B, C, chBC, bytes32("conn-BC"));
+        // The provider approves both directions of both Channels on every ledger.
+        _approveAll(chAB, A, B, 0);
+        _approveAll(chBC, B, C, 0);
+        vm.warp(block.timestamp + CERT_NOTICE);
         vm.deal(alice, 100 ether);
+    }
+
+    /// @dev Label both directions of `ch` between `x` and `y` with `tier` on every ledger (effective after
+    ///      CERT_NOTICE), each naming the verifier its receiving side uses.
+    function _approveAll(bytes32 ch, Ledger memory x, Ledger memory y, uint8 tier) internal {
+        _labelAll(ch, y, tier);
+        _labelAll(ch, x, tier);
+    }
+
+    /// @dev Label the direction of `ch` into `to` with `tier` on every ledger.
+    function _labelAll(bytes32 ch, Ledger memory to, uint8 tier) internal {
+        _applyAll(A_TRUST_TIER, _trustPayload(ch, to.id, tier, _verifierOf(to, ch)));
+    }
+
+    /// @dev The verifier `l`'s CLPR Service uses for Channel `ch`.
+    function _verifierOf(Ledger memory l, bytes32 ch) internal returns (address) {
+        return l.service.getChannel(ch).verifier;
     }
 
     // ═════════════════════════════════════════════════════════════════════

@@ -101,6 +101,11 @@ const triggerSchema = z
     ledgers: z.array(z.string().regex(CAIP2)).optional(),
     /** Attempts per job before it is left for someone else. Default 3. */
     maxAttempts: int(1, 100).optional(),
+    /**
+     * Other Connectors to send a queued receipt over, by Channel id, when the one the route named refuses it. Routers
+     * accept a receipt over any Connector of its Channel.
+     */
+    receiptConnectors: z.record(z.string().regex(/^0x[0-9a-fA-F]{64}$/), z.array(z.string().regex(/^0x[0-9a-fA-F]{64}$/))).optional(),
   })
   .strict()
   .refine((t) => !(t.keyEnv && t.signer), { message: "set either keyEnv or signer, not both" });
@@ -239,6 +244,8 @@ export interface TriggerConfig {
   /** Ledgers the trigger may submit on (default: all). */
   ledgers?: string[];
   maxAttempts?: number;
+  /** Fallback Connectors for queued receipts, by Channel id (tried in order after the route's own Connector). */
+  receiptConnectors?: Record<string, string[]>;
 }
 
 export type DatabaseConfig = string | { url: string; poolMax?: number; statementTimeoutMs?: number };
@@ -310,7 +317,14 @@ export interface ResolvedConfig {
   graph?: { file?: string };
   registryLedger: string;
   routerVersions: number[];
-  trigger: { enabled: boolean; signer: SignerConfig | undefined; completeRejected: boolean; ledgers: string[] | undefined; maxAttempts: number };
+  trigger: {
+    enabled: boolean;
+    signer: SignerConfig | undefined;
+    completeRejected: boolean;
+    ledgers: string[] | undefined;
+    maxAttempts: number;
+    receiptConnectors: Record<string, string[]>;
+  };
   log: { level: LogLevel };
   metrics: { enabled: boolean; host: string; port: number | undefined };
   readiness: { maxStalePolls: number };
@@ -409,6 +423,9 @@ export function resolveConfig(cfg: ServicesConfig, env: NodeJS.ProcessEnv = {}):
       completeRejected: t?.completeRejected ?? false,
       ledgers: t?.ledgers,
       maxAttempts: t?.maxAttempts ?? 3,
+      receiptConnectors: Object.fromEntries(
+        Object.entries(t?.receiptConnectors ?? {}).map(([ch, ids]) => [ch.toLowerCase(), ids.map((i) => i.toLowerCase())]),
+      ),
     },
     log: { level: cfg.log?.level ?? "info" },
     metrics: { enabled: cfg.metrics?.enabled ?? true, host: cfg.metrics?.host ?? h.host ?? "127.0.0.1", port: cfg.metrics?.port },

@@ -45,6 +45,10 @@ contract RouterHopTest is Committee, RouterDeploy {
         svc.setPeer(CH_BC, ID_C);
         svc.setPeer(CH_BD, ID_D);
         reg = _deployRegistry();
+        _approveBoth(reg, CH_AB, ID_A, ID_B, address(svc));
+        _approveBoth(reg, CH_BC, ID_B, ID_C, address(svc));
+        _approveBoth(reg, CH_BD, ID_B, ID_D, address(svc));
+        vm.warp(block.timestamp + CERT_NOTICE);
         QuarantineVault vault = new QuarantineVault(IProviderRegistry(address(reg)), 3 days, 7 days);
         _initRouterDeployer();
         routerA = _routerAddr(ID_A);
@@ -337,7 +341,7 @@ contract RouterHopTest is Committee, RouterDeploy {
     }
 
     function test_trustFloor_nextEdgeBelowFloor_failureReceipt() public {
-        _apply(reg, 11, abi.encode(CH_BC, ID_C, uint8(1)));
+        _apply(reg, A_TRUST_TIER, _trustPayload(CH_BC, ID_C, 1, address(svc)));
         vm.warp(block.timestamp + CERT_NOTICE);
         RouteTypes.Envelope memory e = _env(false);
         e.constraints.deadline = uint64(block.timestamp + 1 hours);
@@ -348,7 +352,7 @@ contract RouterHopTest is Committee, RouterDeploy {
         assertEq(uint8(_sentReceipt(0).reason), uint8(RouteTypes.Reason.TRUST_FLOOR));
     }
 
-    function test_trustFloor_unlabelledNextEdge_failsClosed() public {
+    function test_trustFloor_nextEdgeAtLowestTier_failsClosed() public {
         RouteTypes.Envelope memory e = _env(false);
         e.constraints.trustFloor = 1;
         _deliver(e);
@@ -356,7 +360,7 @@ contract RouterHopTest is Committee, RouterDeploy {
     }
 
     function test_trustFloor_nextEdgeAtFloor_forwards() public {
-        _apply(reg, 11, abi.encode(CH_BC, ID_C, uint8(2)));
+        _apply(reg, A_TRUST_TIER, _trustPayload(CH_BC, ID_C, 2, address(svc)));
         vm.warp(block.timestamp + CERT_NOTICE);
         RouteTypes.Envelope memory e = _env(false);
         e.constraints.deadline = uint64(block.timestamp + 1 hours);
@@ -437,7 +441,7 @@ contract RouterHopTest is Committee, RouterDeploy {
         RouteTypes.Envelope memory next = _receiptAtB();
         next.hopIndex = 2;
         bytes memory out = RouteCodec.encodeEnvelope(next);
-        bytes32 k = keccak256(abi.encode(CH_AB, CONN, abi.encodePacked(routerA), out));
+        bytes32 k = keccak256(abi.encode(CH_AB, abi.encodePacked(routerA), out));
         vm.recordLogs();
         svc.deliver(router, CH_BC, abi.encodePacked(routerC), RouteCodec.encodeEnvelope(re));
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -460,7 +464,7 @@ contract RouterHopTest is Committee, RouterDeploy {
         RouteTypes.Envelope memory re = _receiptAtB();
         svc.deliver(router, CH_BC, abi.encodePacked(routerC), RouteCodec.encodeEnvelope(re));
         MockRouteService.Sent memory s = svc.sent(0);
-        bytes32 k = keccak256(abi.encode(s.channelId, s.connectorId, s.target, s.data));
+        bytes32 k = keccak256(abi.encode(s.channelId, s.target, s.data));
         assertFalse(router.outbox(k));
         vm.expectEmit(true, false, false, true, address(router));
         emit IClprRouter.ReceiptRequeued(k, 1);

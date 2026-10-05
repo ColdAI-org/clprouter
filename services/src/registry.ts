@@ -92,6 +92,13 @@ export interface DepositEntry {
   releasedTo?: Address;
   releaseKind?: string;
   txHash: Hex;
+  /** Block time of the deposit. */
+  depositedAt: number;
+  /**
+   * Earliest time the deposit can go to its case's recovery address (`QuarantineVault.releasableAt`): the notice
+   * and challenge window run from the naming or from the deposit, whichever is later. Undefined while none is named.
+   */
+  recoveryReleasableAt?: number;
 }
 
 /** Registry state of one ledger, folded from its confirmed events. */
@@ -255,6 +262,8 @@ export function foldRegistry(
   const deposits = new Map<number, DepositEntry>();
   const recoveries = new Map<string, LedgerRegistryState["recoveries"][number]>();
   const challenges = new Map<string, { depositId: number; by: Address; to: Address }[]>();
+  /** RECOVERY_NOTICE + CHALLENGE_WINDOW of the vault, read off a naming (releasableAt - naming time). */
+  let recoveryWindow: number | undefined;
   for (const e of vaultEvents) {
     const a = e.args;
     if (e.name === "Deposited") {
@@ -268,6 +277,7 @@ export function foldRegistry(
         amount: s(a.amount),
         released: false,
         txHash: e.txHash,
+        depositedAt: e.timestamp,
       });
     } else if (e.name === "Released") {
       const d = deposits.get(n(a.depositId));
@@ -277,6 +287,7 @@ export function foldRegistry(
         d.releaseKind = s(a.kindName);
       }
     } else if (e.name === "RecoveryNamed") {
+      recoveryWindow = n(a.releasableAt) - e.timestamp;
       recoveries.set(s(a.caseId), {
         caseId: a.caseId as Hex,
         to: a.to as Address,
@@ -291,6 +302,10 @@ export function foldRegistry(
       if (to) list.push({ depositId: a.depositId === undefined ? 0 : n(a.depositId), by: a.by as Address, to });
       challenges.set(s(a.caseId), list);
     }
+  }
+  for (const d of deposits.values()) {
+    const r = recoveries.get(s(d.caseId));
+    if (r && recoveryWindow !== undefined) d.recoveryReleasableAt = Math.max(r.releasableAt, d.depositedAt + recoveryWindow);
   }
   st.deposits = [...deposits.values()];
   for (const r of recoveries.values()) {

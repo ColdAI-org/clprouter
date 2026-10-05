@@ -373,14 +373,14 @@ contract RegistryFindingsTest is AuditBase {
     function test_ok_trustTierRaiseWaitsCertNotice_lowerWaitsRemovalNotice() public {
         bytes32 ch = keccak256("ch");
         bytes32 ek = Caip.edgeKey(ch, HEDERA);
-        _apply(reg, 11, abi.encode(ch, HEDERA, uint8(3)));
+        _apply(reg, A_TRUST_TIER, _trustPayload(ch, HEDERA, 3, address(reg)));
         vm.warp(block.timestamp + CERT_NOTICE - 1);
         (bool l,) = reg.trustTier(ek);
         assertFalse(l);
         vm.warp(block.timestamp + 1);
         (, uint8 t) = reg.trustTier(ek);
         assertEq(t, 3);
-        _apply(reg, 11, abi.encode(ch, HEDERA, uint8(0)));
+        _apply(reg, A_TRUST_TIER, _trustPayload(ch, HEDERA, 0, address(reg)));
         vm.warp(block.timestamp + REMOVAL_NOTICE - 1);
         (, t) = reg.trustTier(ek);
         assertEq(t, 3);
@@ -388,7 +388,7 @@ contract RegistryFindingsTest is AuditBase {
         (, t) = reg.trustTier(ek);
         assertEq(t, 0);
         // Bad tier rejected.
-        IProviderRegistry.Decision memory d = _decision(reg, 11, abi.encode(ch, HEDERA, uint8(4)));
+        IProviderRegistry.Decision memory d = _decision(reg, A_TRUST_TIER, _trustPayload(ch, HEDERA, 4, address(reg)));
         bytes[] memory sigs_15 = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.InvalidTier.selector);
         reg.submit(d, sigs_15);

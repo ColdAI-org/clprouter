@@ -7,18 +7,22 @@ import {Caip} from "./libraries/Caip.sol";
 
 /// @title ProviderRegistry
 /// @notice The provider's only on-chain power in CLPRouter: certify networks for the ISO 20022, MiCA and Energy
-///         filters; label Channel directions with their verifier trust tier (read by Routers to enforce a route's
-///         trust floor); disable and re-enable malicious routes (a Channel direction, a ledger, a Router deployment
-///         or a Router version); and blacklist CAIP-10 accounts after an exploit.
+///         filters; approve Channel directions by labelling them with the verifier that checks them on the
+///         receiving ledger and its trust tier (Routers carry messages only over labelled Channel directions and
+///         enforce a route's trust floor against the tier); disable and re-enable malicious routes (a Channel
+///         direction, a ledger, a Router deployment or a Router version); and blacklist CAIP-10 accounts after an
+///         incident.
 /// @dev Append-only and admin-less. A decision is signed once off-chain by committee members over an EIP-712-style
 ///      digest bound to `DEPLOYMENT_ID` (one CLPRouter deployment, shared by every ledger it runs on), so anyone
 ///      can relay it to the registry on every ledger of that deployment and on no other deployment. Rules:
 ///        - certification changes (k signatures) take effect after a notice period
 ///          (`CERT_NOTICE` to certify, `REMOVAL_NOTICE` to uncertify); certifications last at most a year; the
 ///          newest decision in effect wins, so an uncertify is never held back by an earlier, later-dated certify;
-///        - trust-tier labels (k signatures) take effect after `CERT_NOTICE` when they raise an edge's tier and
-///          after `REMOVAL_NOTICE` when they lower or remove it. A label only describes an edge: it moves no
-///          funds, and a lowered label can at most stop routes whose floor it no longer meets (they are refunded);
+///        - Channel labels (k signatures) approve one Channel direction for every Router: they name the verifier
+///          (address and code hash) of that Channel on the receiving ledger and its trust tier. A label that
+///          approves a direction, raises its tier or names another verifier takes effect after `CERT_NOTICE`; one
+///          that lowers the tier or removes the label after `REMOVAL_NOTICE`. A direction without a label in
+///          effect carries no route and no receipt (receipts on it wait in the sending Router's outbox);
 ///        - disables and blacklist entries need k + 1 signatures, take effect immediately, and lapse after
 ///          `DISABLE_LAPSE` / `BLACKLIST_LAPSE` unless renewed by a new decision;
 ///        - delisting needs k + 1 (the quorum that listed); re-enabling (k) takes effect after `REENABLE_NOTICE`,
@@ -65,7 +69,8 @@ contract ProviderRegistry is IProviderRegistry {
         CONTACT, // (string contact)
         VAULT_RELEASE, // verified by QuarantineVault, never accepted here
         VAULT_NAME_RECOVERY, // verified by QuarantineVault, never accepted here
-        TRUST_TIER, // (bytes32 channelId, string toLedgerId, uint8 tier) — tier TIER_NONE removes the label
+        TRUST_TIER, // (bytes32 channelId, string toLedgerId, uint8 tier, address verifier, bytes32 verifierCodeHash)
+        //             — approves the Channel direction; tier TIER_NONE removes the label (verifier fields ignored)
         VAULT_BIND_ROUTER // verified by QuarantineVault, never accepted here
     }
 
@@ -116,12 +121,17 @@ contract ProviderRegistry is IProviderRegistry {
         uint64 reenableAt; // 0 = no re-enable scheduled
     }
 
-    /// @dev Trust-tier label of one Channel direction. Tiers are stored as tier + 1 so that 0 means "unlabelled".
-    ///      A scheduled change sits in `next` until `nextFrom`.
+    /// @dev Label of one Channel direction: its trust tier and the verifier the receiving ledger checks it with.
+    ///      Tiers are stored as tier + 1 so that 0 means "unlabelled". A scheduled change sits in `next*` until
+    ///      `nextFrom`.
     struct TierLabel {
         uint8 current;
         uint8 next;
         uint64 nextFrom; // 0 = nothing scheduled
+        address verifier;
+        address nextVerifier;
+        bytes32 codeHash;
+        bytes32 nextCodeHash;
     }
 
     struct Listing {
@@ -213,12 +223,14 @@ contract ProviderRegistry is IProviderRegistry {
         uint64 indexed epoch, address[] members, uint8 threshold, bytes32 evidenceHash, bytes32 digest
     );
     event ContactChanged(string contact, bytes32 evidenceHash, bytes32 digest);
-    /// @notice `tier` is TIER_NONE when the label is removed.
+    /// @notice `tier` is TIER_NONE (and the verifier fields zero) when the label is removed.
     event TrustTierScheduled(
         bytes32 indexed edgeKey,
         bytes32 channelId,
         string toLedgerId,
         uint8 tier,
+        address verifier,
+        bytes32 verifierCodeHash,
         uint64 effectiveFrom,
         bytes32 evidenceHash,
         bytes32 indexed digest
@@ -354,9 +366,7 @@ contract ProviderRegistry is IProviderRegistry {
             n = _members.length;
             k = threshold;
         }
-        uint256 required = _required(d.action, k, n);
-        if (!takeOver && from != 0 && block.timestamp >= from) required = _max(required, _supermajority(k, n));
-        _verify(digest, d.epoch, sigs, required);
+        _verify(digest, d.epoch, sigs, takeOver ? _required(d.action, k, n) : requiredSignatures(d.action));
         if (takeOver) _activate(d.evidenceHash, digest);
 
         uint64 v = ++version;
@@ -403,8 +413,15 @@ contract ProviderRegistry is IProviderRegistry {
     }
 
     /// @inheritdoc IProviderRegistry
+    /// @dev Once a scheduled committee's notice has passed, the outgoing committee needs a supermajority for every
+    ///      action (registry and vault alike), so that k outgoing keys cannot act during the hand-over.
     function requiredSignatures(uint8 action) public view returns (uint256) {
-        return _required(action, threshold, _members.length);
+        uint256 k = threshold;
+        uint256 n = _members.length;
+        uint256 required = _required(action, k, n);
+        uint64 from = pendingFrom;
+        if (from != 0 && block.timestamp >= from) required = _max(required, _supermajority(k, n));
+        return required;
     }
 
     /// @inheritdoc IProviderRegistry
@@ -455,10 +472,21 @@ contract ProviderRegistry is IProviderRegistry {
     }
 
     /// @inheritdoc IProviderRegistry
-    function trustTier(bytes32 edgeKey_) public view returns (bool labelled, uint8 tier) {
+    function trustTier(bytes32 edgeKey_) external view returns (bool labelled, uint8 tier) {
+        (labelled, tier,,) = channelApproval(edgeKey_);
+    }
+
+    /// @inheritdoc IProviderRegistry
+    function channelApproval(bytes32 edgeKey_)
+        public
+        view
+        returns (bool approved, uint8 tier, address verifier, bytes32 verifierCodeHash)
+    {
         TierLabel storage t = _tiers[edgeKey_];
-        uint8 v = t.nextFrom != 0 && block.timestamp >= t.nextFrom ? t.next : t.current;
-        return v == 0 ? (false, 0) : (true, v - 1);
+        bool scheduled = t.nextFrom != 0 && block.timestamp >= t.nextFrom;
+        uint8 v = scheduled ? t.next : t.current;
+        if (v == 0) return (false, 0, address(0), bytes32(0));
+        return (true, v - 1, scheduled ? t.nextVerifier : t.verifier, scheduled ? t.nextCodeHash : t.codeHash);
     }
 
     /// @notice Full certification log of `key` (every past version stays readable).
@@ -591,20 +619,30 @@ contract ProviderRegistry is IProviderRegistry {
     }
 
     function _trustTier(Decision calldata d, bytes32 digest) private {
-        (bytes32 channelId, string memory toLedgerId, uint8 tier) = abi.decode(d.payload, (bytes32, string, uint8));
+        (bytes32 channelId, string memory toLedgerId, uint8 tier, address verifier, bytes32 codeHash) =
+            abi.decode(d.payload, (bytes32, string, uint8, address, bytes32));
         if (tier > TIER_VALIDITY_PROOF && tier != TIER_NONE) revert InvalidTier();
         if (channelId == bytes32(0) || bytes(toLedgerId).length == 0) revert InvalidTarget();
+        if (tier == TIER_NONE) {
+            (verifier, codeHash) = (address(0), bytes32(0));
+        } else if (verifier == address(0) || codeHash == bytes32(0)) {
+            revert InvalidTarget();
+        }
         bytes32 key = Caip.edgeKey(channelId, toLedgerId);
         TierLabel storage t = _tiers[key];
         // Fold a scheduled change that already took effect; a pending one is superseded by this decision.
-        if (t.nextFrom != 0 && block.timestamp >= t.nextFrom) t.current = t.next;
+        if (t.nextFrom != 0 && block.timestamp >= t.nextFrom) {
+            (t.current, t.verifier, t.codeHash) = (t.next, t.nextVerifier, t.nextCodeHash);
+        }
         uint8 stored = tier == TIER_NONE ? 0 : tier + 1;
-        // Raising trust needs the certification notice; lowering or removing it the (shorter) removal notice.
-        uint64 notice = stored > t.current ? CERT_NOTICE : REMOVAL_NOTICE;
-        uint64 effectiveFrom = uint64(_max(d.effectiveAt, block.timestamp + notice));
-        t.next = stored;
-        t.nextFrom = effectiveFrom;
-        emit TrustTierScheduled(key, channelId, toLedgerId, tier, effectiveFrom, d.evidenceHash, digest);
+        // Approving a direction, raising its tier or naming another verifier needs the certification notice;
+        // lowering the tier or removing the label the (shorter) removal notice.
+        bool raises = stored > t.current || (stored != 0 && (verifier != t.verifier || codeHash != t.codeHash));
+        uint64 effectiveFrom = uint64(_max(d.effectiveAt, block.timestamp + (raises ? CERT_NOTICE : REMOVAL_NOTICE)));
+        (t.next, t.nextVerifier, t.nextCodeHash, t.nextFrom) = (stored, verifier, codeHash, effectiveFrom);
+        emit TrustTierScheduled(
+            key, channelId, toLedgerId, tier, verifier, codeHash, effectiveFrom, d.evidenceHash, digest
+        );
     }
 
     function _committee(Decision calldata d, bytes32 digest) private {

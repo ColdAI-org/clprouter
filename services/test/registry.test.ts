@@ -145,4 +145,18 @@ describe("registry fold: hash chain, scheduled committee, per-deposit challenges
     const renamed = foldRegistry(L, [], [...vault, ev(L, named(A2), { block: 6 })]).recoveries[0]!;
     expect(renamed.challenged).toBe(false);
   });
+
+  it("gives a deposit made after the naming its own recovery window", () => {
+    // Named at t = 1000 with releasableAt 5000: notice + window = 4000 s.
+    const vault = [
+      ev(L, V.deposited(1, rid(1), caseId, 10n), { block: 1, ts: 900 }),
+      ev(L, named(A1), { block: 2, ts: 1000 }),
+      ev(L, V.deposited(2, rid(2), caseId, 20n), { block: 3, ts: 3000 }),
+    ];
+    const d = foldRegistry(L, [], vault).deposits;
+    expect(d.map((x) => [x.depositId, x.depositedAt, x.recoveryReleasableAt])).toEqual([
+      [1, 900, 5000],
+      [2, 3000, 7000],
+    ]);
+  });
 });
