@@ -12,7 +12,7 @@ These are the values the README badges use.
 | tests | **743 passing** (359 contracts, 212 SDK, 172 services) | `make test-contracts`, `make test-sdk`, `cd services && pnpm test` |
 | symbolic proofs | **14 halmos properties proven** | `make halmos` |
 | coverage | **96.1% lines** (96.2% statements, 86.3% branches, 96.5% functions) | `make coverage` |
-| fuzz | **15 fuzz tests × 10,000 runs; 8 of 14 invariants × 10,000 runs** (router suite at its pinned 64), 0 failures | see [Fuzzing and invariants](#fuzzing-and-invariants) |
+| fuzz | **15 fuzz tests × 10,000 runs, 14 invariants × 10,000 runs**, 0 failures | see [Fuzzing and invariants](#fuzzing-and-invariants) |
 | static analysis | slither: 0 open issues (155 results, all triaged below) | `make slither` |
 | dependency audit | 0 known advisories in CLPRouter's lockfiles (OSV-Scanner, pnpm audit) | `.github/workflows/dependency-audit.yml` |
 
@@ -105,7 +105,7 @@ Run locally on 2026-10-05 with a fixed seed (`FOUNDRY_FUZZ_SEED=0x2a`), all pass
 | --- | --- | --- | --- | --- |
 | Fuzz (`testFuzz_*`) | 15 | 10,000 each | 150,000 | 45 s |
 | Invariants: registry and vault (`RegistryVaultInvariants`) | 5 | 10,000 × depth 64 | 640,000 each | 10 min 45 s |
-| Invariants: router (`RouterInvariants`, three CLPR ledgers per run) | 6 | 64 × depth 60 (pinned); a 10,000-run sweep had not finished when this page was written | 3,840 each | 10 s |
+| Invariants: router (`RouterInvariants`, three CLPR ledgers per run) | 6 | 10,000 × depth 60 | 600,000 each | 14 min 36 s |
 | Invariants: settle on Hedera (`SettleInvariants`, fail on revert) | 3 | 10,000 × depth 60 | 600,000 each | 5 min 29 s |
 
 ```sh
@@ -114,8 +114,8 @@ FOUNDRY_INVARIANT_RUNS=10000 FOUNDRY_INVARIANT_DEPTH=64 forge test --skip 'scrip
 ```
 
 The router and settle invariant suites pin `runs = 64, depth = 60` in inline `forge-config` comments (each run
-deploys three CLPR ledgers), which take precedence over the environment; the settle figures above were taken with that
-line set to 10,000 in a scratch copy. CI runs every fuzz test at 10,000 runs and the invariants at
+deploys three CLPR ledgers), which take precedence over the environment; the 10,000-run figures above were taken with
+those lines set to 10,000 in a scratch copy. CI runs every fuzz test at 10,000 runs and the invariants at
 512 × 64 (`forge-fuzz` job, seed = run number).
 
 ## Coverage
