@@ -81,7 +81,7 @@ contract VaultHalmos is Test, SymTest {
     ///      which stays the registry `v` was built with.
     function _symbolic(QuarantineVault v) internal {
         address reg = address(v.REGISTRY());
-        _symbolic(v);
+        svm.enableSymbolicStorage(address(v));
         vm.store(address(v), bytes32(0), bytes32(uint256(uint160(reg))));
     }
 
