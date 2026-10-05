@@ -3,3 +3,4 @@
 forge-std/=lib/clpr-smart-contracts/lib/forge-std/src/
 @openzeppelin/contracts/=lib/clpr-smart-contracts/lib/openzeppelin-contracts/contracts/
 @clprouter/=src/
+halmos-cheatcodes/=lib/clpr-smart-contracts/lib/openzeppelin-contracts/lib/halmos-cheatcodes/src/

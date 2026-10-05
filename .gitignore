@@ -3,3 +3,5 @@ cache/
 broadcast/
 e2e-out/
 .anvil/
+out-halmos/
+cache-halmos/

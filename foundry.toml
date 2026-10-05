@@ -4,6 +4,8 @@ out = "out"
 test = "test"
 script = "script"
 libs = ["lib"]
+# node_modules of the testnet relay tooling (script/deploy) ship unrelated .sol files.
+skip = ["script/deploy/node_modules/**", "**/node_modules/**"]
 # Same compiler settings as the CLPR reference contracts (lib/clpr-smart-contracts),
 # so the reference ClprService used by the tests is byte-for-byte the upstream build.
 solc = "0.8.30"
@@ -29,5 +31,22 @@ ignored_error_codes = [5740, 2394, 3860, 5574]
 
 [fmt]
 line_length = 120
+ignore = ["**/node_modules/**"]
 tab_width = 4
 bracket_spacing = false
+
+# Symbolic tests (halmos): `FOUNDRY_PROFILE=halmos halmos` or `make halmos`. Builds only test/halmos into its own
+# output directory, so it never touches the default build.
+[profile.halmos]
+src = "test/halmos"
+test = "test/halmos"
+script = "test/halmos"
+out = "out-halmos"
+cache_path = "cache-halmos"
+# halmos does not link external libraries itself: link them at fixed addresses here; the proofs etch the
+# library code there in setUp (test/halmos/SettlementHalmos.t.sol).
+libraries = [
+    "src/libraries/RouteCodec.sol:RouteCodec:0x00000000000000000000000000000000000c0dec",
+    "src/libraries/RouteLogic.sol:RouteLogic:0x000000000000000000000000000000000000106c",
+    "src/libraries/RouteSettlement.sol:RouteSettlement:0x0000000000000000000000000000000000005e77",
+]
