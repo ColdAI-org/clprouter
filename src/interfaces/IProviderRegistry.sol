@@ -56,7 +56,8 @@ interface IProviderRegistry {
     /// @notice Current committee epoch.
     function epoch() external view returns (uint64);
 
-    /// @notice Signatures a decision of `action` needs under the current committee.
+    /// @notice Signatures a decision of `action` needs under the current committee (a supermajority for every action
+    ///         once a scheduled committee's notice has passed).
     function requiredSignatures(uint8 action) external view returns (uint256);
 
     /// @notice EIP-712-style digest committee members sign (EIP-191 personal-sign over it) for registry decision `d`:

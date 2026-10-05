@@ -354,9 +354,7 @@ contract ProviderRegistry is IProviderRegistry {
             n = _members.length;
             k = threshold;
         }
-        uint256 required = _required(d.action, k, n);
-        if (!takeOver && from != 0 && block.timestamp >= from) required = _max(required, _supermajority(k, n));
-        _verify(digest, d.epoch, sigs, required);
+        _verify(digest, d.epoch, sigs, takeOver ? _required(d.action, k, n) : requiredSignatures(d.action));
         if (takeOver) _activate(d.evidenceHash, digest);
 
         uint64 v = ++version;
@@ -403,8 +401,15 @@ contract ProviderRegistry is IProviderRegistry {
     }
 
     /// @inheritdoc IProviderRegistry
+    /// @dev Once a scheduled committee's notice has passed, the outgoing committee needs a supermajority for every
+    ///      action (registry and vault alike), so that k outgoing keys cannot act during the hand-over.
     function requiredSignatures(uint8 action) public view returns (uint256) {
-        return _required(action, threshold, _members.length);
+        uint256 k = threshold;
+        uint256 n = _members.length;
+        uint256 required = _required(action, k, n);
+        uint64 from = pendingFrom;
+        if (from != 0 && block.timestamp >= from) required = _max(required, _supermajority(k, n));
+        return required;
     }
 
     /// @inheritdoc IProviderRegistry

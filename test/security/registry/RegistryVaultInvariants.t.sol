@@ -108,8 +108,11 @@ contract RegistryVaultHandler is AuditBase {
         IProviderRegistry.Decision memory d =
             _vaultDecision(reg, A_VAULT_NAME_RECOVERY, abi.encode(cases[caseB ? 1 : 0], target));
         (uint256[] memory chosen, uint256 nMembers) = _chosen(signerMask);
+        uint256 need = reg.requiredSignatures(A_VAULT_NAME_RECOVERY);
         try vault.nameRecovery(d, _signSorted(address(vault), d, chosen)) {
-            if (nMembers < uint256(reg.threshold()) + 1 || nMembers != chosen.length) releaseRuleViolated = true;
+            if (nMembers < uint256(reg.threshold()) + 1 || nMembers < need || nMembers != chosen.length) {
+                releaseRuleViolated = true;
+            }
         } catch {}
     }
 
@@ -133,6 +136,8 @@ contract RegistryVaultHandler is AuditBase {
         (uint256[] memory chosen, uint256 nMembers) = _chosen(signerMask);
         (address recTo,, uint64 relAt) = vault.recoveries(cid);
         bool challenged = vault.challengedAt(id, recTo) != 0;
+        // The registry's quorum for this release, including the supermajority after a committee notice.
+        uint256 need = reg.requiredSignatures(kind % 4 == 3 ? A_COMMITTEE : A_VAULT_RELEASE);
         address[] memory watch = new address[](3);
         watch[0] = s;
         watch[1] = r;
@@ -141,7 +146,7 @@ contract RegistryVaultHandler is AuditBase {
         try vault.release(d, _signSorted(address(vault), d, chosen)) {
             releasedCount++;
             sumUnreleased -= amt;
-            if (rel || wrongCase || nMembers < reg.threshold() || nMembers != chosen.length) {
+            if (rel || wrongCase || nMembers < reg.threshold() || nMembers < need || nMembers != chosen.length) {
                 releaseRuleViolated = true;
             }
             if (k4 == 2 && (challenged || block.timestamp < relAt || recTo == address(0))) {
