@@ -46,10 +46,11 @@ import {RouteApp} from "../../test/helpers/RouteApp.sol";
 ///
 ///         Routers are deployed by one ClprRouterDeployer at their canonical CREATE2 addresses. The deployer is
 ///         the first contract the deployer key creates after the two libraries (nonce 2) on each chain, so it has
-///         the same address on A, H and B without relying on a deterministic-deployment proxy on Solo. Each vault
-///         is bound to its ledger's Router by a k + 1 committee decision, and the committee approves both
-///         directions of both Channels on every ledger (`approveChannels`); routes flow once the registry's
-///         certification notice (`CERT_NOTICE`, 1 day here, the registry's floor) has passed.
+///         the same address on A, H and B without relying on a deterministic-deployment proxy on Solo (its
+///         constructor pins the Routers' gas and grace parameters and the registry and vault code, identical on
+///         every chain). Each vault is bound to its ledger's Router by a k + 1 committee decision, and the
+///         committee approves both directions of both Channels on every ledger (`approveChannels`); routes flow
+///         once the registry's certification notice (`CERT_NOTICE`, 1 day here, the registry's floor) has passed.
 contract E2EHiero is Script {
     // anvil default accounts 0 (deployer, relayer, also funded on Solo by run.sh) and 1 (alice, sender on A)
     uint256 internal constant DEPLOYER_PK = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
@@ -67,6 +68,9 @@ contract E2EHiero is Script {
     /// @dev Registry notices [cert, removal, reenable, disable lapse, blacklist lapse, committee]: certification
     ///      (and so Channel approval) at the registry's 1-day floor, since Solo's clock cannot be advanced.
     uint64 internal constant CERT_NOTICE = 1 days;
+    uint64 internal constant RECLAIM_GRACE = 1 hours;
+    uint64 internal constant APP_GAS = 300_000;
+    uint64 internal constant MIN_SEND_GAS = 1_500_000;
 
     struct Ledger {
         string id;
@@ -106,9 +110,24 @@ contract E2EHiero is Script {
         address deployerKey = vm.addr(DEPLOYER_PK);
         require(vm.getNonce(deployerKey) == 2, "deployer key must be at nonce 2 (after the two libraries)");
         bytes memory routerInit = type(ClprRouter).creationCode;
+        // The deployer pins the registry's and vault's code: measure it on throw-away local copies (not broadcast;
+        // the code hash does not depend on the address or on the registry a vault serves).
+        IClprRouterDeployer.Pins memory pins;
+        {
+            ProviderRegistry r0 = new ProviderRegistry(DEPLOYMENT_ID, _members(), K, CONTACT, _notices());
+            QuarantineVault v0 = new QuarantineVault(IProviderRegistry(address(r0)), 3 days, 7 days);
+            pins = IClprRouterDeployer.Pins({
+                reclaimGrace: RECLAIM_GRACE,
+                appGas: APP_GAS,
+                minSendGas: MIN_SEND_GAS,
+                registryCodeHash: address(r0).codehash,
+                registryGenesis: r0.headAt(0),
+                vaultCodeHash: address(v0).codehash
+            });
+        }
         vm.startBroadcast(DEPLOYER_PK);
         // Nonce 2 on every chain, same constructor arguments → the same deployer address on A, H and B.
-        ClprRouterDeployer deployer = new ClprRouterDeployer(deployerKey, ROUTER_SALT, keccak256(routerInit));
+        ClprRouterDeployer deployer = new ClprRouterDeployer(deployerKey, ROUTER_SALT, keccak256(routerInit), pins);
         require(address(deployer) == vm.computeCreateAddress(deployerKey, 2), "deployer address");
         ClprService svc = new ClprService(
             vm.addr(DEPLOYER_PK),
@@ -133,9 +152,9 @@ contract E2EHiero is Script {
                     registry: IProviderRegistry(address(reg)),
                     vault: IQuarantineVault(address(vault)),
                     ledgerId: L[here].id,
-                    reclaimGrace: 1 hours,
-                    appGas: 300_000,
-                    minSendGas: 1_500_000
+                    reclaimGrace: RECLAIM_GRACE,
+                    appGas: APP_GAS,
+                    minSendGas: MIN_SEND_GAS
                 })
             )
         );

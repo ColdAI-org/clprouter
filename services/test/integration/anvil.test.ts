@@ -226,19 +226,32 @@ describe.skipIf(!hasAnvil || !hasArtefacts)("services against a local anvil", ()
     await waitFor("anvil", async () => (await pub.getBlockNumber().catch(() => undefined)) !== undefined ? true : undefined, 20_000);
     wallet = createWalletClient({ account: privateKeyToAccount(DEPLOYER), transport: http(rpc) });
 
-    // Routers live at their canonical CREATE2 addresses, deployed through one ClprRouterDeployer.
+    // Routers live at their canonical CREATE2 addresses, deployed through one ClprRouterDeployer, which pins the
+    // Routers' gas and grace parameters and the code (and initial committee) of their registry and vault.
     const routerCode = await link(router);
-    const deployer = await deploy(routerDeployer, [wallet.account!.address, keccak256(toHex("clprouter-anvil")), keccak256(routerCode)]);
-    const codeHash = async (a: Address) => keccak256((await pub.getCode({ address: a }))!);
-    for (const id of IDS) {
-      const service = await deploy(mock, [id]);
-      const reg = await deploy(registry, [
+    const newRegistry = () =>
+      deploy(registry, [
         keccak256(toHex("clprouter-anvil-deployment")),
         COMMITTEE.map((m) => m.address),
         K,
         CONTACT,
         [86400n, 3600n, 86400n, 7n * 86400n, 30n * 86400n, 7n * 86400n],
       ]);
+    const codeHash = async (a: Address) => keccak256((await pub.getCode({ address: a }))!);
+    const reg0 = await newRegistry();
+    const vault0 = await deploy(vault, [reg0, 3n * 86400n, 7n * 86400n]);
+    const pins = {
+      reclaimGrace: 3600n,
+      appGas: 300_000n,
+      minSendGas: MIN_SEND_GAS,
+      registryCodeHash: await codeHash(reg0),
+      registryGenesis: await read<Hex>(reg0, registry.abi, "headAt", [0n]),
+      vaultCodeHash: await codeHash(vault0),
+    };
+    const deployer = await deploy(routerDeployer, [wallet.account!.address, keccak256(toHex("clprouter-anvil")), keccak256(routerCode), pins]);
+    for (const id of IDS) {
+      const service = await deploy(mock, [id]);
+      const reg = await newRegistry();
       const v = await deploy(vault, [reg, 3n * 86400n, 7n * 86400n]);
       await write(deployer, routerDeployer.abi, "deploy", [
         routerCode,

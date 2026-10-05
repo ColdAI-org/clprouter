@@ -29,7 +29,8 @@ MEMBERS="[$(python3 -c "import json; print(','.join(json.load(open('deployments/
 REG_ARGS="$(cast abi-encode "f(bytes32,address[],uint8,string,uint64[6])" "$DEPLOYMENT_ID" "$MEMBERS" 3 \
     "testnet-only: no incident contact (TEST committee)" "[604800,259200,604800,604800,2592000,604800]")"
 VAULT_ARGS="$(cast abi-encode "f(address,uint64,uint64)" "$(j "d['contracts']['QuarantineVault']['constructorArgs']['registry']")" 259200 604800)"
-DEPL_ARGS="$(cast abi-encode "f(address,bytes32,bytes32)" "$OWNER" "$SALT" "$INIT_HASH")"
+PINS="($(python3 -c "import json; r=json.load(open('script/deploy/config/canonical.json'))['router']; print(r['reclaimGrace'], r['appGas'], r['minSendGas'], sep=',')"),$(j "d['contracts']['ProviderRegistry']['runtimeCodeHash']"),$(j "d['registryGenesis']"),$(j "d['contracts']['QuarantineVault']['runtimeCodeHash']"))"
+DEPL_ARGS="$(cast abi-encode "f(address,bytes32,bytes32,(uint64,uint64,uint64,bytes32,bytes32,bytes32))" "$OWNER" "$SALT" "$INIT_HASH" "$PINS")"
 SVC=0xa6db474e3047c3d43b10a4ff7abad547d89982b9
 CONN_ARGS="$(cast abi-encode "f(address,address)" "$SVC" "$OWNER")"
 

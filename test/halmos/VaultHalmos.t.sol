@@ -77,6 +77,14 @@ contract VaultHalmos is Test, SymTest {
         logicVault = new QuarantineVault(IProviderRegistry(address(approving)), 1 days, 3 days);
     }
 
+    /// @dev Symbolic storage for `v`, except its registry reference (slot 0, written once by the constructor),
+    ///      which stays the registry `v` was built with.
+    function _symbolic(QuarantineVault v) internal {
+        address reg = address(v.REGISTRY());
+        _symbolic(v);
+        vm.store(address(v), bytes32(0), bytes32(uint256(uint160(reg))));
+    }
+
     function _decision(uint8 action, bytes memory payload) internal returns (IProviderRegistry.Decision memory) {
         return IProviderRegistry.Decision({
             action: action,
@@ -96,7 +104,7 @@ contract VaultHalmos is Test, SymTest {
     function check_release_neverPaysProviderAndPaysOnce(uint256 depositId, bytes32 caseId, uint8 kind, uint256 bal)
         public
     {
-        svm.enableSymbolicStorage(address(logicVault));
+        _symbolic(logicVault);
         vm.deal(address(logicVault), bal);
         vm.warp(svm.createUint(64, "now"));
         IProviderRegistry.Decision memory d = _decision(A_VAULT_RELEASE, abi.encode(depositId, caseId, kind));
@@ -127,7 +135,7 @@ contract VaultHalmos is Test, SymTest {
     ///         happens only once the deposit's own window has passed: `RECOVERY_NOTICE + CHALLENGE_WINDOW` after
     ///         the naming and after the deposit itself, whichever is later.
     function check_recoveryRelease_waitsForDepositWindow(uint256 depositId, bytes32 caseId, uint8 kind) public {
-        svm.enableSymbolicStorage(address(logicVault));
+        _symbolic(logicVault);
         vm.deal(address(logicVault), svm.createUint(128, "bal"));
         uint256 t = svm.createUint(64, "now");
         vm.warp(t);
@@ -143,7 +151,7 @@ contract VaultHalmos is Test, SymTest {
 
     /// @notice A released deposit can never be released again, by any decision.
     function check_release_releasedDepositIsFinal(uint256 depositId, bytes32 caseId, uint8 kind) public {
-        svm.enableSymbolicStorage(address(logicVault));
+        _symbolic(logicVault);
         vm.warp(svm.createUint(64, "now"));
         (,,,,,, bool released) = logicVault.deposits(depositId);
         vm.assume(released);
@@ -162,7 +170,7 @@ contract VaultHalmos is Test, SymTest {
     {
         RecordingRegistry rec = new RecordingRegistry();
         QuarantineVault v = new QuarantineVault(IProviderRegistry(address(rec)), 1 days, 3 days);
-        svm.enableSymbolicStorage(address(v));
+        _symbolic(v);
         vm.deal(address(v), svm.createUint(128, "bal"));
         vm.warp(svm.createUint(64, "now"));
         bool ok;
@@ -200,7 +208,7 @@ contract VaultHalmos is Test, SymTest {
     /// @notice Deposits: only the bound Router once bound, never without a case or value, and the vault balance
     ///         grows by exactly the deposit.
     function check_deposit_accounting(bytes16 routeId, bytes32 caseId, address sender, address recipient) public {
-        svm.enableSymbolicStorage(address(vault));
+        _symbolic(vault);
         address caller = svm.createAddress("caller");
         vm.assume(caller != address(vault));
         uint256 value = svm.createUint(96, "value");

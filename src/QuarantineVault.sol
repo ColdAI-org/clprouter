@@ -25,7 +25,9 @@ import {IProviderRegistry} from "./interfaces/IProviderRegistry.sol";
 ///        - every deposit, naming, challenge and release is an event;
 ///        - the quorums are the registry's ({IProviderRegistry.requiredSignatures}), including its rule that the
 ///          outgoing committee needs a supermajority for everything once a scheduled committee's notice has passed.
-///      Native value only (no ERC-20 path).
+///      Native value only (no ERC-20 path). The registry is kept in storage (written once, in the constructor), not
+///      as an immutable, so the vault's runtime code is the same whichever registry it serves and its code hash can
+///      be pinned by the Router deployer.
 contract QuarantineVault {
     uint8 internal constant ACTION_COMMITTEE = 7;
     uint8 internal constant ACTION_VAULT_RELEASE = 9;
@@ -113,7 +115,8 @@ contract QuarantineVault {
         bytes32 digest
     );
 
-    IProviderRegistry public immutable REGISTRY;
+    // slither-disable-next-line immutable-states,naming-convention
+    IProviderRegistry public REGISTRY;
     uint64 public immutable RECOVERY_NOTICE;
     uint64 public immutable CHALLENGE_WINDOW;
 

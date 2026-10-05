@@ -20,6 +20,22 @@ interface IClprRouterDeployer {
         uint64 minSendGas;
     }
 
+    /// @notice What a deployer fixes for every Router of the deployment (its constructor arguments).
+    /// @param reclaimGrace Router RECLAIM_GRACE (seconds per edge of the way back).
+    /// @param appGas Router APP_GAS (gas for destination applications and hooks).
+    /// @param minSendGas Router MIN_SEND_GAS.
+    /// @param registryCodeHash Runtime code hash of the provider registry.
+    /// @param registryGenesis The registry's genesis head `headAt(0)` (deployment id, initial committee, notices).
+    /// @param vaultCodeHash Runtime code hash of the quarantine vault.
+    struct Pins {
+        uint64 reclaimGrace;
+        uint64 appGas;
+        uint64 minSendGas;
+        bytes32 registryCodeHash;
+        bytes32 registryGenesis;
+        bytes32 vaultCodeHash;
+    }
+
     function parameters() external view returns (Params memory);
 
     /// @notice Deployment-wide salt; the Router of ledger L is at CREATE2(deployer, keccak256(abi.encode(

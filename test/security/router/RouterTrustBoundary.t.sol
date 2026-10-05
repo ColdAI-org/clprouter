@@ -8,7 +8,12 @@ import {IClprConnector} from "@hiero-ledger/clpr/interfaces/IClprConnector.sol";
 import {IClprService} from "@hiero-ledger/clpr/interfaces/IClprService.sol";
 import {ClprProtobuf} from "@hiero-ledger/clpr/libraries/codec/ClprProtobuf.sol";
 import {ClprRouter} from "@clprouter/ClprRouter.sol";
-import {IClprRouter} from "@clprouter/interfaces/IClprRouter.sol";
+import {ClprRouterDeployer} from "@clprouter/ClprRouterDeployer.sol";
+import {ProviderRegistry} from "@clprouter/ProviderRegistry.sol";
+import {QuarantineVault} from "@clprouter/QuarantineVault.sol";
+import {IClprRouter, IClprRouterDeployer} from "@clprouter/interfaces/IClprRouter.sol";
+import {IProviderRegistry} from "@clprouter/interfaces/IProviderRegistry.sol";
+import {IQuarantineVault} from "@clprouter/interfaces/IQuarantineVault.sol";
 import {RouteTypes} from "@clprouter/libraries/RouteTypes.sol";
 import {RouteCodec} from "@clprouter/libraries/RouteCodec.sol";
 import {RouteLogic} from "@clprouter/libraries/RouteLogic.sol";
@@ -45,7 +50,8 @@ contract ReceiptRefusingConnector is IClprConnector {
 }
 
 /// @notice Trust boundary of the Router on three ledgers running the unchanged reference ClprService: which
-///         Channels it listens to, which Connectors can hold a receipt back, and who can starve a hook.
+///         Channels it listens to, which Connectors can hold a receipt back, who can starve a hook, and what the
+///         deployer lets its owner choose.
 contract RouterTrustBoundaryTest is ThreeLedgerFixture {
     // ═════════════════════════════════════════════════════════════════════
     // Only Channels the provider registry approves carry messages
@@ -317,7 +323,111 @@ contract RouterTrustBoundaryTest is ThreeLedgerFixture {
         }
     }
 
+    // ═════════════════════════════════════════════════════════════════════
+    // The deployer pins every Router's parameters, registry and vault
+    // ═════════════════════════════════════════════════════════════════════
+
+    function test_deployerRejectsUnpinnedRouterParameters() public {
+        string memory idD = "eip155:31004";
+        Ledger memory d = _openSide(idD);
+        bytes memory init = type(ClprRouter).creationCode;
+
+        // Other gas or grace parameters than the pinned ones.
+        IClprRouterDeployer.Params memory bad = _params(d, idD);
+        bad.reclaimGrace = 0;
+        vm.expectRevert(ClprRouterDeployer.InvalidParameters.selector);
+        routerDeployer.deploy(init, bad);
+        bad = _params(d, idD);
+        bad.appGas = 0;
+        vm.expectRevert(ClprRouterDeployer.InvalidParameters.selector);
+        routerDeployer.deploy(init, bad);
+        bad = _params(d, idD);
+        bad.minSendGas = 0;
+        vm.expectRevert(ClprRouterDeployer.InvalidParameters.selector);
+        routerDeployer.deploy(init, bad);
+
+        // A registry or vault that is not a contract with the pinned code.
+        bad = _params(d, idD);
+        bad.registry = IProviderRegistry(makeAddr("owner-chosen-registry"));
+        vm.expectRevert(ClprRouterDeployer.InvalidParameters.selector);
+        routerDeployer.deploy(init, bad);
+        bad = _params(d, idD);
+        bad.vault = IQuarantineVault(makeAddr("owner-chosen-vault"));
+        vm.expectRevert(ClprRouterDeployer.InvalidParameters.selector);
+        routerDeployer.deploy(init, bad);
+
+        // A registry with the pinned code but another initial committee (another genesis head).
+        address[] memory others = new address[](3);
+        others[0] = address(0x1001);
+        others[1] = address(0x1002);
+        others[2] = address(0x1003);
+        ProviderRegistry foreign = new ProviderRegistry(
+            DEPLOYMENT_ID,
+            others,
+            2,
+            CONTACT,
+            [CERT_NOTICE, REMOVAL_NOTICE, REENABLE_NOTICE, DISABLE_LAPSE, BLACKLIST_LAPSE, COMMITTEE_NOTICE]
+        );
+        bad = _params(d, idD);
+        bad.registry = IProviderRegistry(address(foreign));
+        bad.vault = IQuarantineVault(address(new QuarantineVault(IProviderRegistry(address(foreign)), 3 days, 7 days)));
+        vm.expectRevert(ClprRouterDeployer.InvalidParameters.selector);
+        routerDeployer.deploy(init, bad);
+
+        // A genuine vault that serves another registry than the Router's.
+        bad = _params(d, idD);
+        bad.vault = IQuarantineVault(address(B.vault));
+        vm.expectRevert(ClprRouterDeployer.InvalidParameters.selector);
+        routerDeployer.deploy(init, bad);
+
+        // The pinned parameters with this ledger's own registry and vault deploy.
+        IClprRouterDeployer.Params memory p = _params(d, idD);
+        ProviderRegistry regD = _deployRegistry();
+        p.registry = IProviderRegistry(address(regD));
+        p.vault = IQuarantineVault(address(new QuarantineVault(IProviderRegistry(address(regD)), 3 days, 7 days)));
+        ClprRouter rD = ClprRouter(routerDeployer.deploy(init, p));
+        assertEq(A.router.canonicalRouter(idD), address(rD));
+        assertEq(rD.RECLAIM_GRACE(), RECLAIM_GRACE);
+        assertEq(rD.APP_GAS(), APP_GAS);
+        assertEq(rD.MIN_SEND_GAS(), MIN_SEND_GAS);
+    }
+
+    function test_deployerRejectsOutOfRangeParameters() public {
+        IClprRouterDeployer.Pins memory pins = _pins(RECLAIM_GRACE, APP_GAS, MIN_SEND_GAS);
+        bytes32 h = keccak256(type(ClprRouter).creationCode);
+        IClprRouterDeployer.Pins memory bad = pins;
+        bad.reclaimGrace = 1 hours - 1;
+        vm.expectRevert(ClprRouterDeployer.InvalidParameters.selector);
+        new ClprRouterDeployer(address(this), bytes32(0), h, bad);
+        bad = _pins(RECLAIM_GRACE, 49_999, MIN_SEND_GAS);
+        vm.expectRevert(ClprRouterDeployer.InvalidParameters.selector);
+        new ClprRouterDeployer(address(this), bytes32(0), h, bad);
+        bad = _pins(RECLAIM_GRACE, APP_GAS, 99_999);
+        vm.expectRevert(ClprRouterDeployer.InvalidParameters.selector);
+        new ClprRouterDeployer(address(this), bytes32(0), h, bad);
+        bad = _pins(31 days, APP_GAS, MIN_SEND_GAS);
+        vm.expectRevert(ClprRouterDeployer.InvalidParameters.selector);
+        new ClprRouterDeployer(address(this), bytes32(0), h, bad);
+        bad = pins;
+        bad.registryGenesis = bytes32(0);
+        vm.expectRevert(ClprRouterDeployer.InvalidParameters.selector);
+        new ClprRouterDeployer(address(this), bytes32(0), h, bad);
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────
+
+    /// @dev Deploy parameters for ledger `d` with the pinned numbers and A's registry and vault (a fresh copy).
+    function _params(Ledger memory d, string memory id) internal view returns (IClprRouterDeployer.Params memory) {
+        return IClprRouterDeployer.Params({
+            service: IClprService(address(d.service)),
+            registry: IProviderRegistry(address(A.registry)),
+            vault: IQuarantineVault(address(A.vault)),
+            ledgerId: id,
+            reclaimGrace: RECLAIM_GRACE,
+            appGas: APP_GAS,
+            minSendGas: MIN_SEND_GAS
+        });
+    }
 
     /// @dev Label the direction of `ch` into `to` on every ledger, naming `verifier`.
     function _labelAllWith(bytes32 ch, Ledger memory to, address verifier) internal {
