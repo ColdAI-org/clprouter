@@ -131,4 +131,4 @@ for n in 1 2 3 4 5; do
 done
 
 echo "== all scenarios passed; gas per transaction in $GAS"
-column -t -s $'\t' "$GAS"
+if command -v column >/dev/null; then column -t -s $'\t' "$GAS"; else cat "$GAS"; fi

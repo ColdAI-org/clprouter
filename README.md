@@ -158,15 +158,23 @@ flowchart TB
 
 ## Quick start
 
+Prerequisites: [Foundry](https://getfoundry.sh) v1.5.1 (`foundryup -i v1.5.1`), Node.js 22.13 or later, pnpm and
+jq.
+
 ```sh
 git clone --recurse-submodules https://github.com/ColdAI-org/clprouter && cd clprouter
 
-forge test --skip 'script/**'          # contracts: unit, fuzz, invariant, security
-(cd sdk && pnpm install && pnpm test)  # planner, envelope, ISO 20022
-(cd services && pnpm install && pnpm test)
+forge test --skip 'script/**'               # contracts: unit, fuzz, invariant, security
+(cd sdk && pnpm install && pnpm test)       # planner, envelope, ISO 20022
+(cd services && pnpm install && pnpm test)  # services; the integration test runs anvil on forge's out/
 
-script/e2e/run.sh                      # A -> B -> C and back across three local anvil chains
+make demo                                   # A -> B -> C and back across three local anvil chains
 ```
+
+`make demo` runs [`script/e2e/run.sh`](script/e2e/run.sh) and ends with a summary of each scenario's outcome and
+gas. `make demo-docker` runs the same demo with only Docker installed, and `make help` lists the other targets
+(build, coverage, gas snapshot, halmos, slither). To use the SDK in your own project, see
+[sdk/README.md](sdk/README.md#install).
 
 The full design, contract internals, gas figures and the end-to-end run through a local Hiero network are in the
 [technical reference](docs/technical-reference.md).
