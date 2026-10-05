@@ -111,10 +111,14 @@ Keys:
 
 - `local-test-key` (`privateKey`, usually `"${ENV_VAR}"`) is accepted only when every RPC URL in the config is
   local (`localhost`, `127.0.0.1`, `[::1]`, `*.localhost`).
+- `testnet-key` (`privateKey`) is a TEST key for public test networks, accepted only when every configured chain id
+  is Sepolia (11155111) or Hedera testnet or previewnet (296, 297). Each RPC is checked to serve its chain id before
+  use. `config.testnet.json` runs the Connector of the testnet deployment this way
+  (`script/deploy/settle-connector.sh`).
 - `web3signer` (`url`, `address`, optional `authTokenEnv`, `timeoutMs`) works for the `connector` key, which signs
   transactions. A remote web3signer must use https.
-- The quote `signer` must be `local-test-key` for now: typed-data signing through an external signer is not
-  supported yet.
+- The quote `signer` must be `local-test-key` or `testnet-key` for now: typed-data signing through an external
+  signer is not supported yet.
 
 Relay:
 
@@ -132,7 +136,7 @@ store file.
 
 ## Known gaps
 
-- On Hedera, the JSON-RPC relay scales native `value` (weibars to tinybars). Posting a native HBAR bond through it
-  needs that conversion, which is not done here. ERC-20 (HTS) bonds and local EVM test networks are unaffected.
+- On Hedera the JSON-RPC relay takes native `value` in weibars (1 tinybar = 1e10 weibar). `postBond` converts an
+  HBAR bond (tinybars) on Hedera chain ids 295, 296 and 297; other native-value calls on Hedera are not made.
 - There is no external signer for quote signing, and no signer rotation command.
 - There are no metrics, and there is no lock against two processes sharing one store file.

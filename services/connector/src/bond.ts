@@ -5,6 +5,10 @@ import type { Logger } from "../../src/log.js";
 import { ERC20_ABI, ORDER_BOOK_ABI } from "./abi.js";
 import type { Ledger } from "./clients.js";
 import { sendTx } from "./clients.js";
+import { HEDERA_CHAIN_IDS } from "./config.js";
+
+/** Native value scale of Hedera's JSON-RPC relay. */
+export const WEIBARS_PER_TINYBAR = 10_000_000_000n;
 
 /**
  * The Connector's registration and bond on the Hedera order book. Amounts are in the bond asset's base units as
@@ -53,7 +57,10 @@ export async function postBond(h: Ledger, orderBook: Address, asset: Address, am
     const allowance = await h.public.readContract({ address: asset, abi: ERC20_ABI, functionName: "allowance", args: [me, orderBook] });
     if (allowance < amount) await sendTx(h, { address: asset, abi: ERC20_ABI, functionName: "approve", args: [orderBook, amount] });
   }
-  await sendTx(h, { address: orderBook, abi: ORDER_BOOK_ABI, functionName: "postBond", args: [asset, amount], value: native ? amount : 0n });
+  // Hedera's JSON-RPC relay takes native value in weibars (1 tinybar = 1e10 weibar) and the EVM sees tinybars, which
+  // is what `amount` is in. Local EVM test networks take it as is.
+  const value = native ? (HEDERA_CHAIN_IDS.has(h.chainId) ? amount * WEIBARS_PER_TINYBAR : amount) : 0n;
+  await sendTx(h, { address: orderBook, abi: ORDER_BOOK_ABI, functionName: "postBond", args: [asset, amount], value });
   log.info("bond posted", { asset, amount: amount.toString() });
 }
 

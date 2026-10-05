@@ -33,9 +33,9 @@ export function makeLedger(o: { ledgerId: string; chainId: number; rpcUrl: strin
   };
 }
 
-/** Build an account from a key config. The policy (local keys on local RPCs only) is enforced by the config. */
+/** Build an account from a key config. The policy (local keys on local RPCs, testnet keys on public testnets) is enforced by the config. */
 export function accountFromKey(k: KeyConfig, env: NodeJS.ProcessEnv = process.env): LocalAccount {
-  if (k.kind === "local-test-key") return privateKeyToAccount(k.privateKey as Hex);
+  if (k.kind === "local-test-key" || k.kind === "testnet-key") return privateKeyToAccount(k.privateKey as Hex);
   const token = k.authTokenEnv ? env[k.authTokenEnv] : undefined;
   if (k.authTokenEnv && !token) throw new Error(`signer auth token env var ${k.authTokenEnv} is not set`);
   return web3SignerAccount({ url: k.url, address: k.address as Address, authToken: token, timeoutMs: k.timeoutMs });

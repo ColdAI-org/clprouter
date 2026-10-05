@@ -64,3 +64,34 @@ describe("connector config", () => {
     expect(() => loadConnectorConfig(f, { CONNECTOR_KEY: ANVIL_KEY_0 })).toThrow(/SIGNER_KEY/);
   });
 });
+
+describe("testnet keys", () => {
+  const testnet = (over: Record<string, unknown> = {}) => {
+    const r = rawConfig({ relay: { kind: "none" }, keys: { connector: { kind: "testnet-key", privateKey: ANVIL_KEY_0 }, signer: { kind: "testnet-key", privateKey: ANVIL_KEY_0 } }, ...over });
+    r.hedera = { ...(r.hedera as object), ledgerId: "eip155:296", chainId: 296, rpcUrl: "https://testnet.hashio.io/api" };
+    const [y] = r.chains as Record<string, unknown>[];
+    r.chains = [{ ...y, ledgerId: "eip155:11155111", chainId: 11155111, rpcUrl: "https://sepolia.example/rpc" }];
+    r.routes = [{ ...(r.routes as Record<string, unknown>[])[0], srcLedger: "eip155:11155111", dstLedger: "eip155:11155111" }];
+    return r;
+  };
+
+  it("accepts a testnet key when every chain is a public testnet, with remote RPCs", () => {
+    const c = resolveConnectorConfig(testnet());
+    expect(c.keys.connector.kind).toBe("testnet-key");
+    expect(c.keys.signer.kind).toBe("testnet-key");
+  });
+
+  it("refuses a testnet key when any chain is not a known public testnet", () => {
+    const r = testnet();
+    (r.chains as Record<string, unknown>[])[0]!.chainId = 1;
+    expect(() => resolveConnectorConfig(r)).toThrow(/not a known public testnet/);
+    const h = testnet();
+    (h.hedera as Record<string, unknown>).chainId = 295;
+    expect(() => resolveConnectorConfig(h)).toThrow(/295 is not a known public testnet/);
+  });
+
+  it("still refuses the test-only relay on public testnets", () => {
+    const r = testnet({ relay: { kind: "e2e-test-only", bundleEncoder: "0x00000000000000000000000000000000000000ee", bundleEncoderLedger: "eip155:296" } });
+    expect(() => resolveConnectorConfig(r)).toThrow(/e2e-test-only relay refuses/);
+  });
+});

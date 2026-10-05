@@ -40,6 +40,16 @@ const keySchema = z.discriminatedUnion("kind", [
     .strict(),
   z
     .object({
+      /**
+       * A TEST private key for public test networks. Accepted only when every configured chain id is a known public
+       * testnet ({@link PUBLIC_TESTNET_CHAIN_IDS}); each RPC is checked to serve its configured chain id before use.
+       */
+      kind: z.literal("testnet-key"),
+      privateKey: bytes32,
+    })
+    .strict(),
+  z
+    .object({
       /** External signer speaking `eth_signTransaction` (transactions only: not usable as the quote signer). */
       kind: z.literal("web3signer"),
       url: rpcUrl,
@@ -182,6 +192,12 @@ export interface ConnectorConfig {
   cancelUndeliverable: boolean;
 }
 
+/** Public test networks a `testnet-key` may sign on: Ethereum Sepolia, Hedera testnet and previewnet (EVM). */
+export const PUBLIC_TESTNET_CHAIN_IDS: ReadonlySet<number> = new Set([11155111, 296, 297]);
+
+/** Hedera's EVM chain ids (mainnet, testnet, previewnet): native value through the JSON-RPC relay is in weibars. */
+export const HEDERA_CHAIN_IDS: ReadonlySet<number> = new Set([295, 296, 297]);
+
 export const ledgerHash = (caip2: string): Hex => keccak256(toBytes(caip2));
 
 /** Every RPC URL the config reaches. */
@@ -246,14 +262,19 @@ export function resolveConnectorConfig(raw: unknown): ConnectorConfig {
     if (k.kind === "local-test-key" && remote.length) {
       throw new ConfigError(`connector config: keys.${name} is a local test key but ${remote.map(redactUrl).join(", ")} is not a local RPC`);
     }
+    if (k.kind === "testnet-key") {
+      const ids = [c.hedera.chainId, ...c.chains.map((x) => x.chainId)];
+      const other = ids.filter((id) => !PUBLIC_TESTNET_CHAIN_IDS.has(id));
+      if (other.length) throw new ConfigError(`connector config: keys.${name} is a testnet key but chain ${other.join(", ")} is not a known public testnet`);
+    }
     if (k.kind === "web3signer") {
       const u = new URL(k.url);
       if (u.protocol !== "https:" && !isLocalRpc(k.url)) throw new ConfigError(`connector config: keys.${name}: a remote signer must use https unless it is on localhost`);
     }
   }
-  if (c.keys.signer.kind !== "local-test-key") {
+  if (c.keys.signer.kind === "web3signer") {
     // The quote signer signs EIP-712 typed data, which the transaction-only web3signer adapter does not do.
-    throw new ConfigError("connector config: keys.signer must be local-test-key (typed-data signing through web3signer is not supported yet)");
+    throw new ConfigError("connector config: keys.signer must be local-test-key or testnet-key (typed-data signing through web3signer is not supported yet)");
   }
   if (c.relay.kind === "e2e-test-only") {
     if (remote.length) throw new ConfigError(`connector config: the e2e-test-only relay refuses non-local RPC URLs (${remote.map(redactUrl).join(", ")})`);
