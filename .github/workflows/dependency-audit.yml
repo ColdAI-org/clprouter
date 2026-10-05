@@ -1,5 +1,18 @@
-# Dependency audit of the SDK and services lockfiles (pnpm audit) and of the whole tree (OSV-Scanner,
-# which also reads the git submodules' manifests). Runs on lockfile changes, weekly, and on demand.
+# Dependency audit. Runs on lockfile changes, weekly, and on demand.
+#
+# Blocking (fails the workflow):
+#   - pnpm audit of the SDK and services lockfiles (production dependencies, high and above).
+#   - OSV-Scanner over CLPRouter's own lockfiles only: sdk/pnpm-lock.yaml, services/pnpm-lock.yaml and
+#     script/deploy/package-lock.json (testnet relay tooling). They are listed explicitly so a new lockfile has to
+#     be added here on purpose. Overrides that keep them clean live in services/pnpm-workspace.yaml and in
+#     script/deploy/package.json ("overrides").
+#
+# Report only (never fails the workflow):
+#   - OSV-Scanner over the git submodules under lib/. lib/clpr-smart-contracts is the pinned upstream CLPR
+#     repository; CLPRouter compiles its Solidity sources but never installs or ships its JavaScript tooling
+#     (package-lock.json there is upstream's own test/dev setup). Its results are uploaded to code scanning under
+#     their own category, "osv-scanner-upstream-submodules", so they stay visible without blocking CI on code we
+#     do not control. Fixes for those belong upstream.
 name: Dependency audit
 
 on:
@@ -8,8 +21,12 @@ on:
     paths:
       - "sdk/package.json"
       - "sdk/pnpm-lock.yaml"
+      - "sdk/pnpm-workspace.yaml"
       - "services/package.json"
       - "services/pnpm-lock.yaml"
+      - "services/pnpm-workspace.yaml"
+      - "script/deploy/package.json"
+      - "script/deploy/package-lock.json"
       - ".gitmodules"
       - "lib/**"
       - ".github/workflows/dependency-audit.yml"
@@ -17,8 +34,12 @@ on:
     paths:
       - "sdk/package.json"
       - "sdk/pnpm-lock.yaml"
+      - "sdk/pnpm-workspace.yaml"
       - "services/package.json"
       - "services/pnpm-lock.yaml"
+      - "services/pnpm-workspace.yaml"
+      - "script/deploy/package.json"
+      - "script/deploy/package-lock.json"
       - ".gitmodules"
       - "lib/**"
       - ".github/workflows/dependency-audit.yml"
@@ -69,8 +90,60 @@ jobs:
       security-events: write
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
     with:
-      checkout-submodules: true
+      # CLPRouter's own lockfiles only; the submodules are reported by osv-scanner-upstream below.
+      checkout-submodules: false
       scan-args: |-
-        --recursive
-        ./
+        --lockfile=sdk/pnpm-lock.yaml
+        --lockfile=services/pnpm-lock.yaml
+        --lockfile=script/deploy/package-lock.json
       fail-on-vuln: true
+
+  # Not the reusable workflow: two calls of it would upload SARIF under the same code scanning category (same
+  # workflow and job id) and overwrite each other. Same pinned actions, explicit category, never fails.
+  osv-scanner-upstream:
+    name: OSV-Scanner (upstream submodules, report only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: true
+      - name: Run scanner
+        uses: google/osv-scanner-action/osv-scanner-action@7f58dd6750d78fc29a900ba64b1a0f946f62fba4 # v2.6.0
+        env:
+          GOTOOLCHAIN: auto
+        with:
+          scan-args: |-
+            --output=upstream-results.json
+            --format=json
+            --recursive
+            ./lib
+        # Exits non-zero when it finds advisories; this job only reports them.
+        continue-on-error: true
+      - name: Report (does not fail the job)
+        if: ${{ hashFiles('upstream-results.json') != '' }}
+        uses: google/osv-scanner-action/osv-reporter-action@7f58dd6750d78fc29a900ba64b1a0f946f62fba4 # v2.6.0
+        with:
+          scan-args: |-
+            --output=upstream-results.sarif
+            --new=upstream-results.json
+            --gh-annotations=false
+            --fail-on-vuln=false
+      - name: Upload SARIF artifact
+        if: ${{ !cancelled() && hashFiles('upstream-results.sarif') != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: upstream-submodules OSV Scanner SARIF file
+          path: upstream-results.sarif
+          retention-days: 5
+      - name: Upload to code scanning
+        if: ${{ !cancelled() && hashFiles('upstream-results.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: upstream-results.sarif
+          category: osv-scanner-upstream-submodules
