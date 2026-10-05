@@ -1,0 +1,12 @@
+// Static-assets Worker for the CLPRouter demo. workers.dev only: no routes, no custom domain.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "clprouter-demo",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}

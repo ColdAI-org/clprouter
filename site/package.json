@@ -1,0 +1,25 @@
+{
+  "name": "@clprouter/demo-site",
+  "private": true,
+  "version": "0.1.0",
+  "description": "CLPRouter live demo: route planner (real SDK in the browser), testnet explorer, how it works",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "data": "node scripts/build-data.mjs",
+    "dev": "npm run data && vite",
+    "build": "npm run data && tsc --noEmit && vite build && node scripts/inline-css.mjs",
+    "preview": "vite preview --port 4173",
+    "deploy": "npm run build && wrangler deploy",
+    "shots": "node scripts/screenshots.mjs"
+  },
+  "dependencies": {
+    "viem": "2.57.3"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.2",
+    "wrangler": "4.147.0"
+  }
+}
