@@ -4,7 +4,7 @@
     "ledgerId": "eip155:296",
     "rpcUrl": "${HEDERA_TESTNET_RPC_URL}",
     "chainId": 296,
-    "orderBook": "0xB7C875E6EB4a9D470BBccFecbA6256342676e895",
+    "orderBook": "0x28c14e4BAd929e27902149674CCe79b34E5b8B1f",
     "clprService": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9"
   },
   "chains": [
@@ -13,11 +13,11 @@
       "rpcUrl": "${SEPOLIA_RPC_URL}",
       "chainId": 11155111,
       "clprService": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
-      "deposit": "0x249f83524D0827840237e751981B804D99bB5bD6",
-      "delivery": "0x5e7dbA624AFbcb13693BB17d9021Be16Da96cDB8",
-      "channelId": "0x8a15fe9f8ea6a20841a9983e2e6176b4bcf1e01530348632d9488be92a4145e0",
+      "deposit": "0x86ED95936E516742cC4d54657f66831775282875",
+      "delivery": "0xf3c36ceDD119a0BfEdfA9F61C82A4F289046CB24",
+      "channelId": "0x6446fdeff8622cb949ba6207af6365225abc937950ab2f955de664a19b0ec05d",
       "confirmations": 2,
-      "startBlock": 11847081,
+      "startBlock": 11847379,
       "logBatch": 500
     }
   ],
@@ -35,14 +35,33 @@
       "deliveryP90S": 120
     }
   ],
-  "bond": { "asset": "0x0000000000000000000000000000000000000000", "target": "500000000" },
-  "quote": { "ttlS": 300, "defaultDeadlineS": 3600, "minDeliveryMarginS": 60, "maxDeadlineS": 86400 },
-  "keys": {
-    "connector": { "kind": "testnet-key", "privateKey": "${SETTLE_CONNECTOR_KEY}" },
-    "signer": { "kind": "testnet-key", "privateKey": "${SETTLE_SIGNER_KEY}" }
+  "bond": {
+    "asset": "0x0000000000000000000000000000000000000000",
+    "target": "200000000"
   },
-  "relay": { "kind": "none" },
-  "store": "../deployments/.local/connector-testnet-store.json",
-  "http": { "host": "127.0.0.1", "port": 8787 },
+  "quote": {
+    "ttlS": 300,
+    "defaultDeadlineS": 3600,
+    "minDeliveryMarginS": 60,
+    "maxDeadlineS": 86400
+  },
+  "keys": {
+    "connector": {
+      "kind": "testnet-key",
+      "privateKey": "${SETTLE_CONNECTOR_KEY}"
+    },
+    "signer": {
+      "kind": "testnet-key",
+      "privateKey": "${SETTLE_SIGNER_KEY}"
+    }
+  },
+  "relay": {
+    "kind": "none"
+  },
+  "store": "../deployments/.local/connector-testnet-v2-store.json",
+  "http": {
+    "host": "127.0.0.1",
+    "port": 8787
+  },
   "pollIntervalMs": 15000
 }

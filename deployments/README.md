@@ -179,7 +179,68 @@ Gas is the receipt's `gasUsed`. Cost on Sepolia is `gasUsed × effectiveGasPrice
 | Hedera testnet | deliver | ClprRouter flush | [`0xc843d6d4f6…`](https://hashscan.io/testnet/transaction/0xc843d6d4f6199b934fdf221a9192a69df015d1ada9d5c6b847dde61c37d4a7bb) | 705,711 | 0.58574013 HBAR | success |
 
 
-## Settle on Hedera (testnet)
+## Settle on Hedera (testnet, v2)
+
+**v2 (current).** The first deployment below was bound to the v1 Channel `0x8a15fe9f…4145e0`, whose Hedera verifier
+holds the period-1376 committee and cannot rotate. The rotation stream opened the v2 Channel
+`0x6446fdeff8622cb949ba6207af6365225abc937950ab2f955de664a19b0ec05d` (salt `…/channel/v2`, staged rotation,
+`keep-rotating.sh`). An order book takes one source per ledger and never replaces it, and the Sepolia contracts
+name their Channel immutably, so settle was deployed again for v2 (`config/settle.json` salt
+`clprouter/testnet/settle/v2`, steps `settle2-*`). Record: `settle` in [`sepolia.json`](sepolia.json) and
+[`hedera-testnet.json`](hedera-testnet.json); v1 moved to `settleV1`.
+
+| Contract | Network | Address |
+| --- | --- | --- |
+| SettleOrderBook (same parameters as v1) | Hedera testnet | `0x28c14e4BAd929e27902149674CCe79b34E5b8B1f` |
+| SettleDeposit | Sepolia | `0x86ED95936E516742cC4d54657f66831775282875` |
+| SettleDelivery | Sepolia | `0xf3c36ceDD119a0BfEdfA9F61C82A4F289046CB24` |
+| SettleTestnetConnector (allows both settle contracts on Sepolia; pays inbound execution on Hedera, funded 2 HBAR) | both (same address) | `0x7DBAA36A39765668d7aB18AA08Db0a7Fe1Da7227` |
+
+Settle CLPR connector `0x73ab4a8927b983c882174a9d42d4d91282ef4f2d2556f2309b140d1a99a54f39` is registered on the v2 Channel on **both**
+Sepolia (0.0005 ETH locked stake) and Hedera. Sepolia source active from `1791271342`
+(2026-10-06 07:22 UTC). Test Connector `0x316323692104293b58366e6Bc66a796B919108E7`: v1 bond withdrawn and
+re-posted on v2 (2 HBAR), 0.0014 Sepolia ETH for deliveries. The reference service config
+(`services/connector/config.testnet.json`) points at v2.
+
+**Orders.** [`script/deploy/settle-order.sh`](../script/deploy/settle-order.sh) runs them step by step
+(`check`, `quote`, `deposit`, `deliver`, `relay`, `status`, `claim`); see its header for the delivered and the
+missed-deadline sequences. `check` (2026-10-05 07:30 UTC): source NOT YET active; Channel NOT LIVE: the v2 anchor
+was already rotated to period 1378 while Sepolia is in period 1377 (`eth-bundle.ts`: "Hedera Channel anchor != period
+1377 committee"), so no current header verifies until period 1378 starts (2026-10-05 10:35 UTC). The window for
+both orders is **2026-10-06 07:22 UTC (source active) → 13:53 UTC (period 1379 starts)**, and only if the anchor is
+still 1378 then: `keep-rotating.sh` rotates as soon as the finalized head reaches the anchor's period, which moves
+the anchor one period ahead of every new header. No order has run. Ready and checked: the service quotes on v2 (0.00001 ETH, owed on default 0.4737857 HBAR) and `SettleDeposit.deposit` with that quote passes an `eth_call` on Sepolia (the CLPR connector authorizes it).
+
+| Network | Step | Contract / call | Tx | Gas | Cost |
+| --- | --- | --- | --- | ---: | ---: |
+| Hedera testnet | order-book | SettleOrderBook CREATE2 deploy | [`0x7b616e901b…`](https://hashscan.io/testnet/transaction/0x7b616e901b13c85e53743b6dcc9be2cf75774a3c53d7281383d09eb3181f5294) | 3,627,496 | 2.97454672 HBAR |
+| Hedera testnet | source | SettleOrderBook proposeSource(bytes32,bytes32,bytes,bytes) | [`0x94afb674a2…`](https://hashscan.io/testnet/transaction/0x94afb674a246b471fe98c9c6932ea635638ad42c05ec32ce98dc0a246328b983) | 141,803 | 0.11627846 HBAR |
+| Hedera testnet | clpr-connector-hedera | SettleTestnetConnector CREATE2 deploy | [`0x9dab4434c2…`](https://hashscan.io/testnet/transaction/0x9dab4434c2607c00846895e9bb81a88eb95812e954a704190be5214ddec63567) | 438,449 | 0.35952818 HBAR |
+| Hedera testnet | clpr-connector-hedera-register | ClprService registerConnector(bytes32) | [`0x806730c2a9…`](https://hashscan.io/testnet/transaction/0x806730c2a9f00dc2ae935c6771c1a86ca16ce951c8e372fcf3ee156cad62e169) | 51,932 | 0.04258424 HBAR |
+| Hedera testnet | clpr-connector-hedera-register | ClprService completeConnector(bytes32,bytes,bytes,bytes32,bytes32,address,address) | [`0xb5d015f8d8…`](https://hashscan.io/testnet/transaction/0xb5d015f8d8cb1686a1f7418cdc7c7e33e8c91e6d9da61b3402f90a87ef5517b0) | 160,658 | 0.13173956 HBAR |
+| Hedera testnet | clpr-connector-hedera-register | SettleTestnetConnector fund (HBAR) | [`0xe242188c7f…`](https://hashscan.io/testnet/transaction/0xe242188c7f0e29a06f721def651c849e2f5fea5e25c90188e8790893273d213e) | 21,067 | 1.01727494 HBAR |
+| Hedera testnet | v1-recover | SettleOrderBook (v1) requestWithdraw(address,uint256) | [`0x82a662622b…`](https://hashscan.io/testnet/transaction/0x82a662622b861495dc191dc6bc1bd330d643f76bee4741a750998d366b2d7652) | 73,412 | 0.06019784 HBAR |
+| Hedera testnet | v1-recover | SettleTestnetConnector (v1) withdraw(address,uint256) 1 HBAR to the deployer | [`0x0c39cafe92…`](https://hashscan.io/testnet/transaction/0x0c39cafe92cdca0c9b661d1ce80d8ff0ea224c302fa54fdefe098c82942f02c2) | 28,857 | 0.02366274 HBAR |
+| Hedera testnet | clpr-connector-hedera-register | SettleTestnetConnector fund (HBAR) | [`0xd563715a3e…`](https://hashscan.io/testnet/transaction/0xd563715a3ec42745499b0e7d8147e60861afe959a149289109cd2e61312aacc6) | 21,067 | 1.01727494 HBAR |
+| Hedera testnet | v1-recover | SettleOrderBook (v1) executeWithdraw(address) | [`0x4f2fe6867f…`](https://hashscan.io/testnet/transaction/0x4f2fe6867f54fbd66eca39c2e1b1c0c9411802a1dd3d04ff145933bb357d7eb5) | 44,476 | 0.03743582 HBAR |
+| Hedera testnet | connector-register | SettleOrderBook register(address) | [`0x4c930f8892…`](https://hashscan.io/testnet/transaction/0x4c930f8892d16e952abb6c67d17b12cae79772c1cf191dff921c204c3d71261d) | 67,975 | 0.05573950 HBAR |
+| Hedera testnet | v1-recover | SettleOrderBook (v1) executeWithdraw(address) | [`0x9cda78a4d7…`](https://hashscan.io/testnet/transaction/0x9cda78a4d7991d4dcce7217f1f9cc6ba0da01d292684cf7cfc22cbc416b32fdd) | 37,064 | 0.03039248 HBAR |
+| Hedera testnet | connector-register | SettleOrderBook postBond(address,uint256) | [`0xbd0e8d3d4d…`](https://hashscan.io/testnet/transaction/0xbd0e8d3d4d4ecd304b1fdf0ee233b75876a77238e401cc4aad7f92bc15f03334) | 50,756 | 2.04161992 HBAR |
+| Sepolia | sepolia | SettleDeposit CREATE2 deploy | [`0xf605cbbf0c…`](https://sepolia.etherscan.io/tx/0xf605cbbf0c6902f3dab3008b36d2f733c4df56f09abca00a887eadda4a7c8d13) | 989,961 | 0.001107839 ETH |
+| Sepolia | sepolia | SettleDelivery CREATE2 deploy | [`0x7a4fef0056…`](https://sepolia.etherscan.io/tx/0x7a4fef0056a1a73e025f0911861e388328a73b4d451071d72fc02a4f328ca643) | 501,540 | 0.000510636 ETH |
+| Sepolia | clpr-connector-sepolia | SettleTestnetConnector CREATE2 deploy | [`0xc59ddcf5d8…`](https://sepolia.etherscan.io/tx/0xc59ddcf5d8d50f1410b1d27a56d4d6d6a134ff641ee0227612244e1c4a3691bf) | 438,449 | 0.000471180 ETH |
+| Sepolia | clpr-connector-sepolia | SettleTestnetConnector setAllowed(address,bool) | [`0x37fb1d1a9d…`](https://sepolia.etherscan.io/tx/0x37fb1d1a9d77a2897b9c071bb0642e87425142616b7b7732c01688dbb1abef99) | 45,438 | 0.000043610 ETH |
+| Sepolia | clpr-connector-sepolia | SettleTestnetConnector setAllowed(address,bool) | [`0x373b9506b8…`](https://sepolia.etherscan.io/tx/0x373b9506b8ce078d9927f9a6a9cff90e11f2d1b538f64fc6277ce15b73c90b4b) | 45,438 | 0.000045641 ETH |
+| Sepolia | clpr-connector-sepolia-register | ClprService registerConnector(bytes32) | [`0x1ed27b745b…`](https://sepolia.etherscan.io/tx/0x1ed27b745b77b4bfa62acdedc3b3c976c5171415d567a4f07f363df8ad327c97) | 51,932 | 0.000049935 ETH |
+| Sepolia | clpr-connector-sepolia-register | ClprService completeConnector(bytes32,bytes,bytes,bytes32,bytes32,address,address) | [`0x72e4eb34d6…`](https://sepolia.etherscan.io/tx/0x72e4eb34d6cdf7af2eca33bc016959b5d4308267bc0496bc7553aa4321184a32) | 180,558 | 0.000684328 ETH |
+| Sepolia | connector-fund-sepolia | settle Connector account transfer (ETH) | [`0xd25cbfd1b7…`](https://sepolia.etherscan.io/tx/0xd25cbfd1b7d40f1acb29e148dfa783beb8666300a6673b20f213883469008164) | 21,000 | 0.001222285 ETH |
+
+Deployer balances after: 483.49389890 HBAR (488.17678868 before v2), 0.048854193 Sepolia ETH (0.052989646 before).
+v2 spend so far: **5.81091592 HBAR** from the deployer (budget 15; the test Connector's own transactions, paid from its
+recovered v1 bond, are listed but not counted) and **0.004135454 ETH** on Sepolia (budget 0.012; includes the 0.0005 ETH
+stake and 0.0012 ETH of delivery liquidity sent to the test Connector).
+
+## Settle on Hedera (testnet, v1, retired)
 
 [Settle on Hedera](../docs/settle-on-hedera.md) on the same two testnets: `SettleOrderBook` on Hedera testnet,
 `SettleDeposit` and `SettleDelivery` on Sepolia (the demo pays and delivers on Sepolia), over the Channel above.

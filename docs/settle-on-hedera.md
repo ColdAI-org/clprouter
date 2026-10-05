@@ -11,7 +11,7 @@ verifiers that exist today, which all run chain → Hiero.
 > "Connector" in this document is a bonded liquidity provider of this protocol. The CLPR messaging connector that
 > pays for a message's execution on the destination is called the *CLPR connector* (`clprConnectorId`).
 
-Status: pre-release, unaudited. Deployed on Hedera testnet and Sepolia for testing ([`deployments/README.md`](../deployments/README.md#settle-on-hedera-testnet)); no real order has run there yet.
+Status: pre-release, unaudited. Deployed on Hedera testnet and Sepolia for testing ([`deployments/README.md`](../deployments/README.md#settle-on-hedera-testnet-v2)); no real order has run there yet.
 
 ## Flow
 
@@ -196,7 +196,7 @@ withdraw), closing orders with recorded deliveries and, for local networks only,
 
 ## Gaps
 
-- **Testnet deployment** ([`deployments/README.md`](../deployments/README.md#settle-on-hedera-testnet)): the Sepolia source is active one day after it was proposed, the settle CLPR connector is registered on Hedera but not yet on Sepolia, and the Channel needs its sync-committee rotation before new Sepolia messages can be proven.
+- **Testnet deployment** ([`deployments/README.md`](../deployments/README.md#settle-on-hedera-testnet-v2)): v2, over the rotating v2 Channel, ready on both ledgers; its Sepolia source is active from 2026-10-06 07:22 UTC, and an order can only be proven while the Channel's anchor is the current Sepolia sync-committee period (`settle-order.sh check`). A source is bound to one Channel for good, so a new Channel means a new order book and new Sepolia contracts.
 - **Verifier-specific proof submission** is a pluggable `ProofRelay` in the service; only the test relay exists.
 - **Payment provers** for Bitcoin, XRPL and Stellar: the interface and the order-book paths exist and are tested
   with `TestPaymentProver`, but no production prover exists. The CLPR verifiers on those chains prove messages

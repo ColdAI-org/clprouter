@@ -475,14 +475,150 @@
       "valueWei": "200000000000000",
       "costEth": "0.000220219",
       "explorerUrl": "https://sepolia.etherscan.io/tx/0xd44e17580d71a21068261c6128579aaf55f16291ee254cc3f6ca3526f093f063"
+    },
+    {
+      "step": "settle2-sepolia",
+      "hash": "0xf605cbbf0c6902f3dab3008b36d2f733c4df56f09abca00a887eadda4a7c8d13",
+      "block": 11847379,
+      "status": "success",
+      "contract": "SettleDeposit",
+      "function": "CREATE2 deploy",
+      "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "createdAddress": "0x86ed95936e516742cc4d54657f66831775282875",
+      "gasUsed": "989961",
+      "gasLimit": "1447817",
+      "effectiveGasPriceWei": "1119073858",
+      "feeWei": "1107839475539538",
+      "valueWei": "0",
+      "costEth": "0.001107839",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0xf605cbbf0c6902f3dab3008b36d2f733c4df56f09abca00a887eadda4a7c8d13"
+    },
+    {
+      "step": "settle2-sepolia",
+      "hash": "0x7a4fef0056a1a73e025f0911861e388328a73b4d451071d72fc02a4f328ca643",
+      "block": 11847381,
+      "status": "success",
+      "contract": "SettleDelivery",
+      "function": "CREATE2 deploy",
+      "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "createdAddress": "0xf3c36cedd119a0bfedfa9f61c82a4f289046cb24",
+      "gasUsed": "501540",
+      "gasLimit": "692751",
+      "effectiveGasPriceWei": "1018135686",
+      "feeWei": "510635771956440",
+      "valueWei": "0",
+      "costEth": "0.000510636",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x7a4fef0056a1a73e025f0911861e388328a73b4d451071d72fc02a4f328ca643"
+    },
+    {
+      "step": "settle2-clpr-connector-sepolia",
+      "hash": "0xc59ddcf5d8d50f1410b1d27a56d4d6d6a134ff641ee0227612244e1c4a3691bf",
+      "block": 11847386,
+      "status": "success",
+      "contract": "SettleTestnetConnector",
+      "function": "CREATE2 deploy",
+      "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "createdAddress": "0x7dbaa36a39765668d7ab18aa08db0a7fe1da7227",
+      "gasUsed": "438449",
+      "gasLimit": "641231",
+      "effectiveGasPriceWei": "1074650830",
+      "feeWei": "471179581762670",
+      "valueWei": "0",
+      "costEth": "0.000471180",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0xc59ddcf5d8d50f1410b1d27a56d4d6d6a134ff641ee0227612244e1c4a3691bf"
+    },
+    {
+      "step": "settle2-clpr-connector-sepolia",
+      "hash": "0x37fb1d1a9d77a2897b9c071bb0642e87425142616b7b7732c01688dbb1abef99",
+      "block": 11847388,
+      "status": "success",
+      "contract": "SettleTestnetConnector",
+      "function": "setAllowed(address,bool)",
+      "to": "0x7dbaa36a39765668d7ab18aa08db0a7fe1da7227",
+      "createdAddress": "0x7dbaa36a39765668d7ab18aa08db0a7fe1da7227",
+      "gasUsed": "45438",
+      "gasLimit": "62760",
+      "effectiveGasPriceWei": "959759533",
+      "feeWei": "43609553660454",
+      "valueWei": "0",
+      "costEth": "0.000043610",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x37fb1d1a9d77a2897b9c071bb0642e87425142616b7b7732c01688dbb1abef99"
+    },
+    {
+      "step": "settle2-clpr-connector-sepolia",
+      "hash": "0x373b9506b8ce078d9927f9a6a9cff90e11f2d1b538f64fc6277ce15b73c90b4b",
+      "block": 11847390,
+      "status": "success",
+      "contract": "SettleTestnetConnector",
+      "function": "setAllowed(address,bool)",
+      "to": "0x7dbaa36a39765668d7ab18aa08db0a7fe1da7227",
+      "createdAddress": "0x7dbaa36a39765668d7ab18aa08db0a7fe1da7227",
+      "gasUsed": "45438",
+      "gasLimit": "62760",
+      "effectiveGasPriceWei": "1004460155",
+      "feeWei": "45640660522890",
+      "valueWei": "0",
+      "costEth": "0.000045641",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x373b9506b8ce078d9927f9a6a9cff90e11f2d1b538f64fc6277ce15b73c90b4b"
+    },
+    {
+      "step": "settle2-clpr-connector-sepolia-register",
+      "hash": "0x1ed27b745b77b4bfa62acdedc3b3c976c5171415d567a4f07f363df8ad327c97",
+      "block": 11847394,
+      "status": "success",
+      "contract": "ClprService",
+      "function": "registerConnector(bytes32)",
+      "to": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "createdAddress": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "gasUsed": "51932",
+      "gasLimit": "71730",
+      "effectiveGasPriceWei": "961544073",
+      "feeWei": "49934906799036",
+      "valueWei": "0",
+      "costEth": "0.000049935",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x1ed27b745b77b4bfa62acdedc3b3c976c5171415d567a4f07f363df8ad327c97"
+    },
+    {
+      "step": "settle2-clpr-connector-sepolia-register",
+      "hash": "0x72e4eb34d6cdf7af2eca33bc016959b5d4308267bc0496bc7553aa4321184a32",
+      "block": 11847396,
+      "status": "success",
+      "contract": "ClprService",
+      "function": "completeConnector(bytes32,bytes,bytes,bytes32,bytes32,address,address)",
+      "to": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "createdAddress": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+      "gasUsed": "180558",
+      "gasLimit": "249394",
+      "effectiveGasPriceWei": "1020879985",
+      "feeWei": "184328048331630",
+      "valueWei": "500000000000000",
+      "costEth": "0.000684328",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x72e4eb34d6cdf7af2eca33bc016959b5d4308267bc0496bc7553aa4321184a32"
+    },
+    {
+      "step": "settle2-connector-fund-sepolia",
+      "hash": "0xd25cbfd1b7d40f1acb29e148dfa783beb8666300a6673b20f213883469008164",
+      "block": 11847420,
+      "status": "success",
+      "contract": "settle Connector account",
+      "function": "transfer (ETH)",
+      "to": "0x316323692104293b58366e6bc66a796b919108e7",
+      "createdAddress": null,
+      "gasUsed": "21000",
+      "gasLimit": "21000",
+      "effectiveGasPriceWei": "1061191901",
+      "feeWei": "22285029921000",
+      "valueWei": "1200000000000000",
+      "costEth": "0.001222285",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0xd25cbfd1b7d40f1acb29e148dfa783beb8666300a6673b20f213883469008164"
     }
   ],
   "totals": {
-    "transactions": 22,
-    "gasUsed": "25426036",
-    "costEth": "0.027542940"
+    "transactions": 30,
+    "gasUsed": "27700352",
+    "costEth": "0.031678394"
   },
-  "updatedAt": "2026-10-05T06:26:27.061Z",
+  "updatedAt": "2026-10-05T07:32:39.008Z",
   "channel": {
     "channelId": "0x8a15fe9f8ea6a20841a9983e2e6176b4bcf1e01530348632d9488be92a4145e0",
     "peer": "296 (Hedera testnet)",
@@ -546,7 +682,7 @@
     "balanceAfterRoute": "0.007259605123134778 ETH",
     "spentEthRoute": "0.001160935467314388"
   },
-  "settle": {
+  "settleV1": {
     "contracts": {
       "SettleDeposit": {
         "address": "0x249f83524D0827840237e751981B804D99bB5bD6",
@@ -558,6 +694,27 @@
         "runtimeCodeHash": "0x8678fc33053cb8f618bfbee69eb554afe2cacf1d829089c2529709a7ff61ad74",
         "runtimeCodeSize": 2075
       }
-    }
+    },
+    "_note": "First settle deployment, bound to the v1 Sepolia -> Hedera Channel 0x8a15fe9f... (period-1376 committee, cannot rotate). Superseded by `settle` (v2 Channel). Bond and balances recovered as recorded in the settle2-* steps."
+  },
+  "settle": {
+    "contracts": {
+      "SettleDeposit": {
+        "address": "0x86ED95936E516742cC4d54657f66831775282875",
+        "runtimeCodeHash": "0x8a1a87a0e7dd0d59b28c6ed26d40cb7002b5b2ebb7d36060ba5cd6c83c4718f5",
+        "runtimeCodeSize": 4315
+      },
+      "SettleDelivery": {
+        "address": "0xf3c36ceDD119a0BfEdfA9F61C82A4F289046CB24",
+        "runtimeCodeHash": "0x6ebee98d32aee3697d38b263f43a802d9c7893f207ba2735cc298d805e3003fa",
+        "runtimeCodeSize": 2075
+      },
+      "SettleTestnetConnector": {
+        "address": "0x7DBAA36A39765668d7aB18AA08Db0a7Fe1Da7227",
+        "runtimeCodeHash": "0x040f62c382b642ee7ba033a343c2fbb54647b3852fb2cd6994fe55e40a0cb5b6",
+        "runtimeCodeSize": 1779
+      }
+    },
+    "clprConnectorId": "0x73ab4a8927b983c882174a9d42d4d91282ef4f2d2556f2309b140d1a99a54f39"
   }
 }
