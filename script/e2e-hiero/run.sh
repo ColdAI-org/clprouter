@@ -146,6 +146,22 @@ fs 1 wire 'wireConnector(uint8,uint8)' 1 2 >/dev/null
 fs 2 wire 'wireConnector(uint8,uint8)' 2 1 >/dev/null
 echo "   channels A-H and H-B open, connectors registered"
 
+# The committee approves both directions of both Channels on every ledger. Routers carry nothing over a Channel
+# direction before its approval takes effect (CERT_NOTICE, 1 day in E2EHiero): anvil A and B are moved forward,
+# Solo H is waited for (its clock cannot be advanced).
+approved_at=0
+for i in 0 1 2; do
+  out=$(fs "$i" approve 'approveChannels(uint8)' "$i")
+  t=$(awk '/APPROVED_AT/{print $2}' <<<"$out")
+  [ "${t:-0}" -gt "$approved_at" ] && approved_at=$t
+done
+for r in "$RPC_A" "$RPC_B"; do
+  cast rpc evm_setNextBlockTimestamp "$((approved_at + 1))" --rpc-url "$r" >/dev/null
+  cast rpc evm_mine --rpc-url "$r" >/dev/null
+done
+echo "   Channel approvals in effect at $approved_at; waiting for Solo H to reach it"
+until [ "$(cast block latest timestamp --rpc-url "$RPC_H")" -gt "$approved_at" ]; do sleep 60; done
+
 echo "== route A → H → B"
 fs 0 send-A 'send(uint8)' 0 >/dev/null
 DIRS=("0 1" "1 2" "2 1" "1 0")

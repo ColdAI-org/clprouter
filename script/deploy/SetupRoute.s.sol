@@ -9,7 +9,9 @@ import {ClprTypes} from "@hiero-ledger/clpr/libraries/ClprTypes.sol";
 import {ClprProtobuf} from "@hiero-ledger/clpr/libraries/codec/ClprProtobuf.sol";
 
 import {ClprRouter} from "@clprouter/ClprRouter.sol";
+import {ProviderRegistry} from "@clprouter/ProviderRegistry.sol";
 import {IClprRouter} from "@clprouter/interfaces/IClprRouter.sol";
+import {IProviderRegistry} from "@clprouter/interfaces/IProviderRegistry.sol";
 import {RouteTypes} from "@clprouter/libraries/RouteTypes.sol";
 import {Caip} from "@clprouter/libraries/Caip.sol";
 import {TestOnlyStubVerifier, TestnetConnector, TestnetRouteApp} from "./TestnetFixtures.sol";
@@ -26,6 +28,7 @@ import {StagedEthConfigVerifier} from "./StagedEthConfigVerifier.sol";
 ///           HEDERA_DEPLOYMENT         deployments/<network>.json (Router addresses)
 ///           CLPR_TESTNET_PRIVATE_KEY  deployer / CLPR Service owner (testnet only)
 ///           CHANNEL_PK, CONNECTOR_PK  throwaway Channel and Connector operator keys (deployments/.local/)
+///           COMMITTEE_PKS             approveChannel only: comma-separated TEST committee keys (at least k)
 ///
 ///         Verification per direction:
 ///           Sepolia → Hedera: EthMainnetVerifier (real sync-committee light client) on Hedera, behind
@@ -256,6 +259,72 @@ contract SetupRoute is Script {
     }
 
     // ═════════════════════════════════════════════════════════════════════
+    // 4b. Channel approval: the TEST committee labels both directions of the Channel in this chain's registry
+    // ═════════════════════════════════════════════════════════════════════
+
+    /// @notice Relay the committee's approval of both directions of the Channel to this chain's registry (k
+    ///         signatures each). Each label names the verifier the receiving ledger's Service uses for the Channel,
+    ///         read from that ledger (a fork of the other chain). The two decisions carry only values that are the
+    ///         same on both chains (no timestamps), so relaying them to both registries keeps their decision
+    ///         chains identical. Routes can use the Channel once the registry's certification notice has passed.
+    function approveChannel() external {
+        IClprService svc = _service();
+        (bytes32 ch,,) = _channel(svc);
+        ProviderRegistry reg = ProviderRegistry(_registry(block.chainid));
+        uint256 here = vm.activeFork();
+        uint256 other =
+            vm.createFork(vm.envString(block.chainid == SEPOLIA ? "HEDERA_TESTNET_RPC_URL" : "SEPOLIA_RPC_URL"));
+        bool onSepolia = block.chainid == SEPOLIA;
+        _approveDirection(reg, ch, SEPOLIA, onSepolia ? here : other, here);
+        _approveDirection(reg, ch, HEDERA, onSepolia ? other : here, here);
+    }
+
+    function _approveDirection(ProviderRegistry reg, bytes32 ch, uint256 into, uint256 intoFork, uint256 here)
+        internal
+    {
+        vm.selectFork(intoFork);
+        address verifier = _service().getChannel(ch).verifier;
+        bytes32 codeHash = verifier.codehash;
+        vm.selectFork(here);
+        bytes32 key = Caip.edgeKey(ch, _routerLedger(into));
+        (bool approved,, address current,) = reg.channelApproval(key);
+        if (approved && current == verifier) {
+            console.log("CHANNEL_DIRECTION_APPROVED", _routerLedger(into));
+            return;
+        }
+        bytes memory payload = abi.encode(ch, _routerLedger(into), uint8(0), verifier, codeHash);
+        IProviderRegistry.Decision memory d = IProviderRegistry.Decision({
+            action: 11, // TRUST_TIER
+            payload: payload,
+            evidenceHash: keccak256(abi.encode("testnet: approve Channel direction", payload)),
+            nonce: reg.version() + 1,
+            effectiveAt: 0,
+            validUntil: type(uint64).max,
+            epoch: reg.epoch()
+        });
+        bytes[] memory sigs = _committeeSigs(reg.decisionDigest(d), reg.requiredSignatures(11));
+        vm.startBroadcast(_ownerPk());
+        reg.submit(d, sigs);
+        vm.stopBroadcast();
+        console.log("CHANNEL_DIRECTION_SCHEDULED", _routerLedger(into), block.timestamp + reg.CERT_NOTICE());
+    }
+
+    /// @dev `need` signatures over `digest` from COMMITTEE_PKS, in ascending signer order.
+    function _committeeSigs(bytes32 digest, uint256 need) internal view returns (bytes[] memory sigs) {
+        uint256[] memory pks = vm.envUint("COMMITTEE_PKS", ",");
+        require(pks.length >= need, "COMMITTEE_PKS: fewer keys than the quorum");
+        for (uint256 i = 1; i < pks.length; i++) {
+            for (uint256 j = i; j > 0 && vm.addr(pks[j - 1]) > vm.addr(pks[j]); j--) {
+                (pks[j - 1], pks[j]) = (pks[j], pks[j - 1]);
+            }
+        }
+        sigs = new bytes[](need);
+        for (uint256 i = 0; i < need; i++) {
+            sigs[i] = _sign(pks[i], digest);
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
     // 5. Route: send on Sepolia
     // ═════════════════════════════════════════════════════════════════════
 
@@ -422,6 +491,11 @@ contract SetupRoute is Script {
     function _router(uint256 chain) internal view returns (address) {
         string memory d = vm.envString(chain == SEPOLIA ? "SEPOLIA_DEPLOYMENT" : "HEDERA_DEPLOYMENT");
         return vm.parseJsonAddress(d, ".contracts.ClprRouter.address");
+    }
+
+    function _registry(uint256 chain) internal view returns (address) {
+        string memory d = vm.envString(chain == SEPOLIA ? "SEPOLIA_DEPLOYMENT" : "HEDERA_DEPLOYMENT");
+        return vm.parseJsonAddress(d, ".contracts.ProviderRegistry.address");
     }
 
     function _flags(address svc) internal view returns (bool enabled, bool initialized) {

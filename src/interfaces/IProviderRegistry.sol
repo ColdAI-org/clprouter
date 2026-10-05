@@ -43,9 +43,22 @@ interface IProviderRegistry {
 
     /// @notice Verifier trust tier the provider labelled the Channel direction `edgeKey` with
     ///         (`Caip.edgeKey(channelId, toLedgerId)`), as in effect now.
-    /// @return labelled False if the edge carries no label (a trust floor above zero then fails closed).
+    /// @return labelled False if the edge carries no label (Routers then carry nothing over it).
     /// @return tier 0 attested, 1 committee, 2 light client, 3 validity proof (the envelope's `trust_floor` scale).
     function trustTier(bytes32 edgeKey) external view returns (bool labelled, uint8 tier);
+
+    /// @notice Whether the Channel direction `edgeKey` (`Caip.edgeKey(channelId, toLedgerId)`) is approved now, and
+    ///         with which verifier: Routers accept and send messages only over approved directions, and the Router
+    ///         of the receiving ledger also requires its CLPR Service's verifier for that Channel to be `verifier`
+    ///         with runtime code hash `verifierCodeHash`.
+    /// @return approved False if the direction carries no label in effect.
+    /// @return tier Verifier trust tier (as {trustTier}).
+    /// @return verifier Verifier contract of the Channel on the receiving ledger.
+    /// @return verifierCodeHash Its runtime code hash (EXTCODEHASH).
+    function channelApproval(bytes32 edgeKey)
+        external
+        view
+        returns (bool approved, uint8 tier, address verifier, bytes32 verifierCodeHash);
 
     /// @notice Registry version: number of committee decisions applied so far (monotonically increasing).
     function version() external view returns (uint64);

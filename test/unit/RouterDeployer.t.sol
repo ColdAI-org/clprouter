@@ -78,6 +78,9 @@ contract RouterDeployerTest is Committee, RouterDeploy {
         s.setPeer(keccak256("BC"), "eip155:31003");
         ClprRouter r = ClprRouter(routerDeployer.deploy(type(ClprRouter).creationCode, _params(s, "eip155:31002")));
         assertEq(r.ledgerId(), "eip155:31002");
+        _approveBoth(reg, keccak256("AB"), "eip155:31001", "eip155:31002", address(s));
+        _approveBoth(reg, keccak256("BC"), "eip155:31002", "eip155:31003", address(s));
+        vm.warp(block.timestamp + CERT_NOTICE);
 
         // An envelope from A over a Channel whose peer the Service names "31001" is accepted and forwarded.
         RouteTypes.Envelope memory e;

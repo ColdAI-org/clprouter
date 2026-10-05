@@ -30,6 +30,8 @@ contract OriginHandler is Test {
     address[] public payees;
     address[] public feePayees;
     bytes32 internal constant CH_AB = keccak256("AB");
+    /// @dev A Channel to B that the Service knows but the provider registry never approved.
+    bytes32 internal constant CH_UNAPPROVED = keccak256("AB-unapproved");
     bytes32 internal constant CONN = keccak256("connector");
 
     Route[] internal _routes;
@@ -40,6 +42,8 @@ contract OriginHandler is Test {
     bool public forgedAccepted;
     bool public revertChanged;
     bool public honestIgnored;
+    bool public unapprovedAccepted;
+    uint256 public unapprovedTried;
     uint256 public calls;
     uint256 public settled; // routes that reached a terminal status (coverage)
     uint256 public forgedTried;
@@ -228,6 +232,32 @@ contract OriginHandler is Test {
         _sweep();
     }
 
+    /// @dev A receipt that is honest in every respect except the Channel it arrives over, which the registry never
+    ///      approved (its peer is B, and the Service stamps B's canonical Router as sender). It must be refused
+    ///      before anything is recorded: no settlement, no replay key, no held count, no balance change.
+    function overUnapprovedChannel(uint256 idx, uint256 kSeed, uint8 statusSeed) external {
+        if (_routes.length == 0) return;
+        Route storage r = _routes[idx % _routes.length];
+        if (r.wire.length == 0) return;
+        (bytes memory data,) = _receipt(r, 1 + kSeed % 2, statusSeed);
+        RouteTypes.Envelope memory re = RouteCodec.decodeEnvelope(data);
+        re.hops[re.hopIndex - 1].channelId = CH_UNAPPROVED;
+        bytes memory moved = RouteCodec.encodeEnvelope(re);
+        bytes32 key = RouteLogic.inboundKey(re);
+        (,,,,, uint8 heldBefore,,,,,,,,) = router.routes(r.id);
+        IClprRouter.HopState keyBefore = router.hopState(key);
+        bytes32 f = _fingerprint();
+        unapprovedTried++;
+        try svc.deliver(router, CH_UNAPPROVED, abi.encodePacked(routerB), moved) {
+            unapprovedAccepted = true;
+        } catch {}
+        (,,,,, uint8 heldAfter,,,,,,,,) = router.routes(r.id);
+        if (_fingerprint() != f || router.hopState(key) != keyBefore || heldAfter != heldBefore) {
+            unapprovedAccepted = true;
+        }
+        _sweep();
+    }
+
     function respond(uint256 idx, bool ok) external {
         if (_routes.length == 0) return;
         Route storage r = _routes[idx % _routes.length];
@@ -278,7 +308,7 @@ contract OriginHandler is Test {
 
 /// @notice Invariants of the origin Router (docs/audit/router-findings.md):
 ///         escrow conservation, solvency, settle-at-most-once, receipts only from the stored hop commitment,
-///         and no state change on reverted paths.
+///         no state change on reverted paths, and only approved Channels carry messages.
 /// forge-config: default.invariant.runs = 64
 /// forge-config: default.invariant.depth = 60
 contract RouterInvariantsTest is StdInvariant, OriginHarness {
@@ -289,6 +319,7 @@ contract RouterInvariantsTest is StdInvariant, OriginHarness {
     function setUp() public {
         vm.warp(1_800_000_000);
         _deployOrigin();
+        svcA.setPeer(keccak256("AB-unapproved"), ID_B); // known to the Service, never approved
 
         address[] memory s = new address[](4);
         address[] memory p = new address[](3);
@@ -359,6 +390,11 @@ contract RouterInvariantsTest is StdInvariant, OriginHarness {
         assertFalse(handler.revertChanged());
     }
 
+    /// @notice Nothing that arrives over a Channel the provider registry does not approve is accepted or recorded.
+    function invariant_onlyApprovedChannelsCarryMessages() public view {
+        assertFalse(handler.unapprovedAccepted());
+    }
+
     /// @notice Focused fuzz of the same property: every single-field tampering of an honest receipt for a
     ///         pending strict route is ignored (complements the stateful run, where routes settle quickly).
     function testFuzz_forgedReceiptNeverSettles(uint256 k, uint8 st, uint8 m, bytes32 junk) public {
@@ -375,5 +411,6 @@ contract RouterInvariantsTest is StdInvariant, OriginHarness {
         emit log_named_uint("routes", handler.routeCount());
         emit log_named_uint("settled", handler.settled());
         emit log_named_uint("forged receipts tried", handler.forgedTried());
+        emit log_named_uint("unapproved-Channel receipts tried", handler.unapprovedTried());
     }
 }

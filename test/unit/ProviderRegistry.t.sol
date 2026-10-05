@@ -565,11 +565,15 @@ contract ProviderRegistryTest is Committee {
     // Trust-tier labels (Channel directions)
     // ═════════════════════════════════════════════════════════════════════
 
-    uint8 internal constant A_TRUST_TIER = 11;
     bytes32 internal constant CH = keccak256("channel-eth-hedera");
 
+    /// @dev Stands in for the receiving ledger's verifier of CH (any contract: the label names its address and code).
+    function _verifier() internal view returns (address) {
+        return address(reg);
+    }
+
     function _tier(string memory toLedger, uint8 tier) internal returns (bytes32) {
-        return _apply(reg, A_TRUST_TIER, abi.encode(CH, toLedger, tier));
+        return _apply(reg, A_TRUST_TIER, _trustPayload(CH, toLedger, tier, _verifier()));
     }
 
     function _tierOf(string memory toLedger) internal view returns (bool labelled, uint8 tier) {
@@ -578,14 +582,22 @@ contract ProviderRegistryTest is Committee {
 
     function test_trustTier_needsKSignatures_andAdvancesVersion() public {
         assertEq(reg.requiredSignatures(A_TRUST_TIER), K);
-        IProviderRegistry.Decision memory d = _decision(reg, A_TRUST_TIER, abi.encode(CH, HEDERA, uint8(2)));
+        IProviderRegistry.Decision memory d = _decision(reg, A_TRUST_TIER, _trustPayload(CH, HEDERA, 2, _verifier()));
         bytes[] memory few = _sign(address(reg), d, K - 1);
         vm.expectRevert(abi.encodeWithSelector(ProviderRegistry.InsufficientSignatures.selector, K - 1, K));
         reg.submit(d, few);
         bytes32 digest = reg.decisionDigest(d);
         vm.expectEmit(true, true, true, true, address(reg));
         emit ProviderRegistry.TrustTierScheduled(
-            Caip.edgeKey(CH, HEDERA), CH, HEDERA, 2, uint64(block.timestamp + CERT_NOTICE), EVIDENCE, digest
+            Caip.edgeKey(CH, HEDERA),
+            CH,
+            HEDERA,
+            2,
+            _verifier(),
+            _verifier().codehash,
+            uint64(block.timestamp + CERT_NOTICE),
+            EVIDENCE,
+            digest
         );
         reg.submit(d, _sign(address(reg), d, K));
         assertEq(reg.version(), 1);
@@ -642,23 +654,70 @@ contract ProviderRegistryTest is Committee {
     }
 
     function test_trustTier_rejectsInvalidTierAndTarget() public {
-        IProviderRegistry.Decision memory d = _decision(reg, A_TRUST_TIER, abi.encode(CH, HEDERA, uint8(4)));
+        IProviderRegistry.Decision memory d = _decision(reg, A_TRUST_TIER, _trustPayload(CH, HEDERA, 4, _verifier()));
         bytes[] memory sigs = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.InvalidTier.selector);
         reg.submit(d, sigs);
-        d.payload = abi.encode(bytes32(0), HEDERA, uint8(1));
+        d.payload = _trustPayload(bytes32(0), HEDERA, 1, _verifier());
         sigs = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.InvalidTarget.selector);
         reg.submit(d, sigs);
-        d.payload = abi.encode(CH, "", uint8(1));
+        d.payload = _trustPayload(CH, "", 1, _verifier());
+        sigs = _sign(address(reg), d, K);
+        vm.expectRevert(ProviderRegistry.InvalidTarget.selector);
+        reg.submit(d, sigs);
+        // An approval must name the verifier and its code.
+        d.payload = abi.encode(CH, HEDERA, uint8(1), address(0), _verifier().codehash);
+        sigs = _sign(address(reg), d, K);
+        vm.expectRevert(ProviderRegistry.InvalidTarget.selector);
+        reg.submit(d, sigs);
+        d.payload = abi.encode(CH, HEDERA, uint8(1), _verifier(), bytes32(0));
         sigs = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.InvalidTarget.selector);
         reg.submit(d, sigs);
         d.action = 12; // VAULT_BIND_ROUTER: vault only
-        d.payload = abi.encode(CH, HEDERA, uint8(1));
+        d.payload = _trustPayload(CH, HEDERA, 1, _verifier());
         sigs = _sign(address(reg), d, K);
         vm.expectRevert(ProviderRegistry.UnsupportedAction.selector);
         reg.submit(d, sigs);
+    }
+
+    function test_channelApproval_namesTheVerifier() public {
+        _tier(HEDERA, 1);
+        vm.warp(block.timestamp + CERT_NOTICE);
+        (bool approved, uint8 tier, address verifier, bytes32 codeHash) = reg.channelApproval(Caip.edgeKey(CH, HEDERA));
+        assertTrue(approved);
+        assertEq(tier, 1);
+        assertEq(verifier, _verifier());
+        assertEq(codeHash, _verifier().codehash);
+    }
+
+    /// @dev Naming another verifier is a new approval: it waits CERT_NOTICE even at the same or a lower tier, and
+    ///      the old verifier stays in effect meanwhile.
+    function test_channelApproval_newVerifierWaitsForCertNotice() public {
+        _tier(HEDERA, 2);
+        vm.warp(block.timestamp + CERT_NOTICE);
+        address other = address(this);
+        _apply(reg, A_TRUST_TIER, _trustPayload(CH, HEDERA, 1, other));
+        vm.warp(block.timestamp + REMOVAL_NOTICE);
+        (, uint8 tier, address verifier,) = reg.channelApproval(Caip.edgeKey(CH, HEDERA));
+        assertEq(verifier, _verifier(), "old verifier until the certification notice has passed");
+        assertEq(tier, 2);
+        vm.warp(block.timestamp + CERT_NOTICE - REMOVAL_NOTICE);
+        (, tier, verifier,) = reg.channelApproval(Caip.edgeKey(CH, HEDERA));
+        assertEq(verifier, other);
+        assertEq(tier, 1);
+    }
+
+    function test_channelApproval_removalClearsTheVerifier() public {
+        _tier(HEDERA, 0);
+        vm.warp(block.timestamp + CERT_NOTICE);
+        _tier(HEDERA, 255);
+        vm.warp(block.timestamp + REMOVAL_NOTICE);
+        (bool approved,, address verifier, bytes32 codeHash) = reg.channelApproval(Caip.edgeKey(CH, HEDERA));
+        assertFalse(approved);
+        assertEq(verifier, address(0));
+        assertEq(codeHash, bytes32(0));
     }
 
     function test_vaultNameRecoveryStillNotAcceptedHere() public {

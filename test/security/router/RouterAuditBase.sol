@@ -63,6 +63,7 @@ contract SecMockService {
         if (bytes(peerOf[ch]).length == 0) revert ClprTypes.ClprChannelNotFound();
         c.channelId = ch;
         c.chainId = peerOf[ch];
+        c.verifier = address(this); // the mock stands in for every Channel's verifier
     }
 
     function sendMessage(bytes32 ch, bytes32 conn, bytes calldata target, bytes calldata data)
@@ -269,6 +270,9 @@ abstract contract OriginHarness is Committee, RouterDeploy {
         svcA = new SecMockService(ID_A);
         svcA.setPeer(CH_AB, ID_B);
         regA = _deployRegistry();
+        _approveBoth(regA, CH_AB, ID_A, ID_B, address(svcA));
+        _approveBoth(regA, CH_BC, ID_B, ID_C, address(svcA));
+        vm.warp(block.timestamp + CERT_NOTICE);
         vaultA = new QuarantineVault(IProviderRegistry(address(regA)), 3 days, 7 days);
         _initRouterDeployer();
         routerB = _routerAddr(ID_B);

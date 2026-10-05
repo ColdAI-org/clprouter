@@ -135,6 +135,9 @@ interface IClprRouter {
     error WithdrawFailed();
     /// @notice A held receipt is still blocked by a disable; retry {ClprRouter.forward} once it lapses.
     error ReceiptHeld(RouteTypes.Reason reason);
+    /// @notice An envelope arrived over a Channel whose direction into this ledger the provider registry does not
+    ///         approve (or approves with another verifier than the one this ledger's CLPR Service uses for it).
+    error ChannelNotApproved(bytes32 channelId);
 
     // ── Events ──────────────────────────────────────────────────────────────
 

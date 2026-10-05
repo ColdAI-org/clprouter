@@ -103,16 +103,45 @@ library RouteLogic {
         }
     }
 
-    /// @notice Route-safety reason for the edge hops[i] -> hops[i+1] (disabled edge, ledger or Router), or NONE.
+    /// @notice Route-safety reason for the edge hops[i] -> hops[i+1] (Channel direction not approved or disabled;
+    ///         next ledger or Router disabled), or NONE.
     function edgeSafety(IProviderRegistry registry, RouteTypes.Hop memory h, RouteTypes.Hop memory next)
         public
         view
         returns (RouteTypes.Reason)
     {
-        if (registry.isDisabled(Caip.edgeKey(h.channelId, next.ledgerId))) return RouteTypes.Reason.DISABLED_EDGE;
+        bytes32 edge = Caip.edgeKey(h.channelId, next.ledgerId);
+        if (!approved(registry, h.channelId, next.ledgerId) || registry.isDisabled(edge)) {
+            return RouteTypes.Reason.DISABLED_EDGE;
+        }
         if (registry.isDisabled(Caip.ledgerKey(next.ledgerId))) return RouteTypes.Reason.DISABLED_LEDGER;
         if (registry.isDisabled(Caip.routerKey(next.ledgerId, next.router))) return RouteTypes.Reason.DISABLED_ROUTER;
         return RouteTypes.Reason.NONE;
+    }
+
+    /// @notice The provider registry approves the direction of `channelId` that delivers into `toLedgerId`.
+    function approved(IProviderRegistry registry, bytes32 channelId, string memory toLedgerId)
+        public
+        view
+        returns (bool ok)
+    {
+        (ok,,,) = registry.channelApproval(Caip.edgeKey(channelId, toLedgerId));
+    }
+
+    /// @notice The Channel `channelId` an envelope arrived over, as this ledger's CLPR Service reports it: the
+    ///         keccak256 of its peer ledger's CAIP-2 id (zero if unknown), and whether the registry approves its
+    ///         direction into `here` with exactly the verifier (address and code hash) the Service uses for it.
+    function inboundChannel(IClprService service, IProviderRegistry registry, bytes32 channelId, string memory here)
+        public
+        returns (bytes32 peerHash, bool ok)
+    {
+        try service.getChannel(channelId) returns (ClprTypes.Channel memory c) {
+            (bool labelled,, address verifier, bytes32 codeHash) =
+                registry.channelApproval(Caip.edgeKey(channelId, here));
+            return (ledgerHash(c.chainId), labelled && c.verifier == verifier && verifier.codehash == codeHash);
+        } catch {
+            return (bytes32(0), false);
+        }
     }
 
     /// @notice The edge hops[i] -> hops[i+1] meets the trust floor `floor`: the provider registry labels it with
@@ -170,8 +199,10 @@ library RouteLogic {
     }
 
     /// @notice Checks on the edge leaving hop `idx` of `e` (whose Channel the caller already matched with the next
-    ///         ledger): disabled edge, ledger or Router; for routes also filters on the next ledger at the pinned
-    ///         registry version, the edge's trust tier against the trust floor, and the fee budget.
+    ///         ledger): Channel direction approved and not disabled, next ledger and Router not disabled; for routes
+    ///         also the way back (the Channel's direction into this ledger, which the receipt takes, approved),
+    ///         filters on the next ledger at the pinned registry version, the edge's trust tier against the trust
+    ///         floor, and the fee budget.
     function checkNext(IProviderRegistry registry, RouteTypes.Envelope memory e, uint256 idx)
         public
         view
@@ -181,6 +212,7 @@ library RouteLogic {
         RouteTypes.Hop memory next = e.hops[idx + 1];
         RouteTypes.Reason r = edgeSafety(registry, h, next);
         if (r != RouteTypes.Reason.NONE || e.payloadType == RouteTypes.PayloadType.RECEIPT) return r;
+        if (!approved(registry, h.channelId, h.ledgerId)) return RouteTypes.Reason.DISABLED_EDGE;
         if (!filtersPass(registry, next.ledgerId, e.constraints, e.filterRegistryVersions)) {
             return RouteTypes.Reason.FILTER;
         }
@@ -214,7 +246,8 @@ library RouteLogic {
     }
 
     /// @notice Origin-side check of a whole route before any value moves: own Router and ledger, then every
-    ///         edge (route safety, trust floor) and every ledger's filters. Returns the first failing (hop, reason), or (0, NONE).
+    ///         edge (route safety, both directions of its Channel approved, trust floor) and every ledger's
+    ///         filters. Returns the first failing (hop, reason), or (0, NONE).
     function checkRoute(IProviderRegistry registry, bytes32 selfRouterKey, uint32 version, RouteTypes.Envelope memory e)
         public
         view
@@ -230,6 +263,10 @@ library RouteLogic {
         for (uint256 i = 0; i + 1 < e.hops.length; i++) {
             RouteTypes.Reason r = edgeSafety(registry, e.hops[i], e.hops[i + 1]);
             if (r != RouteTypes.Reason.NONE) return (i, r);
+            // The receipt comes back over the same Channel in the other direction.
+            if (!approved(registry, e.hops[i].channelId, e.hops[i].ledgerId)) {
+                return (i, RouteTypes.Reason.DISABLED_EDGE);
+            }
             if (!edgeTrusted(registry, e.hops[i], e.hops[i + 1], e.constraints.trustFloor)) {
                 return (i, RouteTypes.Reason.TRUST_FLOOR);
             }

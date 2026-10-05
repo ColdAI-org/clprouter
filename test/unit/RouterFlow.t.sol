@@ -317,6 +317,9 @@ contract RouterFlowTest is ThreeLedgerFixture {
     }
 
     function test_send_revertsWhenFirstChannelGoesElsewhere() public {
+        // Even if the registry approved that Channel in both directions, its peer is not B: a bad route.
+        _apply(A.registry, A_TRUST_TIER, _trustPayload(chBC, ID_A, 0, address(A.service)));
+        vm.warp(block.timestamp + CERT_NOTICE);
         IClprRouter.SendRequest memory req = _request(0);
         req.hops[0].channelId = chBC; // not a channel on A
         vm.expectRevert(abi.encodeWithSelector(IClprRouter.RouteBlocked.selector, 0, RouteTypes.Reason.BAD_ROUTE));
@@ -730,15 +733,8 @@ contract RouterFlowTest is ThreeLedgerFixture {
     }
 
     // ═════════════════════════════════════════════════════════════════════
-    // Trust floor (edge trust tiers labelled in the provider registry)
+    // Trust floor (edge trust tiers labelled in the provider registry; every edge starts at tier 0)
     // ═════════════════════════════════════════════════════════════════════
-
-    uint8 internal constant A_TRUST_TIER = 11;
-
-    /// @dev Label the edge `ch` → `toLedger` with `tier` on every ledger's registry.
-    function _labelAll(bytes32 ch, string memory toLedger, uint8 tier) internal {
-        _applyAll(A_TRUST_TIER, abi.encode(ch, toLedger, tier));
-    }
 
     function _floorRequest(uint256 escrow, uint32 floor) internal view returns (IClprRouter.SendRequest memory req) {
         req = _request(escrow);
@@ -746,11 +742,11 @@ contract RouterFlowTest is ThreeLedgerFixture {
         req.constraints.deadline = uint64(block.timestamp + 10 days);
     }
 
-    /// @dev Only forward edges are labelled: receipts carry no floor, so the unlabelled reverse edges still
-    ///      bring the DELIVERED receipt home.
+    /// @dev Only forward edges are raised: receipts carry no floor, so the tier-0 reverse edges still bring the
+    ///      DELIVERED receipt home.
     function test_trustFloor_edgesAtOrAboveFloor_deliver() public {
-        _labelAll(chAB, ID_B, 3);
-        _labelAll(chBC, ID_C, 2);
+        _labelAll(chAB, B, 3);
+        _labelAll(chBC, C, 2);
         vm.warp(block.timestamp + CERT_NOTICE);
         bytes16 id = _sendAs(alice, _floorRequest(1 ether, 2), 1.1 ether);
         _settle();
@@ -758,38 +754,38 @@ contract RouterFlowTest is ThreeLedgerFixture {
         assertEq(payee.balance, 1 ether);
     }
 
-    function test_trustFloor_zero_ignoresMissingLabels() public {
+    function test_trustFloor_zero_acceptsEveryApprovedEdge() public {
         bytes16 id = _sendAs(alice, _floorRequest(0, 0), 0.03 ether);
         _settle();
         assertEq(uint8(_routeStatus(id)), uint8(IClprRouter.RouteStatus.DELIVERED));
     }
 
-    function test_trustFloor_unlabelledEdge_atSend_reverts() public {
-        _labelAll(chAB, ID_B, 3);
+    function test_trustFloor_edgeAtLowestTier_atSend_reverts() public {
+        _labelAll(chAB, B, 3);
         vm.warp(block.timestamp + CERT_NOTICE);
         vm.expectRevert(abi.encodeWithSelector(IClprRouter.RouteBlocked.selector, 1, RouteTypes.Reason.TRUST_FLOOR));
         _sendAs(alice, _floorRequest(0, 1), 0.03 ether);
     }
 
     function test_trustFloor_edgeBelowFloor_atSend_reverts() public {
-        _labelAll(chAB, ID_B, 1); // committee tier
-        _labelAll(chBC, ID_C, 3);
+        _labelAll(chAB, B, 1); // committee tier
+        _labelAll(chBC, C, 3);
         vm.warp(block.timestamp + CERT_NOTICE);
         vm.expectRevert(abi.encodeWithSelector(IClprRouter.RouteBlocked.selector, 0, RouteTypes.Reason.TRUST_FLOOR));
         _sendAs(alice, _floorRequest(1 ether, 2), 1.1 ether);
     }
 
     function test_trustFloor_labelBeforeNotice_reverts() public {
-        _labelAll(chAB, ID_B, 3);
-        _labelAll(chBC, ID_C, 3);
+        _labelAll(chAB, B, 3);
+        _labelAll(chBC, C, 3);
         vm.warp(block.timestamp + CERT_NOTICE - 1);
         vm.expectRevert(abi.encodeWithSelector(IClprRouter.RouteBlocked.selector, 0, RouteTypes.Reason.TRUST_FLOOR));
         _sendAs(alice, _floorRequest(0, 1), 0.03 ether);
     }
 
     function test_trustFloor_aboveHighestTier_neverPasses() public {
-        _labelAll(chAB, ID_B, 3);
-        _labelAll(chBC, ID_C, 3);
+        _labelAll(chAB, B, 3);
+        _labelAll(chBC, C, 3);
         vm.warp(block.timestamp + CERT_NOTICE);
         vm.expectRevert(abi.encodeWithSelector(IClprRouter.RouteBlocked.selector, 0, RouteTypes.Reason.TRUST_FLOOR));
         _sendAs(alice, _floorRequest(0, 4), 0.03 ether);
@@ -798,12 +794,12 @@ contract RouterFlowTest is ThreeLedgerFixture {
     /// @dev B's registry lowers B → C below the floor while the route is in flight: B refuses to forward,
     ///      sends a FAILED receipt, and the origin refunds the escrow and the unused budget.
     function test_trustFloor_downgradeMidRoute_stopsAtHopAndRefunds() public {
-        _labelAll(chAB, ID_B, 3);
-        _labelAll(chBC, ID_C, 3);
+        _labelAll(chAB, B, 3);
+        _labelAll(chBC, C, 3);
         vm.warp(block.timestamp + CERT_NOTICE);
         uint256 before = alice.balance;
         bytes16 id = _sendAs(alice, _floorRequest(1 ether, 3), 1.1 ether);
-        _apply(B.registry, A_TRUST_TIER, abi.encode(chBC, ID_C, uint8(2)));
+        _apply(B.registry, A_TRUST_TIER, _trustPayload(chBC, ID_C, 2, _verifierOf(C, chBC)));
         vm.warp(block.timestamp + REMOVAL_NOTICE);
 
         (, Vm.Log[] memory logs) = _relayWithLogs(A, B, chAB);

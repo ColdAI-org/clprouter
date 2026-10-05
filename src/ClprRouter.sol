@@ -23,10 +23,12 @@ import {Caip} from "./libraries/Caip.sol";
 ///         A CLPR application on top of an unchanged CLPR Service: it only calls `sendMessage` and implements
 ///         `IClprApplication`.
 /// @dev Immutable, no admin key, no pause. Deployed by {ClprRouterDeployer} at the canonical CREATE2 address of its
-///      ledger; it accepts envelopes only from, and forwards only to, the canonical Routers of the deployment, so
-///      every envelope on the wire was built by this code. The only outside inputs that change behaviour are the
-///      provider registry (route disables, blacklist, filter certifications, edge trust tiers) whose address is
-///      fixed at deployment.
+///      ledger; it accepts envelopes only from, and forwards only to, the canonical Routers of the deployment, and
+///      only over Channel directions the provider registry approves (with, on the receiving side, exactly the
+///      verifier the approval names), so every envelope on the wire was built by this code and carried by an
+///      approved Channel. The only outside inputs that change behaviour are the provider registry (Channel
+///      approvals and trust tiers, route disables, blacklist, filter certifications) whose address is fixed at
+///      deployment.
 ///
 ///      Flow: `send` on the origin → forward inside CLPR application delivery on each intermediate ledger →
 ///      deliver to the destination application → receipt back to the origin as a new routed message → origin
@@ -218,7 +220,8 @@ contract ClprRouter is IClprApplication, IClprRouter, ReentrancyGuardTransient {
     /// @notice CLPR delivery of an envelope from the previous hop's Router.
     /// @dev Reverts (CLPR APPLICATION_ERROR to the previous hop) only if the envelope is malformed, names a
     ///      non-canonical Router, is not addressed to this hop, not from the Router named for the previous hop,
-    ///      or a replay (or if too little gas was given to run the destination application). Every other
+    ///      arrived over a Channel direction the registry does not approve ({ChannelNotApproved}), or is a replay
+    ///      (or if too little gas was given to run the destination application). Every other
     ///      outcome — forwarded, pending, held, delivered, or stopped with a receipt — returns normally.
     /// @return response `abi.encodePacked(uint8 accepted|rejected, uint8 reason)`.
     function onClprMessage(bytes32 channelId, bytes calldata sender, bytes calldata messageData)
@@ -532,7 +535,11 @@ contract ClprRouter is IClprApplication, IClprRouter, ReentrancyGuardTransient {
             revert NotForThisHop();
         }
         if (prev.channelId != channelId || keccak256(prev.router) != keccak256(sender)) revert UnexpectedSender();
-        if (_peerLedgerHash(channelId) != keccak256(bytes(prev.ledgerId))) revert UnexpectedSender();
+        // The Channel must lead to the previous hop's ledger, and its direction into this ledger must be approved
+        // with the verifier this ledger's Service uses for it: a Channel anyone opened proves nothing.
+        (bytes32 peer, bool approved) = RouteLogic.inboundChannel(SERVICE, REGISTRY, channelId, ledgerId);
+        if (peer != keccak256(bytes(prev.ledgerId))) revert UnexpectedSender();
+        if (!approved) revert ChannelNotApproved(channelId);
         if (e.payloadType == RouteTypes.PayloadType.RECEIPT) {
             // A receipt is reported by the Router that built it: its origin is its first hop.
             if (

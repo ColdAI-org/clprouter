@@ -7,10 +7,12 @@ import {ClprRouterDeployer} from "@clprouter/ClprRouterDeployer.sol";
 import {IClprRouterDeployer} from "@clprouter/interfaces/IClprRouter.sol";
 import {IProviderRegistry} from "@clprouter/interfaces/IProviderRegistry.sol";
 import {IQuarantineVault} from "@clprouter/interfaces/IQuarantineVault.sol";
+import {ProviderRegistry} from "@clprouter/ProviderRegistry.sol";
+import {Committee} from "./Committee.sol";
 
 /// @notice Deploys CLPRouters of one test deployment at their canonical CREATE2 addresses and computes the
 ///         canonical address of any (deployed or not) ledger's Router.
-abstract contract RouterDeploy {
+abstract contract RouterDeploy is Committee {
     ClprRouterDeployer internal routerDeployer;
 
     function _initRouterDeployer() internal {
@@ -46,5 +48,18 @@ abstract contract RouterDeploy {
     /// @dev Hop-state / replay key of envelope `id` that originated at (`ledgerId`, `router`).
     function _key(string memory ledgerId, address router, bytes16 id) internal pure returns (bytes32) {
         return keccak256(abi.encode(keccak256(bytes(ledgerId)), keccak256(abi.encodePacked(router)), id));
+    }
+
+    /// @dev Approve the direction of `ch` into `toLedger` on `reg` with `verifier` (tier 0); effective after CERT_NOTICE.
+    function _approveChannel(ProviderRegistry reg, bytes32 ch, string memory toLedger, address verifier) internal {
+        _apply(reg, A_TRUST_TIER, _trustPayload(ch, toLedger, 0, verifier));
+    }
+
+    /// @dev Approve both directions of `ch` between `x` and `y` on `reg` (tier 0, `verifier` on both sides).
+    function _approveBoth(ProviderRegistry reg, bytes32 ch, string memory x, string memory y, address verifier)
+        internal
+    {
+        _approveChannel(reg, ch, x, verifier);
+        _approveChannel(reg, ch, y, verifier);
     }
 }

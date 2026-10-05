@@ -47,7 +47,9 @@ import {RouteApp} from "../../test/helpers/RouteApp.sol";
 ///         Routers are deployed by one ClprRouterDeployer at their canonical CREATE2 addresses. The deployer is
 ///         the first contract the deployer key creates after the two libraries (nonce 2) on each chain, so it has
 ///         the same address on A, H and B without relying on a deterministic-deployment proxy on Solo. Each vault
-///         is bound to its ledger's Router by a k + 1 committee decision.
+///         is bound to its ledger's Router by a k + 1 committee decision, and the committee approves both
+///         directions of both Channels on every ledger (`approveChannels`); routes flow once the registry's
+///         certification notice (`CERT_NOTICE`, 1 day here, the registry's floor) has passed.
 contract E2EHiero is Script {
     // anvil default accounts 0 (deployer, relayer, also funded on Solo by run.sh) and 1 (alice, sender on A)
     uint256 internal constant DEPLOYER_PK = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
@@ -61,6 +63,10 @@ contract E2EHiero is Script {
     bytes32 internal constant ROUTER_SALT = keccak256("clprouter-e2e-hiero.routers");
     uint8 internal constant K = 3;
     uint8 internal constant ACTION_VAULT_BIND_ROUTER = 12;
+    uint8 internal constant ACTION_TRUST_TIER = 11;
+    /// @dev Registry notices [cert, removal, reenable, disable lapse, blacklist lapse, committee]: certification
+    ///      (and so Channel approval) at the registry's 1-day floor, since Solo's clock cannot be advanced.
+    uint64 internal constant CERT_NOTICE = 1 days;
 
     struct Ledger {
         string id;
@@ -117,9 +123,7 @@ contract E2EHiero is Script {
         );
         svc.initialize(abi.encodePacked(address(svc)), throttles, "", "", _econ(here));
         svc.setClprEnabled(true);
-        ProviderRegistry reg = new ProviderRegistry(
-            DEPLOYMENT_ID, _members(), K, CONTACT, [uint64(7 days), 72 hours, 7 days, 7 days, 30 days, 7 days]
-        );
+        ProviderRegistry reg = new ProviderRegistry(DEPLOYMENT_ID, _members(), K, CONTACT, _notices());
         QuarantineVault vault = new QuarantineVault(IProviderRegistry(address(reg)), 3 days, 7 days);
         ClprRouter router = ClprRouter(
             deployer.deploy(
@@ -216,6 +220,44 @@ contract E2EHiero is Script {
             id, pubKey, abi.encodePacked(r, s, v), bytes32(0), ch, address(c), vm.addr(DEPLOYER_PK)
         );
         vm.stopBroadcast();
+    }
+
+    /// @notice On `here`: relay the committee's approval of both directions of both Channels (k signatures each),
+    ///         each naming the verifier the receiving ledger's Service uses for that Channel. They take effect
+    ///         CERT_NOTICE after this call; prints APPROVED_AT with the time they do.
+    function approveChannels(uint8 here) external {
+        _load(here);
+        _approve(here, chAH, 1); // A -> H
+        _approve(here, chAH, 0); // H -> A
+        _approve(here, chHB, 2); // H -> B
+        _approve(here, chHB, 1); // B -> H
+        vm.selectFork(L[here].fork);
+        console.log("APPROVED_AT", block.timestamp + CERT_NOTICE);
+    }
+
+    function _approve(uint8 here, bytes32 ch, uint8 to) internal {
+        vm.selectFork(L[to].fork);
+        address verifier = L[to].service.getChannel(ch).verifier;
+        bytes32 codeHash = verifier.codehash;
+        vm.selectFork(L[here].fork);
+        ProviderRegistry reg = L[here].registry;
+        IProviderRegistry.Decision memory d = IProviderRegistry.Decision({
+            action: ACTION_TRUST_TIER,
+            payload: abi.encode(ch, L[to].id, uint8(0), verifier, codeHash),
+            evidenceHash: keccak256(abi.encode("e2e: approve Channel direction", ch, L[to].id)),
+            nonce: reg.version() + 1,
+            effectiveAt: 0,
+            validUntil: uint64(block.timestamp + 1 days),
+            epoch: reg.epoch()
+        });
+        bytes[] memory sigs = _sign(reg.decisionDigest(d), reg.requiredSignatures(ACTION_TRUST_TIER));
+        vm.startBroadcast(DEPLOYER_PK);
+        reg.submit(d, sigs);
+        vm.stopBroadcast();
+    }
+
+    function _notices() internal pure returns (uint64[6] memory) {
+        return [CERT_NOTICE, 1 hours, 7 days, 7 days, 30 days, 7 days];
     }
 
     // ═════════════════════════════════════════════════════════════════════

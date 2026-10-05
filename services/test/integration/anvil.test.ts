@@ -229,6 +229,7 @@ describe.skipIf(!hasAnvil || !hasArtefacts)("services against a local anvil", ()
     // Routers live at their canonical CREATE2 addresses, deployed through one ClprRouterDeployer.
     const routerCode = await link(router);
     const deployer = await deploy(routerDeployer, [wallet.account!.address, keccak256(toHex("clprouter-anvil")), keccak256(routerCode)]);
+    const codeHash = async (a: Address) => keccak256((await pub.getCode({ address: a }))!);
     for (const id of IDS) {
       const service = await deploy(mock, [id]);
       const reg = await deploy(registry, [
@@ -253,6 +254,20 @@ describe.skipIf(!hasAnvil || !hasArtefacts)("services against a local anvil", ()
     await write(B().service, mock.abi, "setPeer", [CH_AB, A().id]);
     await write(B().service, mock.abi, "setPeer", [CH_BC, C().id]);
     await write(C().service, mock.abi, "setPeer", [CH_BC, B().id]);
+    // The committee approves both directions of both Channels on every ledger (each label names the verifier the
+    // receiving ledger uses: the mock service stands in for it), then the certification notice (1 day) passes.
+    const directions: [Hex, Ledger][] = [[CH_AB, B()], [CH_AB, A()], [CH_BC, C()], [CH_BC, B()]];
+    for (const l of L) {
+      for (const [ch, to] of directions) {
+        const payload = encodeAbiParameters(
+          [{ type: "bytes32" }, { type: "string" }, { type: "uint8" }, { type: "address" }, { type: "bytes32" }],
+          [ch, to.id, 0, to.service, await codeHash(to.service)],
+        );
+        await decide(l, 11, payload, K);
+      }
+    }
+    await pub.request({ method: "evm_increaseTime", params: [86_401] } as never);
+    await pub.request({ method: "evm_mine", params: [] } as never);
 
     process.env.CLPROUTER_TRIGGER_KEY_TEST = TRIGGER;
     const cfg: ServicesConfig = {

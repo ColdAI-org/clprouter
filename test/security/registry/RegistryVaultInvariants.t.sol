@@ -221,7 +221,7 @@ contract RegistryVaultHandler is AuditBase {
             uint8 k = uint8(cnt - 1 - ((seed >> 40) % 2));
             return abi.encode(_sortedAddrs(pk), k == 0 ? uint8(1) : k);
         }
-        if (action == 11) return abi.encode(keccak256("ch"), ledger, uint8(seed % 4));
+        if (action == 11) return _trustPayload(keccak256("ch"), ledger, uint8(seed % 4), address(reg));
         return abi.encode("mailto:x");
     }
 

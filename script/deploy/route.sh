@@ -17,6 +17,9 @@
 #   connector-sepolia | connector-hedera
 #   route-fixtures-sepolia | route-fixtures-hedera   (after deploy.sh) allow the Router on the Connector,
 #                                       destination app on Hedera
+#   approve-sepolia | approve-hedera    the TEST committee approves both directions of the Channel in that chain's
+#                                       registry (needs COMMITTEE_PKS: comma-separated committee keys, at least k,
+#                                       from deployments/.local/); routes may use the Channel after CERT_NOTICE
 #   send                                Router.send on Sepolia
 #   deliver                             wait for a sync-committee-signed header past the send block, build the
 #                                       bundle proof, pre-flight it on Hedera, submitBundle on Hedera
@@ -133,6 +136,8 @@ case "$STEP" in
     connector-hedera) fs hedera-testnet "registerConnector()" ;;
     route-fixtures-sepolia) fs sepolia "deployRouteFixtures()" ;;
     route-fixtures-hedera) fs hedera-testnet "deployRouteFixtures()" ;;
+    approve-sepolia) : "${COMMITTEE_PKS:?}"; fs sepolia "approveChannel()" ;;
+    approve-hedera) : "${COMMITTEE_PKS:?}"; fs hedera-testnet "approveChannel()" ;;
     send)
         fs sepolia "send()"
         if [[ "$BROADCAST" == "--broadcast" ]]; then
