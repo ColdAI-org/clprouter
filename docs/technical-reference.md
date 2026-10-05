@@ -265,7 +265,7 @@ Requires Foundry (tested with forge 1.5.1).
 ```sh
 git submodule update --init --recursive
 forge build --sizes --skip 'test/**' --skip 'script/**'   # contract sizes (all under 24,576 B)
-forge test                                                # 278 unit, security and in-process integration tests
+forge test                                                # 379 unit, fuzz, invariant, security and in-process integration tests
 script/e2e/run.sh                                         # three anvil chains, five routes (~9 minutes)
 ```
 

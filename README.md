@@ -19,7 +19,7 @@
   <a href="https://github.com/ColdAI-org/clprouter/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ColdAI-org/clprouter/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/ColdAI-org/clprouter/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/ColdAI-org/clprouter/actions/workflows/codeql.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/ColdAI-org/clprouter/actions/workflows/nightly-e2e.yml"><img alt="Nightly e2e" src="https://github.com/ColdAI-org/clprouter/actions/workflows/nightly-e2e.yml/badge.svg?branch=main"></a>
-  <img alt="Tests: 743 passing" src="https://img.shields.io/badge/tests-743%20passing-2ea44f">
+  <img alt="Tests: 767 passing" src="https://img.shields.io/badge/tests-767%20passing-2ea44f">
   <br>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-black"></a>
   <img alt="Solidity 0.8.30" src="https://img.shields.io/badge/Solidity-0.8.30-363636?logo=solidity">
@@ -116,7 +116,7 @@ flowchart LR
 
 | Component | What it is |
 | --- | --- |
-| [`ClprRouter`](src/ClprRouter.sol) | One per ledger, deployed at a canonical CREATE2 address. Immutable: no admin key, no pause, no upgrade. 22,417 B runtime (EIP-170 limit 24,576 B). |
+| [`ClprRouter`](src/ClprRouter.sol) | One per ledger, deployed at a canonical CREATE2 address. Immutable: no admin key, no pause, no upgrade. 23,175 B runtime (EIP-170 limit 24,576 B). |
 | [`ProviderRegistry`](src/ProviderRegistry.sol) | Append-only, hash-chained register of k-of-n committee decisions: certifications, disables, blacklist. |
 | [`QuarantineVault`](src/QuarantineVault.sol) | Per-ledger vault for funds diverted by the blacklist, with fixed release rules. |
 | [`ClprRouterDeployer`](src/ClprRouterDeployer.sol) | Deploys each ledger's Router at its canonical address; every hop refuses non-canonical Routers. |
@@ -258,10 +258,10 @@ jq.
 ```sh
 git clone --recurse-submodules https://github.com/ColdAI-org/clprouter && cd clprouter
 
-forge test --skip 'script/**'                # 359 contract tests in 22 suites: unit, fuzz, invariant, security, three-ledger
-(cd sdk && pnpm install && pnpm test)        # 212 tests: planner, envelope codec, ISO 20022
+forge test --skip 'script/**'                # 379 contract tests in 24 suites: unit, fuzz, invariant, security, three-ledger
+(cd sdk && pnpm install && pnpm test)        # 213 tests: planner, envelope codec, ISO 20022
 forge build                                  # artefacts for the services' anvil integration test
-(cd services && pnpm install && pnpm test)   # 172 tests: services, Settle Connector, anvil integration
+(cd services && pnpm install && pnpm test)   # 175 tests: services, Settle Connector, anvil integration
 
 make demo                  # three anvil chains, five routes A → B → C and back, summary table (about 9 minutes)
 script/settle-e2e/run.sh   # Settle on Hedera on three anvil chains, four scenarios, with Hedera trace-size checks

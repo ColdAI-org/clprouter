@@ -9,28 +9,28 @@ These are the values the README badges use.
 
 | Badge | Value | Source |
 | --- | --- | --- |
-| tests | **743 passing** (359 contracts, 212 SDK, 172 services) | `make test-contracts`, `make test-sdk`, `cd services && pnpm test` |
-| symbolic proofs | **14 halmos properties proven** | `make halmos` |
-| coverage | **96.1% lines** (96.2% statements, 86.3% branches, 96.5% functions) | `make coverage` |
-| fuzz | **15 fuzz tests × 10,000 runs, 14 invariants × 10,000 runs**, 0 failures | see [Fuzzing and invariants](#fuzzing-and-invariants) |
-| static analysis | slither: 0 open issues (155 results, all triaged below) | `make slither` |
+| tests | **767 passing** (379 contracts, 213 SDK, 175 services) | `make test-contracts`, `make test-sdk`, `cd services && pnpm test` |
+| symbolic proofs | **16 halmos properties proven** | `make halmos` |
+| coverage | **96.1% lines** (96.2% statements, 85.7% branches, 96.6% functions) | `make coverage` |
+| fuzz | **16 fuzz tests × 10,000 runs, 15 invariants × 10,000 runs**, 0 failures | see [Fuzzing and invariants](#fuzzing-and-invariants) |
+| static analysis | slither: 0 open issues (168 results, all triaged below) | `make slither` |
 | dependency audit | 0 known advisories in CLPRouter's lockfiles (OSV-Scanner, pnpm audit) | `.github/workflows/dependency-audit.yml` |
 
 Badge data, for shields.io endpoints or static badges:
 
 ```json
 {
-  "tests": 743,
-  "contractTests": 359,
-  "sdkTests": 212,
-  "servicesTests": 172,
+  "tests": 767,
+  "contractTests": 379,
+  "sdkTests": 213,
+  "servicesTests": 175,
   "coverageLines": "96.1%",
   "coverageStatements": "96.2%",
-  "coverageBranches": "86.3%",
-  "coverageFunctions": "96.5%",
+  "coverageBranches": "85.7%",
+  "coverageFunctions": "96.6%",
   "fuzzRuns": 10000,
   "invariantRuns": 10000,
-  "halmosProofs": 14
+  "halmosProofs": 16
 }
 ```
 
@@ -38,19 +38,18 @@ Badge data, for shields.io endpoints or static badges:
 
 | Suite | Tests | Command |
 | --- | --- | --- |
-| Contracts: unit, fuzz, invariant, security regression (22 suites) | 359 | `forge test --skip 'script/**'` (2 min 46 s on an M-series laptop) |
-| SDK: planner, envelope, ISO 20022, route data | 212 | `cd sdk && pnpm test` |
+| Contracts: unit, fuzz, invariant, security regression (24 suites) | 379 | `forge test --skip 'script/**'` (about 3 min on an M-series laptop) |
+| SDK: planner, envelope, ISO 20022, route data | 213 | `cd sdk && pnpm test` |
 | SDK package: pack, install into a scratch project, import every entry point, type-check a consumer | 1 check | `cd sdk && pnpm run test:pack` |
-| Services: unit (167) and integration on anvil (5) | 172 | `cd services && pnpm test` |
-| End to end: three anvil chains, 5 scenarios, 42 transactions | 5 scenarios | `make demo` (about 9 min; `make demo-docker` with only Docker) |
+| Services: unit (170) and integration on anvil (5) | 175 | `cd services && pnpm test` |
+| End to end: three anvil chains, 5 scenarios, 42 transactions | 5 scenarios | `make demo` (about 13 min including the Channel approvals; `make demo-docker` with only Docker) |
 
 ## Formal guarantees (halmos)
 
 Symbolic tests live in [`test/halmos/`](../test/halmos). halmos executes the real contract bytecode with symbolic
 inputs and asks an SMT solver whether any input can break the assertion, so a passing `check_*` is a proof for
 **every** input within the stated bounds, not a sample. They are named `check_*` so `forge test` skips them; run
-them with `make halmos` (foundry profile `halmos`, own `out-halmos/` directory). CI runs them in the `halmos` job. All 14 pass; the whole run takes 2 min 50 s including compilation (2 min 33 s
-of solving).
+them with `make halmos` (foundry profile `halmos`, own `out-halmos/` directory). CI runs them in the `halmos` job. All 16 pass; the whole run takes 2 min 20 s including compilation.
 
 Common modelling choices:
 
@@ -79,6 +78,8 @@ Common modelling choices:
 | 12 | ClprRouter (RouteSettlement) | **No double refund**: the two-phase reclaim refunds escrow + whole budget to the sender exactly once, never before deadline + grace × edges, never while a receipt is held, and the third call reverts | `check_reclaim_refundsOnce` | timestamps < 2^40 s | <1 s |
 | 13 | SettleOrderBook | **Bond accounting, inductive**: from any state with reserved + pendingWithdraw ≤ total (free bond never negative) and an open order's reservation inside its Connector's, every bond and order operation (post, request / cancel / execute withdrawal, default, cancel) keeps it; HBAR moves exactly with `total` + `totalOwed`; a default or cancel pays the user exactly the order's reservation, which is ≤ cover + penalty | `check_bondAccounting_inductive` | symbolic storage, any penalty ≤ 50%, any caller amounts | 7 s |
 | 14 | SettleOrderBook | **No double payout**: once an order is not OPEN, both default and cancel revert and nothing moves | `check_noDoublePayout` | symbolic storage, any caller | <1 s |
+| 15 | ProviderRegistry | **Hand-over quorum**: once a scheduled committee's notice has passed, `requiredSignatures` is at least max(k + 1, ⌈2n/3⌉) for every action (the vault uses it for its own decisions); before it, the quorum table of proof 1 | `check_requiredSignatures_supermajorityAfterNotice` | every committee shape for n = 3..7, every k, every action id, any take-over time before or after now | 15 s |
+| 16 | QuarantineVault | **Recovery window per deposit**: from any vault state, a release to the recovery address (with or without a challenge override) happens only once `RECOVERY_NOTICE + CHALLENGE_WINDOW` have passed since the naming and since the deposit itself | `check_recoveryRelease_waitsForDepositWindow` | symbolic storage, any time | 2 s |
 
 What is **not** proven symbolically, and how it is covered instead:
 
@@ -94,29 +95,31 @@ What is **not** proven symbolically, and how it is covered instead:
   bound (reserved <= cover + penalty, free bond first) is covered by `testFuzz_reserveNeverExceedsBond`,
   `invariant_bondAccounting` and `invariant_payouts`; proof 13 starts from any state where an order's reservation
   is at most its cover + penalty and shows every later operation keeps the accounting.
-- Registry decisions with a pending committee take-over (supermajority of the outgoing committee after the notice)
-  are covered by unit tests and `invariant_decisionsOnlyWithQuorum`.
+- Registry decisions with a pending committee take-over are covered by unit tests and
+  `invariant_decisionsOnlyWithQuorum`; proof 15 shows the quorum rule itself for every action.
+- That Routers carry nothing over a Channel the registry does not approve is shown on the real Router by
+  `invariant_onlyApprovedChannelsCarryMessages` and the `RouterTrustBoundary` tests, not symbolically.
 
 ## Fuzzing and invariants
 
 Run locally on 2026-10-05 with a fixed seed (`FOUNDRY_FUZZ_SEED=0x2a`), all passing:
 
-| Kind | Tests | Runs | Calls | Wall time |
-| --- | --- | --- | --- | --- |
-| Fuzz (`testFuzz_*`) | 15 | 10,000 each | 150,000 | 45 s |
-| Invariants: registry and vault (`RegistryVaultInvariants`) | 5 | 10,000 × depth 64 | 640,000 each | 10 min 45 s |
-| Invariants: router (`RouterInvariants`, three CLPR ledgers per run) | 6 | 10,000 × depth 60 | 600,000 each | 14 min 36 s |
-| Invariants: settle on Hedera (`SettleInvariants`, fail on revert) | 3 | 10,000 × depth 60 | 600,000 each | 5 min 29 s |
+| Kind | Tests | Runs | Calls |
+| --- | --- | --- | --- |
+| Fuzz (`testFuzz_*`) | 16 | 10,000 each | 160,000 |
+| Invariants: registry and vault (`RegistryVaultInvariants`) | 5 | 10,000 × depth 64 | 640,000 each |
+| Invariants: router (`RouterInvariants`, origin Router against a Service stand-in) | 7 | 10,000 × depth 60 | 600,000 each |
+| Invariants: settle on Hedera (`SettleInvariants`, fail on revert) | 3 | 10,000 × depth 60 | 600,000 each |
 
 ```sh
-FOUNDRY_FUZZ_RUNS=10000 forge test --skip 'script/**' --match-test '^testFuzz'
-FOUNDRY_INVARIANT_RUNS=10000 FOUNDRY_INVARIANT_DEPTH=64 forge test --skip 'script/**' --match-test '^invariant'
+FOUNDRY_PROFILE=deep FOUNDRY_FUZZ_SEED=0x2a forge test --skip 'script/**' --match-test '^(testFuzz|invariant)'
 ```
 
-The router and settle invariant suites pin `runs = 64, depth = 60` in inline `forge-config` comments (each run
-deploys three CLPR ledgers), which take precedence over the environment; the 10,000-run figures above were taken with
-those lines set to 10,000 in a scratch copy. CI runs every fuzz test at 10,000 runs and the invariants at
-512 × 64 (`forge-fuzz` job, seed = run number).
+The `deep` profile (`foundry.toml`) runs fuzz tests at 10,000 runs and invariants at 10,000 × 64; the router and
+settle suites pin `runs = 64, depth = 60` for the default run in inline `forge-config` comments and carry matching
+`deep.` lines (10,000 × 60). The whole deep run takes about 17 minutes on an M-series laptop, the router suite alone
+about 8. CI runs every fuzz test at 10,000 runs and the invariants at 512 × 64 (`forge-fuzz` job, seed = run
+number).
 
 ## Coverage
 
@@ -125,21 +128,21 @@ Router's source maps are reported). Tests whose assertions depend on exact gas a
 
 | File | Lines | Statements | Branches | Functions |
 | --- | --- | --- | --- | --- |
-| src/ClprRouter.sol | 97.65% (249/255) | 97.45% (306/314) | 91.30% (63/69) | 100.00% (24/24) |
-| src/ClprRouterDeployer.sol | 94.44% (17/18) | 94.74% (18/19) | 100.00% (3/3) | 100.00% (5/5) |
-| src/ProviderRegistry.sol | 93.56% (218/233) | 95.54% (343/359) | 98.15% (53/54) | 80.00% (28/35) |
-| src/QuarantineVault.sol | 100.00% (85/85) | 96.90% (125/129) | 87.88% (29/33) | 100.00% (9/9) |
+| src/ClprRouter.sol | 97.72% (257/263) | 97.55% (318/326) | 91.55% (65/71) | 100.00% (25/25) |
+| src/ClprRouterDeployer.sol | 97.14% (34/35) | 98.36% (60/61) | 100.00% (5/5) | 100.00% (5/5) |
+| src/ProviderRegistry.sol | 93.88% (230/245) | 95.96% (356/371) | 98.28% (57/58) | 80.56% (29/36) |
+| src/QuarantineVault.sol | 100.00% (91/91) | 97.14% (136/140) | 88.24% (30/34) | 100.00% (10/10) |
 | src/libraries/Caip.sol | 100.00% (28/28) | 100.00% (32/32) | 100.00% (0/0) | 100.00% (8/8) |
-| src/libraries/RouteCodec.sol | 93.70% (223/238) | 94.41% (304/322) | 69.30% (79/114) | 100.00% (29/29) |
-| src/libraries/RouteLogic.sol | 98.70% (227/230) | 97.02% (358/369) | 88.33% (53/60) | 100.00% (26/26) |
+| src/libraries/RouteCodec.sol | 93.70% (223/238) | 93.79% (302/322) | 67.54% (77/114) | 100.00% (29/29) |
+| src/libraries/RouteLogic.sol | 97.99% (244/249) | 96.64% (374/387) | 86.36% (57/66) | 100.00% (29/29) |
 | src/libraries/RouteOrigin.sol | 64.29% (27/42) | 68.00% (34/50) | 44.44% (4/9) | 100.00% (2/2) |
-| src/libraries/RouteReceipts.sol | 100.00% (15/15) | 100.00% (19/19) | 100.00% (4/4) | 100.00% (1/1) |
-| src/libraries/RouteSettlement.sol | 98.59% (70/71) | 98.94% (93/94) | 100.00% (22/22) | 100.00% (6/6) |
+| src/libraries/RouteReceipts.sol | 100.00% (16/16) | 96.00% (24/25) | 80.00% (4/5) | 100.00% (1/1) |
+| src/libraries/RouteSettlement.sol | 98.61% (71/72) | 99.00% (99/100) | 100.00% (23/23) | 100.00% (6/6) |
 | src/settle/SettleDelivery.sol | 100.00% (21/21) | 100.00% (27/27) | 85.71% (6/7) | 100.00% (2/2) |
 | src/settle/SettleDeposit.sol | 100.00% (35/35) | 100.00% (56/56) | 93.33% (14/15) | 100.00% (3/3) |
 | src/settle/SettleOrderBook.sol | 99.65% (286/287) | 98.74% (393/398) | 93.90% (77/82) | 100.00% (38/38) |
 | src/settle/SettleTypes.sol | 84.85% (28/33) | 85.71% (30/35) | 100.00% (2/2) | 100.00% (11/11) |
-| **Total** | **96.10% (1529/1591)** | **96.18% (2138/2223)** | **86.29% (409/474)** | **96.48% (192/199)** |
+| **Total** | **96.13% (1591/1655)** | **96.18% (2241/2330)** | **85.74% (421/491)** | **96.59% (198/205)** |
 
 Notes: `RouteOrigin` is the origin-side send path that runs inside `ClprRouter.send` by DELEGATECALL; under
 `--ir-minimum` part of its lines are attributed to the Router. `RouteCodec` branches are the protobuf decoder's
@@ -148,10 +151,15 @@ than by line-targeted tests. `ProviderRegistry` functions below 100% are view he
 
 ## Gas
 
-[`.gas-snapshot`](../.gas-snapshot) holds the gas of every unit test (328 entries; fuzz and invariant runs are
+[`.gas-snapshot`](../.gas-snapshot) holds the gas of every unit test (348 entries; fuzz and invariant runs are
 excluded because their gas depends on the inputs). CI fails when it drifts (`forge snapshot --check` in the
 `forge` job). After an intended change: `make snapshot` and commit the file. Per-transaction gas of the end-to-end
 scenarios is in the nightly e2e summary and in [technical reference](technical-reference.md).
+
+Approved-Channel checks, as measured by `test_gasProfile_threeHopEscrowRoute` (one A → B → C route with escrow):
+`send` +33,085 gas (1,924,390; both directions of both edges are checked), each inbound message +3,000 to +64,000
+(the Channel's verifier is read from the Service and its label from the registry; largest for a receipt at an
+intermediate hop: 1,111,417), settlement at the origin +18,371 (1,210,868); the whole route 10,420,341 gas, +1.2 %.
 
 ## Contract sizes
 
@@ -160,15 +168,15 @@ separately and called by DELEGATECALL, so they do not count against the Router.
 
 | Contract | Runtime (B) | Initcode (B) | Runtime margin (B) |
 | --- | ---: | ---: | ---: |
-| ClprRouter (optimizer runs 200) | 22,417 | 24,717 | 2,159 |
-| ClprRouterDeployer | 2,786 | 2,981 | 21,790 |
-| ProviderRegistry | 14,628 | 16,996 | 9,948 |
-| QuarantineVault | 7,453 | 7,796 | 17,123 |
+| ClprRouter (optimizer runs 200) | 23,175 | 25,489 | 1,401 |
+| ClprRouterDeployer | 4,234 | 4,979 | 20,342 |
+| ProviderRegistry | 15,171 | 17,539 | 9,405 |
+| QuarantineVault | 7,607 | 7,923 | 16,969 |
 | RouteCodec (library) | 10,553 | 10,583 | 14,023 |
-| RouteLogic (library) | 16,184 | 16,217 | 8,392 |
+| RouteLogic (library) | 17,169 | 17,201 | 7,407 |
 | RouteOrigin (library) | 7,045 | 7,077 | 17,531 |
-| RouteReceipts (library) | 5,805 | 5,837 | 18,771 |
-| RouteSettlement (library) | 8,258 | 8,290 | 16,318 |
+| RouteReceipts (library) | 5,891 | 5,923 | 18,685 |
+| RouteSettlement (library) | 8,410 | 8,442 | 16,166 |
 | SettleOrderBook | 16,175 | 17,354 | 8,401 |
 | SettleDeposit | 4,315 | 4,868 | 20,261 |
 | SettleDelivery | 2,075 | 2,303 | 22,501 |
@@ -178,20 +186,20 @@ separately and called by DELEGATECALL, so they do not count against the Router.
 ### Slither
 
 `make slither` (CI: `slither` job, results in code scanning) with [`.github/slither.config.json`](../.github/slither.config.json)
-(`lib/`, `test/`, `script/` filtered). 155 results; none needs a code change. Triage:
+(`lib/`, `test/`, `script/` filtered). 168 results; none needs a code change. Triage:
 
 | Detector | Count | Where | Triage |
 | --- | ---: | --- | --- |
-| arbitrary-send-eth (High) | 3 | `RouteSettlement.finish` → vault deposit; `SettleDelivery.deliver`; `SettleOrderBook._transferOut` | By design. The vault is an immutable of the Router; `deliver` pays the recipient the caller names with the caller's own `msg.value`; `_transferOut` pays `msg.sender` its own withdrawal or owed balance. Proofs 10, 13 show the amounts are exactly the accounted ones. |
-| reentrancy-no-eth (Medium) | 3 | `ClprRouter.onClprMessage`, `SettleOrderBook.openByPayment` / `closeByPayment` | All three are `nonReentrant` (transient lock). The external calls are to the immutable CLPR service and to a payment prover that only the admin can add, behind `SOURCE_NOTICE`. |
+| arbitrary-send-eth (High) | 3 | `RouteSettlement.finish` → vault deposit; `SettleDelivery.deliver`; `SettleOrderBook._transferOut` | By design. The vault is an immutable of the Router, with code pinned by the deployer; `deliver` pays the recipient the caller names with the caller's own `msg.value`; `_transferOut` pays `msg.sender` its own withdrawal or owed balance. Proofs 10, 13 show the amounts are exactly the accounted ones. |
+| reentrancy-no-eth (Medium) | 4 | `ClprRouter.onClprMessage`, `ClprRouter.requeue`, `SettleOrderBook.openByPayment` / `closeByPayment` | All four are `nonReentrant` (transient lock); `requeue` only reads the CLPR Service's Channel state before writing. The external calls are to the immutable CLPR service and to a payment prover that only the admin can add, behind `SOURCE_NOTICE`. |
 | incorrect-equality (Medium) | 2 | `registeredAt == 0`, `emissionsUg == 0` | Sentinel checks on stored values, not on balances. |
 | uninitialized-local (Medium) | 14 | accumulators and loop sentinels (`paid`, `last`, `ok`, …) | Zero is the intended initial value. |
-| unused-return (Medium) | 4 | `ECDSA.tryRecover` third value; `vault.deposit` id | The error enum is checked; the recovery's third value and the deposit id are not needed. |
+| unused-return (Medium) | 6 | `ECDSA.tryRecover` third value; `vault.deposit` id; `channelApproval` tier in `RouteLogic.approved` / `inboundChannel` | The error enum is checked; the recovery's third value, the deposit id and (for an approval check) the tier are not needed. |
 | write-after-write (Medium) | 1 | `ClprRouter._inDelivery` | A flag set around `_advance` and cleared after; both writes are needed. |
-| calls-loop, reentrancy-benign, reentrancy-events (Low) | 27 | settlement pushes, vault deposit, registry reads | Pushes are gas-bounded (`PAY_GAS`, `PUSH_GAS`) with failures credited to `owed`; entry points hold the reentrancy lock. |
-| timestamp (Low) | 24 | deadlines, notices, lapses | Time windows are minutes to days; validator influence on `block.timestamp` is seconds. |
+| calls-loop, reentrancy-benign, reentrancy-events (Low) | 29 | settlement pushes, vault deposit, registry reads (including Channel approvals per edge, at most 8), `requeue` | Pushes are gas-bounded (`PAY_GAS`, `PUSH_GAS`) with failures credited to `owed`; entry points hold the reentrancy lock. |
+| timestamp (Low) | 26 | deadlines, notices, lapses, Channel labels, the hand-over quorum, per-deposit recovery time | Time windows are minutes to days; validator influence on `block.timestamp` is seconds. |
 | missing-zero-check, shadowing-local (Low) | 7 | constructor and setter parameters | Zero values are rejected where they matter (`InvalidParameters`, `BadParams`, `ZeroSigner`); the remaining ones are admin addresses that may be zero by design (renounced). |
-| Informational, optimization | 64 | naming (`DEPLOYMENT_ID`-style immutables), assembly, low-level calls, cyclomatic complexity | Style; the assembly blocks are the bounded no-return-data pushes. |
+| Informational, optimization | 70 | naming (`DEPLOYMENT_ID`-style immutables, the deployer's pins, the vault's `REGISTRY` getter), assembly, low-level calls, cyclomatic complexity | Style; the assembly blocks are the bounded no-return-data pushes. |
 
 ### Aderyn
 

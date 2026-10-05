@@ -44,7 +44,7 @@ jobs:
       - name: forge fmt --check
         run: forge fmt --check
       - name: forge build --sizes (EIP-170, 24,576 B)
-        # Fails if any deployable contract is over the EIP-170 limit (ClprRouter: 22,417 B).
+        # Fails if any deployable contract is over the EIP-170 limit (ClprRouter: 23,175 B).
         run: forge build --sizes --skip 'test/**' --skip 'script/**'
       - name: forge test
         run: forge test -vv
