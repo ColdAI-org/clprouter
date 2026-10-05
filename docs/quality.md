@@ -9,7 +9,7 @@ These are the values the README badges use.
 
 | Badge | Value | Source |
 | --- | --- | --- |
-| tests | **767 passing** (379 contracts, 213 SDK, 175 services) | `make test-contracts`, `make test-sdk`, `cd services && pnpm test` |
+| tests | **772 passing** (384 contracts, 213 SDK, 175 services) | `make test-contracts`, `make test-sdk`, `cd services && pnpm test` |
 | symbolic proofs | **16 halmos properties proven** | `make halmos` |
 | coverage | **96.1% lines** (96.2% statements, 85.7% branches, 96.6% functions) | `make coverage` |
 | fuzz | **16 fuzz tests × 10,000 runs, 15 invariants × 10,000 runs**, 0 failures | see [Fuzzing and invariants](#fuzzing-and-invariants) |
@@ -20,7 +20,7 @@ Badge data, for shields.io endpoints or static badges:
 
 ```json
 {
-  "tests": 767,
+  "tests": 772,
   "contractTests": 379,
   "sdkTests": 213,
   "servicesTests": 175,
@@ -38,7 +38,7 @@ Badge data, for shields.io endpoints or static badges:
 
 | Suite | Tests | Command |
 | --- | --- | --- |
-| Contracts: unit, fuzz, invariant, security regression (24 suites) | 379 | `forge test --skip 'script/**'` (about 3 min on an M-series laptop) |
+| Contracts: unit, fuzz, invariant, security regression (25 suites) | 384 | `forge test --skip 'script/**'` (about 3 min on an M-series laptop) |
 | SDK: planner, envelope, ISO 20022, route data | 213 | `cd sdk && pnpm test` |
 | SDK package: pack, install into a scratch project, import every entry point, type-check a consumer | 1 check | `cd sdk && pnpm run test:pack` |
 | Services: unit (170) and integration on anvil (5) | 175 | `cd services && pnpm test` |

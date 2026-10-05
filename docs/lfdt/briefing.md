@@ -30,7 +30,7 @@ It does two things on top of CLPR's pairwise Channels:
 | --- | --- |
 | Contracts | Router, registry, vault, deployer, 5 libraries; Settle order book, deposit and delivery contracts ([`src/`](../../src)) |
 | Off-chain | Planner SDK with measured route data for 86 chains ([`sdk/`](../../sdk)); indexer, status API, quote service, forward trigger, reference Settle Connector ([`services/`](../../services)) |
-| Tests | 359 Foundry tests in 22 suites (unit, fuzz, invariant, security regressions, three-ledger integration), 212 SDK tests, 172 services tests; CI, CodeQL and nightly e2e green on `main` |
+| Tests | 384 Foundry tests in 25 suites (unit, fuzz, invariant, security regressions, three-ledger integration), 213 SDK tests, 175 services tests; CI, CodeQL and nightly e2e green on `main` |
 | Local e2e | Five routes over three anvil chains; a round trip through a local Hiero (Solo) network; Settle on three anvil chains with Hedera trace-size checks |
 | Reviews | Two internal security reviews, all High/Medium/Low items fixed with regression tests; re-review in progress; **no external audit** |
 | Sepolia + Hedera testnet | Canonical deployment at identical addresses on both; a Channel verified on Hedera by `EthMainnetVerifier`; route Sepolia → Hedera **delivered** ([send](https://sepolia.etherscan.io/tx/0x8a08f19922f6a265f2900b218db01510c4dc21e50ed80b68ae8756faddff0d6c), [delivery](https://hashscan.io/testnet/transaction/0x1249ca9040fb4c1f02e99ee656823393b223bf9f2bcba9d2a6cdb36344e1989b)); Settle contracts deployed on a second, rotated Channel and a Connector bonded ([order book](https://hashscan.io/testnet/contract/0x28c14e4BAd929e27902149674CCe79b34E5b8B1f), [record](../../deployments/README.md)); the Sepolia source opens 2026-10-06 07:22 UTC |

@@ -19,7 +19,7 @@
   <a href="https://github.com/ColdAI-org/clprouter/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ColdAI-org/clprouter/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/ColdAI-org/clprouter/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/ColdAI-org/clprouter/actions/workflows/codeql.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/ColdAI-org/clprouter/actions/workflows/nightly-e2e.yml"><img alt="Nightly e2e" src="https://github.com/ColdAI-org/clprouter/actions/workflows/nightly-e2e.yml/badge.svg?branch=main"></a>
-  <img alt="Tests: 767 passing" src="https://img.shields.io/badge/tests-767%20passing-2ea44f">
+  <img alt="Tests: 772 passing" src="https://img.shields.io/badge/tests-772%20passing-2ea44f">
   <br>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-black"></a>
   <img alt="Solidity 0.8.30" src="https://img.shields.io/badge/Solidity-0.8.30-363636?logo=solidity">
@@ -258,7 +258,7 @@ jq.
 ```sh
 git clone --recurse-submodules https://github.com/ColdAI-org/clprouter && cd clprouter
 
-forge test --skip 'script/**'                # 379 contract tests in 24 suites: unit, fuzz, invariant, security, three-ledger
+forge test --skip 'script/**'                # 384 contract tests in 25 suites: unit, fuzz, invariant, security, three-ledger
 (cd sdk && pnpm install && pnpm test)        # 213 tests: planner, envelope codec, ISO 20022
 forge build                                  # artefacts for the services' anvil integration test
 (cd services && pnpm install && pnpm test)   # 175 tests: services, Settle Connector, anvil integration
