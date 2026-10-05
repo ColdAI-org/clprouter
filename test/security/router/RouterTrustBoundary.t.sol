@@ -45,7 +45,7 @@ contract ReceiptRefusingConnector is IClprConnector {
 }
 
 /// @notice Trust boundary of the Router on three ledgers running the unchanged reference ClprService: which
-///         Channels it listens to, and which Connectors can hold a receipt back.
+///         Channels it listens to, which Connectors can hold a receipt back, and who can starve a hook.
 contract RouterTrustBoundaryTest is ThreeLedgerFixture {
     // ═════════════════════════════════════════════════════════════════════
     // Only Channels the provider registry approves carry messages
@@ -285,6 +285,36 @@ contract RouterTrustBoundaryTest is ThreeLedgerFixture {
         _settle();
         assertEq(uint8(_routeStatus(id)), uint8(IClprRouter.RouteStatus.DELIVERED));
         assertEq(payee.balance, 1 ether);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // Hooks get their gas, whoever pays for the transaction
+    // ═════════════════════════════════════════════════════════════════════
+
+    function test_permissionlessCallerCannotStarveReceiptHook() public {
+        IClprRouter.SendRequest memory req = _request(0);
+        vm.deal(address(A.app), 1 ether);
+        bytes16 id = A.app.sendRoute{value: 0.03 ether}(A.router, req);
+        vm.warp(block.timestamp + 1 hours + 2 * RECLAIM_GRACE + 1);
+        A.router.reclaim(id);
+        vm.warp(block.timestamp + RECLAIM_GRACE);
+
+        uint256 s0 = vm.snapshotState();
+        A.router.reclaim(id);
+        assertEq(A.app.receiptCount(), 1, "with ample gas the hook runs");
+        vm.revertToState(s0);
+
+        for (uint256 g = 40_000; g <= 400_000; g += 1_000) {
+            uint256 snap = vm.snapshotState();
+            (bool ok,) = address(A.router).call{gas: g}(abi.encodeCall(ClprRouter.reclaim, (id)));
+            if (ok) {
+                assertEq(uint8(_routeStatus(id)), uint8(IClprRouter.RouteStatus.EXPIRED));
+                assertEq(A.app.receiptCount(), 1, "settled only together with its callback");
+            } else {
+                assertEq(uint8(_routeStatus(id)), uint8(IClprRouter.RouteStatus.PENDING));
+            }
+            vm.revertToState(snap);
+        }
     }
 
     // ── helpers ────────────────────────────────────────────────────────────

@@ -19,6 +19,8 @@ import {Caip} from "./Caip.sol";
 library RouteSettlement {
     /// @notice Gas forwarded to a payment receiver (no return data is copied, whatever it returns).
     uint256 internal constant PAY_GAS = 30_000;
+    /// @notice Gas kept on top of the hook's own gas (and the 1/64 the call withholds) for the rest of the call.
+    uint256 internal constant HOOK_MARGIN = 10_000;
 
     /// @notice What the settlement needs from the Router's immutables.
     struct Ctx {
@@ -99,7 +101,8 @@ library RouteSettlement {
 
     /// @notice Pay the fees of `forwarded` (the hops before the reporting one), then release, refund or
     ///         quarantine the rest. Payments are pushed with a bounded call that copies no return data; a failed
-    ///         push is credited to `owed` (pull with ClprRouter.withdraw).
+    ///         push is credited to `owed` (pull with ClprRouter.withdraw). A sender that is a contract then gets
+    ///         `onRouteReceipt` with exactly `appGas`; if that much is not left the call reverts (InsufficientGas).
     function finish(
         mapping(bytes16 => IClprRouter.OriginRoute) storage routes,
         mapping(address => uint256) storage owed,
@@ -151,6 +154,9 @@ library RouteSettlement {
         emit IClprRouter.RouteSettled(routeId, status, reason, reachedHop, caseId, contact_, paid);
 
         if (sender.code.length > 0) {
+            // The hook gets its full gas or the whole call reverts: whoever pays for this transaction (a
+            // permissionless reclaim or forward, a relayer) cannot settle the route and starve the callback.
+            if (gasleft() < uint256(c.appGas) + c.appGas / 63 + HOOK_MARGIN) revert IClprRouter.InsufficientGas();
             // No return values are declared, so no return data is copied.
             try IClprRouteSender(sender).onRouteReceipt{gas: c.appGas}(
                 routeId, uint8(status), uint8(reason), caseId, responseHash

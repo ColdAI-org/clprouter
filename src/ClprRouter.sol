@@ -222,7 +222,7 @@ contract ClprRouter is IClprApplication, IClprRouter, ReentrancyGuardTransient {
     /// @dev Reverts (CLPR APPLICATION_ERROR to the previous hop) only if the envelope is malformed, names a
     ///      non-canonical Router, is not addressed to this hop, not from the Router named for the previous hop,
     ///      arrived over a Channel direction the registry does not approve ({ChannelNotApproved}), or is a replay
-    ///      (or if too little gas was given to run the destination application). Every other
+    ///      (or if too little gas was given to run the destination application or a hook). Every other
     ///      outcome — forwarded, pending, held, delivered, or stopped with a receipt — returns normally.
     /// @return response `abi.encodePacked(uint8 accepted|rejected, uint8 reason)`.
     function onClprMessage(bytes32 channelId, bytes calldata sender, bytes calldata messageData)

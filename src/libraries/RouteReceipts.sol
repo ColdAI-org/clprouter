@@ -15,7 +15,7 @@ import {Caip} from "./Caip.sol";
 library RouteReceipts {
     /// @notice Report route `e` at hop `e.hopIndex` (this ledger) with `status`: emit {IClprRouter.RouteStopped}
     ///         (unless DELIVERED) and, when QUARANTINED, the quarantine notice (and the destination application's
-    ///         notice hook), then build the receipt.
+    ///         notice hook, with exactly `appGas` or the call reverts), then build the receipt.
     /// @return h The receipt's first hop (this ledger and the Channel back).
     /// @return target Router of the receipt's next hop.
     /// @return data Encoded receipt envelope.
@@ -37,6 +37,8 @@ library RouteReceipts {
             emit IClprRouter.QuarantineNotice(Caip.accountKey(e.recipient), e.routeId, e.recipient, r.caseId, r.contact);
             bytes memory a = e.destination.application;
             if (e.hopIndex == e.hops.length - 1 && a.length == 20 && address(bytes20(a)).code.length > 0) {
+                // The hook gets its full gas or the whole call reverts (no caller can starve it).
+                if (gasleft() < uint256(appGas) + appGas / 63 + 10_000) revert IClprRouter.InsufficientGas();
                 try IClprRouteApplication(address(bytes20(a))).onRouteNotice{gas: appGas}(
                     e.routeId, r.caseId, r.contact
                 ) {}
