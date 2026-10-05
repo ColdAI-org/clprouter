@@ -126,12 +126,12 @@ contract RouterFindingsUnitTest is OriginHarness {
         vm.recordLogs();
         svcB.deliver(hopB, CH_BC, abi.encodePacked(address(destC)), data);
         (bytes32 ch, bytes32 conn, bytes memory target, bytes memory out) = _queued(vm.getRecordedLogs());
-        assertTrue(hopB.outbox(keccak256(abi.encode(ch, conn, target, out))));
+        assertTrue(hopB.outbox(keccak256(abi.encode(ch, target, out))));
 
         svcB.setFailChannel(CH_AB, true);
         try hopB.flush(ch, conn, target, out) {} catch {}
         assertEq(svcB.sentCount(), 0);
-        assertTrue(hopB.outbox(keccak256(abi.encode(ch, conn, target, out))), "still queued");
+        assertTrue(hopB.outbox(keccak256(abi.encode(ch, target, out))), "still queued");
         svcB.setFailChannel(CH_AB, false);
         hopB.flush(ch, conn, target, out);
 

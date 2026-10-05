@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import {Vm} from "forge-std/Vm.sol";
 import {ClprDeployHelper} from "@test/helpers/ClprDeployHelper.sol";
+import {ConnectorRegistrar} from "@test/helpers/ConnectorRegistrar.sol";
+import {IClprConnector} from "@hiero-ledger/clpr/interfaces/IClprConnector.sol";
 import {IClprService} from "@hiero-ledger/clpr/interfaces/IClprService.sol";
 import {ClprProtobuf} from "@hiero-ledger/clpr/libraries/codec/ClprProtobuf.sol";
+import {ClprRouter} from "@clprouter/ClprRouter.sol";
 import {IClprRouter} from "@clprouter/interfaces/IClprRouter.sol";
 import {RouteTypes} from "@clprouter/libraries/RouteTypes.sol";
 import {RouteCodec} from "@clprouter/libraries/RouteCodec.sol";
@@ -11,8 +15,37 @@ import {RouteLogic} from "@clprouter/libraries/RouteLogic.sol";
 import {Caip} from "@clprouter/libraries/Caip.sol";
 import {ThreeLedgerFixture} from "../../helpers/ThreeLedgerFixture.sol";
 
+/// @notice A Connector contract run by a route's sender: it authorises and pays for everything except receipt
+///         envelopes, which it refuses (ClprConnectorUnauthorized on `sendMessage`).
+contract ReceiptRefusingConnector is IClprConnector {
+    function authorizeOutboundMessage(bytes32, bytes calldata, bytes calldata, bytes calldata data)
+        external
+        view
+        returns (bool)
+    {
+        try this.payloadType(data) returns (uint8 t) {
+            return t != uint8(RouteTypes.PayloadType.RECEIPT);
+        } catch {
+            return true;
+        }
+    }
+
+    function payloadType(bytes calldata data) external pure returns (uint8) {
+        return uint8(RouteCodec.decodeEnvelope(data).payloadType);
+    }
+
+    function payForExecution(uint256 amount) external {
+        (bool ok,) = msg.sender.call{value: amount}("");
+        require(ok, "pay");
+    }
+
+    function onInboundMessage(bytes32, uint64, bytes calldata, bytes calldata, bytes calldata) external {}
+
+    receive() external payable {}
+}
+
 /// @notice Trust boundary of the Router on three ledgers running the unchanged reference ClprService: which
-///         Channels it listens to.
+///         Channels it listens to, and which Connectors can hold a receipt back.
 contract RouterTrustBoundaryTest is ThreeLedgerFixture {
     // ═════════════════════════════════════════════════════════════════════
     // Only Channels the provider registry approves carry messages
@@ -178,6 +211,82 @@ contract RouterTrustBoundaryTest is ThreeLedgerFixture {
         A.router.reclaim(id);
     }
 
+    // ═════════════════════════════════════════════════════════════════════
+    // No single Connector can hold a receipt back
+    // ═════════════════════════════════════════════════════════════════════
+
+    /// @dev The sender names its own Connector for B -> C; it carries the route and refuses the DELIVERED receipt
+    ///      on the way back. The receipt waits in C's outbox and anyone sends it over another Connector of the
+    ///      same Channel; the origin accepts it (its content does not depend on the Connector) and pays the payee.
+    function test_receiptTravelsOverAnyConnectorOfItsChannel() public {
+        address cB = address(new ReceiptRefusingConnector());
+        address cC = address(new ReceiptRefusingConnector());
+        vm.deal(cB, 10 ether);
+        vm.deal(cC, 10 ether);
+        vm.deal(address(this), address(this).balance + 2 ether);
+        bytes32 conn =
+            ConnectorRegistrar.register(IClprService(address(B.service)), chBC, "refusing", cB, alice, 1 ether);
+        require(
+            ConnectorRegistrar.register(IClprService(address(C.service)), chBC, "refusing", cC, alice, 1 ether) == conn
+        );
+
+        IClprRouter.SendRequest memory req = _request(1 ether);
+        req.hops[1].connectorId = conn;
+        bytes16 id = _sendAs(alice, req, 1.1 ether);
+        _relay(A, B, chAB);
+        (, Vm.Log[] memory logs) = _relayWithLogs(B, C, chBC);
+        (bytes32 qc, bytes32 qconn, bytes memory target, bytes memory data) = _queuedReceipt(C, logs);
+        assertEq(C.app.deliveredCount(), 1, "destination acted");
+        assertEq(qconn, conn, "the route's Connector refused the receipt");
+        assertTrue(C.router.outbox(keccak256(abi.encode(qc, target, data))), "receipt queued");
+
+        // Over the refusing Connector it stays queued; over another Connector of the Channel it goes.
+        vm.expectRevert();
+        C.router.flush(qc, conn, target, data);
+        C.router.flush(qc, connBC, target, data);
+        _settle();
+        assertEq(uint8(_routeStatus(id)), uint8(IClprRouter.RouteStatus.DELIVERED));
+        assertEq(payee.balance, 1 ether, "payee paid after delivery");
+    }
+
+    /// @dev A receipt message whose CLPR reply never reached the Router (B refused it, and the Response callback
+    ///      on C then failed, e.g. out of gas, which the Service swallows) is put back in the outbox by anyone once
+    ///      C's Service has processed that reply; the route then settles.
+    function test_receiptWithLostReplyCanBeRequeued() public {
+        bytes16 id = _sendAs(alice, _request(1 ether), 1.1 ether);
+        _relay(A, B, chAB);
+        (, Vm.Log[] memory logs) = _relayWithLogs(B, C, chBC);
+        assertEq(C.app.deliveredCount(), 1);
+        // C's DELIVERED receipt to B: queued inside delivery, then flushed by the pumper as C's last message.
+        (,,, bytes memory data) = _queuedReceipt(C, logs);
+        uint64 mid = C.service.getChannel(chBC).nextMessageId - 1;
+
+        vm.mockCallRevert(address(B.router), abi.encodeWithSelector(ClprRouter.onClprMessage.selector), "down");
+        _relay(C, B, chBC); // B replies APPLICATION_ERROR
+        vm.clearMockedCalls();
+        vm.expectRevert(IClprRouter.NothingPending.selector);
+        C.router.requeue(chBC, mid); // C's Service has not processed that reply yet
+
+        vm.mockCallRevert(address(C.router), abi.encodeWithSelector(ClprRouter.onClprResponse.selector), "no gas");
+        _relay(B, C, chBC); // the reply is processed, the callback fails
+        vm.clearMockedCalls();
+        bytes memory target = abi.encodePacked(address(B.router));
+        bytes32 k = keccak256(abi.encode(chBC, target, data));
+        assertFalse(C.router.outbox(k), "the Router never learnt of the refusal");
+        assertEq(uint8(_routeStatus(id)), uint8(IClprRouter.RouteStatus.PENDING));
+
+        vm.expectEmit(true, false, false, true, address(C.router));
+        emit IClprRouter.ReceiptRequeued(k, type(uint8).max);
+        C.router.requeue(chBC, mid);
+        assertTrue(C.router.outbox(k), "back in the outbox");
+        vm.expectRevert(IClprRouter.NothingPending.selector);
+        C.router.requeue(chBC, mid); // once only
+        C.router.flush(chBC, connBC, target, data);
+        _settle();
+        assertEq(uint8(_routeStatus(id)), uint8(IClprRouter.RouteStatus.DELIVERED));
+        assertEq(payee.balance, 1 ether);
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────
 
     /// @dev Label the direction of `ch` into `to` on every ledger, naming `verifier`.
@@ -191,5 +300,19 @@ contract RouterTrustBoundaryTest is ThreeLedgerFixture {
             ClprProtobuf.decodeDataMessage(l.service.getMessage(ch, l.service.getChannel(ch).nextMessageId - 1).payload)
             .messageData
         );
+    }
+
+    /// @dev The receipt `l`'s Router queued in `logs` (OutboxQueued).
+    function _queuedReceipt(Ledger memory l, Vm.Log[] memory logs)
+        internal
+        pure
+        returns (bytes32 ch, bytes32 conn, bytes memory target, bytes memory data)
+    {
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].emitter == address(l.router) && logs[i].topics[0] == IClprRouter.OutboxQueued.selector) {
+                return abi.decode(logs[i].data, (bytes32, bytes32, bytes, bytes));
+            }
+        }
+        revert("no receipt queued");
     }
 }

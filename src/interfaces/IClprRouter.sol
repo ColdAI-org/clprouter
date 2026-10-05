@@ -173,10 +173,12 @@ interface IClprRouter {
         RouteTypes.Reason reason,
         bytes envelope
     );
-    /// @notice A receipt message waits in the outbox; anyone sends it with {ClprRouter.flush}.
+    /// @notice A receipt message waits in the outbox; anyone sends it with {ClprRouter.flush}, over `connectorId` (the
+    ///         Connector the route named) or any other Connector of `channelId`.
     event OutboxQueued(bytes32 indexed key, bytes32 channelId, bytes32 connectorId, bytes target, bytes data);
-    /// @notice A receipt message was rejected by CLPR (`clprStatus`); it is back in the outbox under `key` (its data
-    ///         is in the earlier {OutboxQueued} or {RouteForwarded} with that key). Receipts are never dropped.
+    /// @notice A receipt message was rejected by CLPR (`clprStatus`), or its reply never reached the Router
+    ///         (`clprStatus` 255, {ClprRouter.requeue}); it is back in the outbox under `key` (its data is in the
+    ///         earlier {OutboxQueued} or {RouteForwarded} with that key). Receipts are never dropped.
     event ReceiptRequeued(bytes32 indexed key, uint8 clprStatus);
     event RouteDelivered(bytes16 indexed routeId, address indexed application, bytes32 responseHash);
     event RouteStopped(

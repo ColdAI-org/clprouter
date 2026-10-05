@@ -144,6 +144,16 @@ library RouteLogic {
         }
     }
 
+    /// @notice Whether this ledger's CLPR Service has already processed the reply to outbound message `messageId`
+    ///         of `channelId` (whatever reached, or did not reach, the sending application).
+    function replied(IClprService service, bytes32 channelId, uint64 messageId) public returns (bool) {
+        try service.getChannel(channelId) returns (ClprTypes.Channel memory c) {
+            return messageId < c.nextExpectedReplyId;
+        } catch {
+            return false;
+        }
+    }
+
     /// @notice The edge hops[i] -> hops[i+1] meets the trust floor `floor`: the provider registry labels it with
     ///         a tier of at least `floor`. A floor of zero is always met and never reads the registry; above zero,
     ///         an unlabelled edge fails closed.

@@ -441,7 +441,7 @@ contract RouterHopTest is Committee, RouterDeploy {
         RouteTypes.Envelope memory next = _receiptAtB();
         next.hopIndex = 2;
         bytes memory out = RouteCodec.encodeEnvelope(next);
-        bytes32 k = keccak256(abi.encode(CH_AB, CONN, abi.encodePacked(routerA), out));
+        bytes32 k = keccak256(abi.encode(CH_AB, abi.encodePacked(routerA), out));
         vm.recordLogs();
         svc.deliver(router, CH_BC, abi.encodePacked(routerC), RouteCodec.encodeEnvelope(re));
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -464,7 +464,7 @@ contract RouterHopTest is Committee, RouterDeploy {
         RouteTypes.Envelope memory re = _receiptAtB();
         svc.deliver(router, CH_BC, abi.encodePacked(routerC), RouteCodec.encodeEnvelope(re));
         MockRouteService.Sent memory s = svc.sent(0);
-        bytes32 k = keccak256(abi.encode(s.channelId, s.connectorId, s.target, s.data));
+        bytes32 k = keccak256(abi.encode(s.channelId, s.target, s.data));
         assertFalse(router.outbox(k));
         vm.expectEmit(true, false, false, true, address(router));
         emit IClprRouter.ReceiptRequeued(k, 1);
