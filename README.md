@@ -196,20 +196,21 @@ flowchart TB
         c2["Disable a Channel direction, ledger, Router deployment<br/>or version (k + 1, lapses after 7 days); re-enable (k, after notice)"]
         c3["Blacklist an account after an exploit (k + 1, lapses after 30 days):<br/>its routed funds go to the quarantine vault"]
         c4["Change the committee<br/>(supermajority, after notice)"]
+        c5["Approve Channel directions, naming their verifier<br/>(k, after 7 days' notice): Routers use no other Channel"]
     end
     subgraph CANNOT["Cannot (no code path exists)"]
         n1["Change, pause or upgrade Routers"]
         n2["Change fees, Channels, verifiers or Connectors"]
         n3["Move funds anywhere but the quarantine vault"]
         n4["Release vault funds to any committee account"]
-        n5["Affect routes in flight: they pin the registry version"]
+        n5["Change certifications under routes in flight: they pin the registry version"]
     end
 ```
 
 The vault pays only the original sender, the original recipient, or a recovery address named by k + 1 members after
-a public notice and challenge window. Worst case with compromised committee keys: false filter labels, stopped
-routes, funds parked in the vault until the committee is replaced. CLPR verification is unaffected. Full analysis:
-[threat model](docs/threat-model.md).
+a public notice and a challenge window that every deposit gets in full. Worst case with compromised committee keys:
+false filter labels, a weak Channel approved after a week's public notice, stopped routes, funds parked in the vault
+until the committee is replaced. Full analysis: [threat model](docs/threat-model.md).
 
 ## Modes and filters
 

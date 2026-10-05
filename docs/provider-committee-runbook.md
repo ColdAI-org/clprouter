@@ -1,9 +1,11 @@
 # Provider committee runbook
 
 How the provider committee holds and uses its keys. The committee is the only privileged role in CLPRouter. It acts
-only through `ProviderRegistry` (certifications, trust-tier labels, disables, blacklist, its own membership, the
-contact address) and `QuarantineVault` (naming a recovery address, releasing a deposit). It cannot change Router
-code, fees, Channels, Connectors or verifiers, and the vault refuses to pay any past or present member.
+only through `ProviderRegistry` (certifications, Channel approvals and their trust tiers, disables, blacklist, its
+own membership, the contact address) and `QuarantineVault` (naming a recovery address, releasing a deposit). It cannot
+change Router code, fees, Channels, Connectors or verifiers, and the vault refuses to pay any past or present member.
+Routers carry messages only over Channel directions the committee has approved, so approving a Channel is a
+trust decision for every route that uses it (section 6).
 
 Every procedure below ends with a public, signed, on-chain record. Keep the evidence documents public too: the
 registry stores only their hash.
@@ -15,8 +17,8 @@ registry stores only their hash.
 | n (members) | `COMMITTEE` decision / constructor | ≥ 5, different jurisdictions and organisations | `k + 1 ≤ n` is enforced |
 | k (threshold) | same | ≥ 3 | Certify, uncertify, trust tier, enable, delist, committee, contact, vault actions |
 | k + 1 | derived | — | `DISABLE` and `BLACKLIST` |
-| `CERT_NOTICE` | registry constructor | 7 days | Certify; raise a trust tier |
-| `REMOVAL_NOTICE` | registry constructor | 72 hours | Uncertify; lower or remove a trust tier |
+| `CERT_NOTICE` | registry constructor | 7 days | Certify; approve a Channel direction, raise its tier or name another verifier |
+| `REMOVAL_NOTICE` | registry constructor | 72 hours | Uncertify; lower a Channel direction's tier or remove its approval (keep it above the longest route window in use) |
 | `REENABLE_NOTICE` | registry constructor | 7 days | Re-enable after a disable |
 | `DISABLE_LAPSE` | registry constructor | 7 days | A disable ends unless renewed |
 | `BLACKLIST_LAPSE` | registry constructor | 30 days | A listing ends unless renewed |
@@ -55,12 +57,16 @@ signed = keccak256("\x19Ethereum Signed Message:\n32" ‖ digest)           // E
 | `DISABLE` (also renews) | 3 | `(uint8 kind, bytes32 subject, string reason)` | k + 1 |
 | `ENABLE` | 4 | `(uint8 kind, bytes32 subject)` | k |
 | `BLACKLIST` (also renews) | 5 | `(string caip10, bytes32 caseId, string reason)` | k + 1 |
-| `DELIST` | 6 | `(string caip10, bytes32 caseId)` | k |
-| `COMMITTEE` | 7 | `(address[] members, uint8 threshold)`, members sorted ascending | k |
+| `DELIST` | 6 | `(string caip10, bytes32 caseId)` | k + 1 |
+| `COMMITTEE` | 7 | `(address[] members, uint8 threshold)`, members sorted ascending | max(k + 1, ⌈2n/3⌉) |
 | `CONTACT` | 8 | `(string contact)` | k |
-| `TRUST_TIER` | 11 | `(bytes32 channelId, string toLedgerId, uint8 tier)`; `tier = 255` removes the label | k |
-| `VAULT_NAME_RECOVERY` | 10 | `(bytes32 caseId, address to)` | k |
+| `TRUST_TIER` (Channel approval) | 11 | `(bytes32 channelId, string toLedgerId, uint8 tier, address verifier, bytes32 verifierCodeHash)`: approves the direction of `channelId` into `toLedgerId`, checked there by `verifier` (its runtime code hash); `tier = 255` removes the label (verifier fields ignored) | k |
+| `VAULT_NAME_RECOVERY` | 10 | `(bytes32 caseId, address to)` | k + 1 |
 | `VAULT_RELEASE` | 9 | `(uint256 depositId, bytes32 caseId, uint8 kind)`; kind 0 sender, 1 recipient, 2 recovery | k |
+
+Once a scheduled committee's notice has passed on a ledger, the outgoing committee needs max(k + 1, ⌈2n/3⌉)
+signatures there for every registry and vault decision until the new committee takes over; `requiredSignatures(action)`
+returns the number in force.
 
 Labels: 1 ISO 20022, 2 MiCA, 3 Energy. Disable kinds: 1 Channel direction (subject `edgeKey(channelId, toLedgerId)`),
 2 ledger (`ledgerKey(ledgerId)`), 3 Router deployment (`routerKey(ledgerId, router)`), 4 Router version
@@ -158,7 +164,8 @@ report, and warn every vault depositor to watch `RecoveryNamed` and challenge (t
 | --- | --- | --- |
 | `CERTIFY` | The evidence record meets the published criteria; expiry ≤ 366 days after the effective time; Energy carries a µgCO2e figure and its source | Evidence is from marketing lists or unverifiable; a reviewer could not reproduce it |
 | `UNCERTIFY` | Evidence lapsed or was wrong | To influence a route already under way (it cannot; pins protect it) |
-| `TRUST_TIER` | The verifier family README and live verification support the tier | The edge's verifier is a stub or test verifier |
+| `TRUST_TIER` (approve) | The Channel is open on the receiving ledger; its verifier there (address read with `getChannel(channelId).verifier`, code hash with `cast codehash`) and the configuration it was opened with were reviewed, and the verifier family README and live verification support the tier; approve both directions of a Channel that value routes will use | The verifier is a stub or test verifier, can be upgraded by its operator, or the Channel's configuration is controlled by a party the provider has not vetted |
+| `TRUST_TIER` (remove) | The Channel direction must stop for good; no route is in flight over it (or a `DISABLE` has drained it first), since its receipts wait while it is unapproved | As a quick stop (use `DISABLE`, which is immediate and lapses) |
 | `DISABLE` | A Channel direction, ledger, Router deployment or Router version can lose or forge messages | To act on a person, asset or payload (use the blacklist, or nothing) |
 | `ENABLE` | The cause is fixed and the incident report is closed | — |
 | `BLACKLIST` | A published case links the account to an exploit | Without legal sign-off (section 9) |
@@ -201,8 +208,10 @@ Target time from detection to effect: under one hour.
    carry no ledger id, and a decision relayed to another ledger's vault could release that vault's deposit with the
    same id and case (threat model R10).
 3. To pay a third party (a victim who is neither sender nor recipient): sign `VAULT_NAME_RECOVERY(caseId, to)` with
-   k, after legal sign-off. Publish it. The sender and recipient can challenge until `releasableAt`
-   (`RECOVERY_NOTICE + CHALLENGE_WINDOW`). If unchallenged, sign `VAULT_RELEASE(depositId, caseId, 2)`.
+   k + 1, after legal sign-off. Publish it. Each deposit's sender and recipient can challenge until
+   `releasableAt(depositId)`: `RECOVERY_NOTICE + CHALLENGE_WINDOW` after the naming or after that deposit, whichever
+   is later (a deposit that joins the case later gets its own window). If unchallenged, sign
+   `VAULT_RELEASE(depositId, caseId, 2)` once that time has passed.
 4. A challenge blocks that recovery address. Do not re-name addresses to wear down a challenger; take it to the legal
    process instead (threat model R3).
 5. Never name an address controlled by the provider or a member; the vault refuses current and past members, and

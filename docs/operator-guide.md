@@ -94,7 +94,8 @@ anyone can send them, and optionally submits them itself.
 - **One account per ledger, gas money only.** The account needs no permission on any contract; a compromised signer
   can only waste its own balance.
 - **Exact calldata.** Send `forward(envelope, [])` or `flush(channelId, connectorId, target, data)` exactly as served
-  (the Router checks `keccak256(envelope)` against `pendingHash`).
+  (the Router checks `keccak256(envelope)` against `pendingHash`, and the outbox key `keccak256(abi.encode(channelId,
+  target, data))`). For `flush`, `connectorId` may be any Connector registered on the Channel.
 - **Gas.** Simulate first. A call below `MIN_SEND_GAS` reverts with `InsufficientGas` and changes nothing, so
   over-provision gas (the trigger uses about three times the estimate, capped at 10M).
 
@@ -106,10 +107,13 @@ reentrancy lock guards both). So:
 | Event on the hop ledger | Meaning | Call |
 | --- | --- | --- |
 | `ForwardPending(routeId, hopIndex, envelope)` | Hop checked, waiting to be sent | `forward(envelope, [])` |
-| `OutboxQueued(key, channelId, connectorId, target, data)` | Receipt waiting to be sent | `flush(channelId, connectorId, target, data)` |
+| `OutboxQueued(key, channelId, connectorId, target, data)` | Receipt waiting to be sent | `flush(channelId, connectorId, target, data)`; if that Connector refuses it, the same call with another Connector of the Channel (the services trigger tries `trigger.receiptConnectors` in order) |
+| A receipt's `RouteForwarded(receiptId, hopIndex, channelId, messageId, key, data)` with no later `HopResponse` once the CLPR Service has processed that message's reply (`messageId < getChannel(channelId).nextExpectedReplyId`) | The Router never received the reply (its Response callback failed, or the message was redacted) | `requeue(channelId, messageId)`, then `flush` |
 | `ForwardRejected(routeId, hopIndex, envelopeHash, clprStatus, reason, envelope)` | Next hop rejected it (NACK) or the local send failed | Strict: `forward(envelope, [])` sends the `FAILED` receipt that refunds the origin. Loose: `forward(envelope, newTail)` re-routes |
 
-Every check runs again at that time, including the deadline. Pump promptly: an intermediate hop that waits past the
+Every check runs again at that time, including the deadline and the Channel approvals. A receipt that CLPR keeps
+rejecting is re-queued each time; the trigger stops after `maxAttempts` (default 3) per job, so a permanently refused
+receipt does not cost gas for ever. Pump promptly: an intermediate hop that waits past the
 deadline stops the route with `EXPIRED`. The services' `completeRejected` option (default off) completes rejected
 hops with the refund receipt instead of leaving them for re-routing.
 
