@@ -203,6 +203,24 @@ export const ROUTER_ABI = [
   },
   {
     "type": "function",
+    "name": "requeue",
+    "inputs": [
+      {
+        "name": "channelId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "messageId",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "routes",
     "inputs": [
       {
@@ -770,6 +788,17 @@ export const ROUTER_ABI = [
   },
   {
     "type": "error",
+    "name": "ChannelNotApproved",
+    "inputs": [
+      {
+        "name": "channelId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "InsufficientGas",
     "inputs": []
   },
@@ -1018,6 +1047,40 @@ export const REGISTRY_ABI = [
             "internalType": "bytes32"
           }
         ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "channelApproval",
+    "inputs": [
+      {
+        "name": "edgeKey_",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "approved",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "tier",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "verifier",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "verifierCodeHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "stateMutability": "view"
@@ -1575,6 +1638,18 @@ export const REGISTRY_ABI = [
         "internalType": "uint8"
       },
       {
+        "name": "verifier",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "verifierCodeHash",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
         "name": "effectiveFrom",
         "type": "uint64",
         "indexed": false,
@@ -1815,6 +1890,25 @@ export const VAULT_ABI = [
       },
       {
         "name": "releasableAt",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "releasableAt",
+    "inputs": [
+      {
+        "name": "depositId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
         "type": "uint64",
         "internalType": "uint64"
       }

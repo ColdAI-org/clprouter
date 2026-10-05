@@ -93,6 +93,12 @@ export interface ForwardTriggerOptions {
   log?: (msg: string) => void;
   /** Attempts per job before it is left for someone else. Default 3. */
   maxAttempts?: number;
+  /**
+   * Other Connectors of a Channel (by lower-case Channel id) to send a queued receipt over when the Connector the
+   * route named refuses it. Routers accept a receipt over any Connector of its Channel, so a refusing Connector
+   * cannot hold a receipt back while one of these carries it.
+   */
+  receiptConnectors?: Record<string, Hex[]>;
   /** Called with every job result (metrics). */
   onResult?: (job: TriggerJob, result: "done" | "skipped" | "failed") => void;
 }
@@ -286,6 +292,21 @@ export class ForwardTrigger {
     return this.current;
   }
 
+  /** Flush over the route's own Connector, then over each configured fallback of the Channel until one goes. */
+  private async flushOverAnyConnector(chain: RouterChain, p: Record<string, Hex>): Promise<Hex> {
+    const own = p.connectorId!;
+    const others = (this.o.receiptConnectors?.[p.channelId!.toLowerCase()] ?? []).filter((c) => c.toLowerCase() !== own.toLowerCase());
+    let last: unknown;
+    for (const c of [own, ...others]) {
+      try {
+        return await chain.flush(p.channelId!, c, p.target!, p.data!);
+      } catch (err) {
+        last = err;
+      }
+    }
+    throw last;
+  }
+
   private async run(chain: RouterChain, j: TriggerJob): Promise<void> {
     const p = j.payload as Record<string, Hex>;
     try {
@@ -309,8 +330,7 @@ export class ForwardTrigger {
       this.o.store.updateJob(j.ledger, j.kind, j.key, { status: "submitted", attempt: true });
       // The attempt must be durable before the transaction goes out (a crash then retries, never loops unbounded).
       await this.o.store.flush();
-      const tx =
-        j.kind === "flush" ? await chain.flush(p.channelId!, p.connectorId!, p.target!, p.data!) : await chain.forward(p.envelope!);
+      const tx = j.kind === "flush" ? await this.flushOverAnyConnector(chain, p) : await chain.forward(p.envelope!);
       this.o.store.updateJob(j.ledger, j.kind, j.key, { status: "done", txHash: tx });
       this.o.onResult?.(j, "done");
       this.o.log?.(`trigger: ${j.kind} on ${j.ledger} ${j.routeId ?? j.key} → ${tx}`);
