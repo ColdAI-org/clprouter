@@ -47,6 +47,7 @@ export SETTLE_CONFIG="$(cat "$D/config/settle.json")"
 export SETTLE_CLPR_CONNECTOR_PK="$(key settleClprConnector private_key)"
 export SETTLE_CLPR_CONNECTOR_PUB="$(cast wallet public-key --private-key "$SETTLE_CLPR_CONNECTOR_PK")"
 export SETTLE_CHANNEL_ID="$(cfg channelId)"
+PRE="$(cfg stepPrefix)"
 
 BUILD=(--out "$D/.build/out" --cache-path "$D/.build/cache")
 mkdir -p "$D/.build"
@@ -61,7 +62,8 @@ b = json.load(open(cfgp))["budget"]
 p = f"{dep}/{net}.json"
 txs = json.load(open(p)).get("transactions", []) if os.path.exists(p) else []
 # connector-register is paid by the test Connector's account out of connector-fund, which is already counted.
-settle = [t for t in txs if str(t.get("step", "")).startswith("settle-") and t.get("step") != "settle-connector-register"]
+pre = json.load(open(cfgp)).get("stepPrefix", "settle-")
+settle = [t for t in txs if str(t.get("step", "")).startswith(pre) and t.get("step") != pre + "connector-register"]
 if net == "hedera-testnet":
     spent = sum(float(t.get("costHbar") or 0) for t in settle)
     print(f"settle budget: {spent:.8f} of {b['hbar']} HBAR spent on {net}")
@@ -72,6 +74,18 @@ print(f"settle budget: {spent:.9f} of {b['eth']} ETH spent on {net}; balance {ba
 ok = spent + step_max <= b["eth"] + 1e-12 and bal - step_max >= b["sepoliaFloorEth"]
 sys.exit(0 if ok else 1)
 EOF
+}
+
+# The rotation stream sends from the same key: wait until it has nothing pending on Sepolia (nonces read fresh).
+sepolia_quiet() {
+    for _ in $(seq 1 60); do
+        local l p
+        l="$(cast nonce "$CLPR_TESTNET_ADDRESS" --block latest --rpc-url "$SEPOLIA_RPC_URL")"
+        p="$(cast nonce "$CLPR_TESTNET_ADDRESS" --block pending --rpc-url "$SEPOLIA_RPC_URL")"
+        [[ "$l" == "$p" ]] && { echo "sepolia nonce $l, nothing pending"; return 0; }
+        echo "sepolia: $((p - l)) pending transaction(s) from the shared key; waiting" >&2; sleep 10
+    done
+    echo "sepolia: still pending after 10 min; stopping" >&2; exit 2
 }
 
 # forge script on one chain: <network> <sig>
@@ -85,16 +99,17 @@ fs() {
         rpc="$HEDERA_TESTNET_RPC_URL"; chain=296
         tx=(--legacy --with-gas-price "$(cast gas-price --rpc-url "$rpc")")
     fi
-    local log="$D/.build/settle-$STEP.log"
+    local log="$D/.build/$PRE$STEP.log"
     if [[ "$BROADCAST" == "--broadcast" ]]; then
         budget_ok "$net" || { echo "SETTLE BUDGET EXCEEDED on $net: stopping" >&2; exit 2; }
+        [[ "$net" == "sepolia" ]] && sepolia_quiet
         tx+=(--broadcast)
     fi
     forge script "$D/DeploySettle.s.sol:DeploySettle" --sig "$sig" "${BUILD[@]}" --rpc-url "$rpc" \
         --sender "$CLPR_TESTNET_ADDRESS" --gas-estimate-multiplier "${GAS_MULT:-130}" --slow "${tx[@]}" "$@" 2>&1 | tee "$log"
     if [[ "$BROADCAST" == "--broadcast" ]]; then
         local fn="${sig%%(*}"
-        node "$D/record.mjs" "$net" "settle-$STEP" "$log" "$ROOT/broadcast/DeploySettle.s.sol/$chain/$fn-latest.json"
+        node "$D/record.mjs" "$net" "$PRE$STEP" "$log" "$ROOT/broadcast/DeploySettle.s.sol/$chain/$fn-latest.json"
     fi
 }
 
@@ -103,7 +118,7 @@ fs() {
 record_cast() {
     local net="$1" contract="$2" fn="$3"; shift 3
     local rpc; [[ "$net" == "sepolia" ]] && rpc="$SEPOLIA_RPC_URL" || rpc="$HEDERA_TESTNET_RPC_URL"
-    local run="$D/.build/settle-$STEP-run.json" log="$D/.build/settle-$STEP.log"
+    local run="$D/.build/$PRE$STEP-run.json" log="$D/.build/$PRE$STEP.log"
     : > "$log"
     python3 - "$run" "$contract" "$fn" "$rpc" "$@" <<'EOF'
 import json, subprocess, sys
@@ -117,12 +132,13 @@ for h in hashes:
     run["receipts"].append(r)
 json.dump(run, open(out, "w"))
 EOF
-    node "$D/record.mjs" "$net" "settle-$STEP" "$log" "$run"
+    node "$D/record.mjs" "$net" "$PRE$STEP" "$log" "$run"
 }
 
 ob_address() {
     python3 -c "import json; print(json.load(open('$DEP/hedera-testnet.json'))['settle']['contracts']['SettleOrderBook']['address'])"
 }
+ob_v1() { cfg v1.orderBook; }
 
 case "$STEP" in
     order-book) fs hedera-testnet "deployOrderBook()" ;;
@@ -159,6 +175,7 @@ case "$STEP" in
         if python3 -c "import sys; sys.exit(0 if float('$have') < float('$amt') else 1)"; then
             [[ "$BROADCAST" == "--broadcast" ]] || { echo "(simulation) would send $amt ETH"; exit 0; }
             STEP_MAX_ETH="$(python3 -c "print(float('$amt') + 0.00005)")" budget_ok sepolia || exit 2
+            sepolia_quiet
             h="$(cast send "$to" --value "${amt}ether" --private-key "$CLPR_TESTNET_PRIVATE_KEY" \
                 --gas-price "${SEPOLIA_MAX_FEE_WEI:-1250000000}" --priority-gas-price "${SEPOLIA_TIP_WEI:-1000000}" \
                 --rpc-url "$SEPOLIA_RPC_URL" --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["transactionHash"])')"
@@ -186,13 +203,37 @@ case "$STEP" in
         if (( total < bond )); then
             need=$(( bond - total ))
             # postBond(HBAR, amount): the EVM sees tinybars; the relay takes value in weibars (x 1e10).
-            hashes+=("$(cast send "$OB" "postBond(address,uint256)" 0x0000000000000000000000000000000000000000 "$need" \
+            hashes+=("$(cast send "$OB" "postBond(address,uint256)" 0x0000000000000000000000000000000000000000 "$need" --gas-limit 200000 \
                 --value "$(( need ))0000000000" --private-key "$PK" --legacy --rpc-url "$HEDERA_TESTNET_RPC_URL" --json \
                 | python3 -c 'import json,sys; print(json.load(sys.stdin)["transactionHash"])')")
             record_cast hedera-testnet SettleOrderBook "postBond(address,uint256)" "${hashes[-1]}"
         fi
         cast call "$OB" "freeCapacity(address,address)(uint256)" "$me" 0x0000000000000000000000000000000000000000 --rpc-url "$HEDERA_TESTNET_RPC_URL"
         ;;
+    v1-recover)
+        # Superseded v1 deployment: take the test Connector's bond back (request, then execute after
+        # WITHDRAW_DELAY = 1 h) so it can bond on the v2 order book.
+        OB1="$(ob_v1)"; PK="$(key settleConnector private_key)"; me="$(key settleConnector address)"
+        read -r total _ pending ready < <(cast call "$OB1" "bonds(address,address)(uint256,uint256,uint256,uint64)" "$me" \
+            0x0000000000000000000000000000000000000000 --rpc-url "$HEDERA_TESTNET_RPC_URL" | awk '{print $1}' | tr '\n' ' '; echo)
+        now="$(cast block latest -f timestamp --rpc-url "$HEDERA_TESTNET_RPC_URL")"
+        echo "v1 bond total=$total pending=$pending readyAt=$ready now=$now"
+        [[ "$BROADCAST" == "--broadcast" ]] || exit 0
+        if (( pending > 0 && now >= ready )); then
+            h="$(cast send "$OB1" "executeWithdraw(address)" 0x0000000000000000000000000000000000000000 --gas-limit 200000 --private-key "$PK" --legacy \
+                --rpc-url "$HEDERA_TESTNET_RPC_URL" --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["transactionHash"])')"
+            record_cast hedera-testnet "SettleOrderBook (v1)" "executeWithdraw(address)" "$h"
+        elif (( pending > 0 )); then echo "not ready until $ready"; exit 3; fi
+        ;;
+    record-cast)
+        # RECORD_STEP=<step> settle.sh record-cast - <network> <contract> <function> <tx hash>...
+        # (transactions sent by hand with cast)
+        shift 2
+        STEP="${RECORD_STEP:?set RECORD_STEP}"
+        record_cast "$1" "$2" "$3" "${@:4}"
+        ;;
+    budget-sepolia) budget_ok sepolia || exit 2; sepolia_quiet ;;
+    budget-hedera) budget_ok hedera-testnet || exit 2 ;;
     status-hedera) BROADCAST=""; fs hedera-testnet "status()" ;;
     status-sepolia) BROADCAST=""; fs sepolia "status()" ;;
     *) echo "unknown step $STEP" >&2; exit 1 ;;
