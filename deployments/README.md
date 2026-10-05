@@ -64,7 +64,7 @@ The rehearsal also showed that the Hedera `TestnetConnector` had no balance, so 
 `econ.hedera.connectorFunding` (3 HBAR) in `config/route.json`.
 
 **Second run.** Staged verifier deployed, 16 chunks staged, Channel opened with the period-1376 Sepolia committee,
-Connector registered and funded, `Router.send` on Sepolia, and `submitBundle` on Hedera (attested slot 11274704,
+Connector registered and funded, `Router.send` on Sepolia, and `submitBundle` on Hedera (slot 11274704,
 participation 499/512, 14,829-byte proof, 2,755,892 gas) delivered route `0x03c51452a41f4867d5bd8f5774baa110` to
 `TestnetRouteApp`; the Router's DELIVERED receipt was flushed into the Hedera → Sepolia queue. 9.71 HBAR in all
 (balance 522.657 → 512.944), of which 2.29 HBAR still sits in the Connector.

@@ -27,7 +27,7 @@ Gas limits, fees, the relay's file-based `callData` and the SDK do not change th
 2. `verifyConfig` accepts, besides the current shape, `[slot, [[chunkRoot × 16], aggregate], gvr, forkVersion,
    ledgerConfiguration, codeHash]`, requires every chunk root staged, folds them into the committee root and builds the
    same 260-byte trust anchor.
-3. Rotation in two steps: a staging transaction proves the next committee against an already verified attested
+3. Rotation in two steps: a staging transaction proves the next committee against an already verified
    state root (the SSZ branch at gindex 87 needs the keys only to rebuild `syncCommitteeRootFromUncompressed`, which
    can be accumulated per chunk), stores `(stateRoot, nextCommitteeMerkleRoot, aggregate)`, and the rotation bundle
    then names that record instead of carrying the keys. The successor anchor is unchanged.

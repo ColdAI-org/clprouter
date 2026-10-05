@@ -1151,7 +1151,7 @@
     "deliveredTo": "0xDbB0EbcBf8fa0cE4886fbe8Ae0C24C6D68B8bC69",
     "routeIdDelivered": "0x03c51452a41f4867d5bd8f5774baa11000000000000000000000000000000000",
     "submitBundle": "0x1249ca9040fb4c1f02e99ee656823393b223bf9f2bcba9d2a6cdb36344e1989b",
-    "bundle": "attested Sepolia slot 11274704 (execution block 11835696), sync-committee period 1376, participation 499/512, proof 14,829 bytes",
+    "bundle": "Sepolia slot 11274704 (execution block 11835696), sync-committee period 1376, participation 499/512, proof 14,829 bytes",
     "receipt": "DELIVERED receipt flushed into the Hedera -> Sepolia CLPR queue; it cannot be proven to Sepolia (no Hiero proof source)"
   },
   "spend": {
