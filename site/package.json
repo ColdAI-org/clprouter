@@ -8,7 +8,7 @@
   "scripts": {
     "data": "node scripts/build-data.mjs",
     "dev": "npm run data && vite",
-    "build": "npm run data && tsc --noEmit && vite build",
+    "build": "npm run data && tsc --noEmit && vite build && node scripts/inline-css.mjs",
     "preview": "vite preview --port 4173",
     "deploy": "npm run build && wrangler deploy",
     "shots": "node scripts/screenshots.mjs"

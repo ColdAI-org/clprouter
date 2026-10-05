@@ -13,6 +13,7 @@ import {
 import { ORDER_BOOK_ABI, ROUTE_APP_ABI, ROUTER_ABI, SERVICE_ABI } from "./abi";
 import {
   CHANNEL_ID,
+  CHANNEL_V1_ID,
   CONTRACTS,
   NETS,
   ORDER_BOOK,
@@ -23,6 +24,7 @@ import {
   ROUTER,
   SEPOLIA_LEDGER_LABEL,
   SERVICE,
+  SETTLE_CLPR_CONNECTOR,
   SETTLE_DELIVERY,
   SETTLE_DEPOSIT,
   TEST_CONNECTOR,
@@ -71,9 +73,10 @@ export function initExplorer(root: HTMLElement): void {
   root.innerHTML = `
     <div class="ex-grid">
       <section class="card" aria-labelledby="ex-net-h"><h3 class="card-title" id="ex-net-h">Endpoints</h3><div id="ex-net"></div></section>
-      <section class="card" aria-labelledby="ex-ch-h"><h3 class="card-title" id="ex-ch-h">The Channel <code class="muted">${shortHex(CHANNEL_ID)}</code></h3><div id="ex-ch"></div></section>
-      <section class="card" aria-labelledby="ex-rt-h"><h3 class="card-title" id="ex-rt-h">Route <code class="muted">${shortHex(ROUTE_ID, 4)}</code>: Sepolia → Hedera</h3><div id="ex-rt"></div></section>
-      <section class="card" aria-labelledby="ex-ob-h"><h3 class="card-title" id="ex-ob-h">Settle on Hedera: order book</h3><div id="ex-ob"></div></section>
+      <section class="card" aria-labelledby="ex-ch-h"><h3 class="card-title" id="ex-ch-h">The Channel (v2) <code class="muted">${shortHex(CHANNEL_ID)}</code></h3><div id="ex-ch"></div></section>
+      <section class="card" aria-labelledby="ex-rt-h"><h3 class="card-title" id="ex-rt-h">Route <code class="muted">${shortHex(ROUTE_ID, 4)}</code>: Sepolia → Hedera</h3>
+        <p class="hint">Delivered over the first Channel <code>${shortHex(CHANNEL_V1_ID)}</code>, before the v2 Channel replaced it.</p><div id="ex-rt"></div></section>
+      <section class="card" aria-labelledby="ex-ob-h"><h3 class="card-title" id="ex-ob-h">Settle on Hedera: order book (v2)</h3><div id="ex-ob"></div></section>
     </div>
     <section class="card" aria-labelledby="ex-ct-h"><h3 class="card-title" id="ex-ct-h">Canonical contracts</h3>
       <p class="hint">Code read live with <code>eth_getCode</code>; where the deployment record has a runtime code hash, the hash is checked too.
@@ -136,7 +139,7 @@ async function loadChannel(): Promise<string> {
   const show = (r: PromiseSettledResult<string>, net: Net) =>
     r.status === "fulfilled" ? r.value : `<div class="side"><div class="side-h">${NETS[net].name}</div><p class="error">${esc((r.reason as Error).message)}</p></div>`;
   return `<div class="sides">${show(s, "sepolia")}${show(h, "hedera")}</div>
-    <p class="hint">One CLPR Channel joins exactly two ledgers. Read live with <code>getChannel</code> on the CLPR Service ${addrLink("sepolia", SERVICE)}.</p>`;
+    <p class="hint">One CLPR Channel joins exactly two ledgers. v2 replaced the first Channel <code>${shortHex(CHANNEL_V1_ID)}</code> (superseded) with a staged committee rotation; settle runs on v2. Read live with <code>getChannel</code> on the CLPR Service ${addrLink("sepolia", SERVICE)}.</p>`;
 }
 
 interface OriginRoute {
@@ -244,7 +247,7 @@ async function loadOrderBook(): Promise<string> {
     ${
       orders.length
         ? `<div class="table-wrap"><table><thead><tr><th scope="col">Order</th><th scope="col">Status</th><th scope="col">Owed on default</th><th scope="col">Opened</th></tr></thead><tbody>${orderRows}</tbody></table></div>`
-        : `<p class="hint"><strong>Orders: none yet.</strong> The book is deployed and a Connector is bonded; the first order opens once the Sepolia source is active and the settle CLPR connector is registered on Sepolia.</p>`
+        : `<p class="hint"><strong>Orders: none yet.</strong> The book is deployed and a Connector is bonded; the settle CLPR connector is registered on the v2 Channel on both networks, and the first order can open once the Sepolia source is active.</p>`
     }`;
 }
 
@@ -265,7 +268,7 @@ async function loadContracts(): Promise<string> {
         }
       };
       const [s, h] = await Promise.all([one("sepolia", c.sepolia), one("hedera", c.hedera)]);
-      return `<tr><th scope="row"><div>${esc(c.name)}</div><div class="muted small">${esc(c.group)}: ${esc(c.what)}</div></th>${s}${h}</tr>`;
+      return `<tr${c.superseded ? ' class="superseded"' : ""}><th scope="row"><div>${esc(c.name)}${c.superseded ? ` <span class="badge sm" title="superseded ${esc(c.superseded)}">superseded</span>` : ""}</div><div class="muted small">${esc(c.group)}: ${esc(c.what)}</div></th>${s}${h}</tr>`;
     }),
   );
   return `<div class="table-wrap"><table class="contracts"><thead><tr><th scope="col">Contract</th><th scope="col">Sepolia (Etherscan)</th><th scope="col">Hedera testnet (HashScan)</th></tr></thead><tbody>${cells.join("")}</tbody></table></div>`;
@@ -347,7 +350,7 @@ function summary(d: Decoded): string {
 
 async function loadEvents(): Promise<string> {
   const [sep, hr, hs, ho] = await Promise.allSettled([
-    sepoliaLogs([ROUTER.sepolia, SERVICE, SETTLE_DEPOSIT, SETTLE_DELIVERY]),
+    sepoliaLogs([ROUTER.sepolia, SERVICE, SETTLE_DEPOSIT, SETTLE_DELIVERY, SETTLE_CLPR_CONNECTOR]),
     hederaLogs(ROUTER.hedera, 25),
     hederaLogs(SERVICE, 50),
     hederaLogs(ORDER_BOOK, 25),

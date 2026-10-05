@@ -31,7 +31,8 @@ async function desktop(scheme) {
   // Planner: default route.
   await page.locator("#planner").scrollIntoViewIfNeeded();
   await page.waitForSelector(".res-title");
-  check((await page.locator(".res-title").first().textContent()).includes("Ethereum"), `${scheme}: planner shows a route from Ethereum`);
+  const title = await page.locator(".res-title").first().textContent();
+  check(title.includes("Ethereum") && title.includes("Hedera"), `${scheme}: planner defaults to Ethereum → Hedera`);
   await page.locator("#planner").screenshot({ path: join(OUT, `02-planner-${scheme}.png`) });
   if (scheme === "dark") {
     await ctx.close();
@@ -44,6 +45,11 @@ async function desktop(scheme) {
   check(await page.locator(".reasons li").count() > 0, "ISO 20022 filter explains the exclusion");
   await page.locator("#planner").screenshot({ path: join(OUT, `03-planner-filter-excluded.png`) });
   await page.getByLabel("ISO 20022").uncheck();
+
+  // Projected destination one click away, tagged.
+  await page.getByRole("button", { name: "Ethereum → Solana (projected)" }).click();
+  await page.waitForFunction(() => document.querySelector(".res-title")?.textContent?.includes("Solana"));
+  check(await page.locator(".hops .badge", { hasText: "projected" }).count() > 0, "Ethereum → Solana preset is tagged projected");
 
   // Preset: Stellar -> XRPL, ISO 20022.
   await page.getByRole("button", { name: "Stellar → XRP Ledger, ISO 20022" }).click();
@@ -75,13 +81,15 @@ async function desktop(scheme) {
     { timeout: 60000 },
   );
   const channel = await page.locator("#ex-ch").textContent();
-  check(/ACTIVE/.test(channel), "explorer: Channel status read live (ACTIVE)");
+  check(/ACTIVE/.test(channel) && /v2/.test(await page.locator("#ex-ch-h").textContent()), "explorer: v2 Channel status read live (ACTIVE)");
+  check(await page.locator("#ex-ct .badge", { hasText: "superseded" }).count() === 4, "explorer: v1 settle contracts labelled superseded");
   const codeOk = await page.locator("#ex-ct .badge.ok").count();
   check(codeOk >= 10, `explorer: contract code present (${codeOk} badges)`);
   const ev = await page.locator("#ex-ev tbody tr").count();
   check(ev > 0, `explorer: ${ev} recent events decoded`);
   const ob = await page.locator("#ex-ob").textContent();
-  check(/HBAR/.test(ob), "explorer: order book bond read live");
+  check(/HBAR/.test(ob) && !/Free capacity\s*0 HBAR/.test(ob), "explorer: v2 order book bond read live, free capacity not 0");
+  console.log("     order book:", ob.replace(/\s+/g, " ").slice(0, 400));
   await page.locator("#testnet").screenshot({ path: join(OUT, `06-testnet.png`) });
 
   await page.goto(`${URL_}#how`, { waitUntil: "load" });

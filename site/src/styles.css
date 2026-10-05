@@ -297,3 +297,4 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width
 
 .foot { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--muted); font-size: 0.88rem; }
 .foot-in p { margin: 4px 0; }
+.contracts tr.superseded th > div:first-child, .contracts tr.superseded td { opacity: 0.75; }

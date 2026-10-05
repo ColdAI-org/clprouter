@@ -49,7 +49,8 @@ const WHATIF_SET = [
   "xrpl:0",
 ];
 const PRESETS: Array<{ label: string; origin: string; dest: string; mode: Mode; filters?: Filters; whatIf?: boolean }> = [
-  { label: "Ethereum → Solana", origin: "eip155:1", dest: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", mode: "balanced" },
+  { label: "Ethereum → Hedera (measured)", origin: "eip155:1", dest: "hedera:mainnet", mode: "balanced" },
+  { label: "Ethereum → Solana (projected)", origin: "eip155:1", dest: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", mode: "balanced" },
   { label: "Stellar → XRP Ledger, ISO 20022", origin: "stellar:pubnet", dest: "xrpl:0", mode: "fastest", filters: { iso20022: true } },
   { label: "Bitcoin → Stellar, greenest + Energy", origin: "bip122:000000000019d6689c085ae165831e93", dest: "stellar:pubnet", mode: "greenest", filters: { energy: true } },
   { label: "Base → Stellar, what-if Channels", origin: "eip155:8453", dest: "stellar:pubnet", mode: "cheapest", whatIf: true },
@@ -77,7 +78,7 @@ interface State {
 const state: State = {
   dataset: "measured",
   origin: "eip155:1",
-  dest: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+  dest: HUB,
   picking: "origin",
   mode: "balanced",
   iso: false,
