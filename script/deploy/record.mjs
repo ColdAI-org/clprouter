@@ -41,7 +41,8 @@ const dep = existsSync(outFile)
 // ── contracts from the forge log ─────────────────────────────────────────────
 const lines = readFileSync(logFile, "utf8").split("\n").map((l) => l.trim());
 const FIXTURES = new Set(["TestnetConnector", "TestOnlyStubVerifier", "TestnetRouteApp", "EthMainnetVerifier", "StagedEthConfigVerifier"]);
-const bucket = (name) => (FIXTURES.has(name) ? dep.fixtures : dep.contracts);
+// Settle on Hedera contracts (DeploySettle.s.sol) are kept apart from the CLPRouter stack.
+const bucket = (name) => (name.startsWith("Settle") ? (dep.settle ??= {}).contracts ??= {} : FIXTURES.has(name) ? dep.fixtures : dep.contracts);
 for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
     let m;
@@ -73,6 +74,12 @@ for (let i = 0; i < lines.length; i++) {
         dep.channel = {...(dep.channel ?? {}), channelId: lines[i + 1]};
     } else if ((m = l.match(/^(CONNECTOR_REGISTERED|CONNECTOR_EXISTS)$/))) {
         dep.channel = {...(dep.channel ?? {}), connectorId: lines[i + 1]};
+    } else if ((m = l.match(/^SOURCE_(PROPOSED|EXISTS) active at (\d+)$/))) {
+        (dep.settle ??= {}).sepoliaSource = {channelId: process.env.SETTLE_CHANNEL_ID ?? null, activeAt: Number(m[2])};
+    } else if ((m = l.match(/^CLPR_CONNECTOR_(REGISTERED|EXISTS)$/))) {
+        (dep.settle ??= {}).clprConnectorId = lines[i + 1];
+    } else if (l === "DOMAIN_SEPARATOR") {
+        (dep.settle ??= {}).domainSeparator = lines[i + 1];
     } else if (l === "CHECKS_OK") {
         dep.postDeployChecks = {passed: true, at: new Date().toISOString(), against: "live chain (verification run)"};
     }
@@ -184,7 +191,7 @@ if (runFile && existsSync(runFile)) {
 
 // Name CREATE2 deployments the broadcast file left unnamed (e.g. "ProviderRegistry.small" artifacts).
 const byAddr = new Map();
-for (const group of [dep.contracts, dep.libraries, dep.fixtures]) {
+for (const group of [dep.contracts, dep.libraries, dep.fixtures, dep.settle?.contracts ?? {}]) {
     for (const [name, v] of Object.entries(group)) if (v?.address) byAddr.set(v.address.toLowerCase(), name);
 }
 for (const t of dep.transactions) {

@@ -424,14 +424,65 @@
       "valueWei": "0",
       "costEth": "0.001160935",
       "explorerUrl": "https://sepolia.etherscan.io/tx/0x8a08f19922f6a265f2900b218db01510c4dc21e50ed80b68ae8756faddff0d6c"
+    },
+    {
+      "step": "settle-sepolia",
+      "hash": "0xf8df71b3fdb143044236c6ba77ace20c1c59cb6c29ec363b8ed24e9546c16330",
+      "block": 11847081,
+      "status": "success",
+      "contract": "SettleDeposit",
+      "function": "CREATE2 deploy",
+      "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "createdAddress": "0x249f83524d0827840237e751981b804d99bb5bd6",
+      "gasUsed": "989973",
+      "gasLimit": "1367399",
+      "effectiveGasPriceWei": "1086578311",
+      "feeWei": "1075683190275603",
+      "valueWei": "0",
+      "costEth": "0.001075683",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0xf8df71b3fdb143044236c6ba77ace20c1c59cb6c29ec363b8ed24e9546c16330"
+    },
+    {
+      "step": "settle-sepolia",
+      "hash": "0x9a5239a3ffa2d5e032478b4777d6f2942a0a195bf973b11d61afaf4261e1aec5",
+      "block": 11847084,
+      "status": "success",
+      "contract": "SettleDelivery",
+      "function": "CREATE2 deploy",
+      "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
+      "createdAddress": "0x5e7dba624afbcb13693bb17d9021be16da96cdb8",
+      "gasUsed": "501540",
+      "gasLimit": "692751",
+      "effectiveGasPriceWei": "1112414870",
+      "feeWei": "557920553899800",
+      "valueWei": "0",
+      "costEth": "0.000557921",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0x9a5239a3ffa2d5e032478b4777d6f2942a0a195bf973b11d61afaf4261e1aec5"
+    },
+    {
+      "step": "settle-connector-fund-sepolia",
+      "hash": "0xd44e17580d71a21068261c6128579aaf55f16291ee254cc3f6ca3526f093f063",
+      "block": 11847110,
+      "status": "success",
+      "contract": "settle Connector account",
+      "function": "transfer (ETH)",
+      "to": "0x316323692104293b58366e6bc66a796b919108e7",
+      "createdAddress": null,
+      "gasUsed": "21000",
+      "gasLimit": "21000",
+      "effectiveGasPriceWei": "962791110",
+      "feeWei": "20218613310000",
+      "valueWei": "200000000000000",
+      "costEth": "0.000220219",
+      "explorerUrl": "https://sepolia.etherscan.io/tx/0xd44e17580d71a21068261c6128579aaf55f16291ee254cc3f6ca3526f093f063"
     }
   ],
   "totals": {
-    "transactions": 19,
-    "gasUsed": "23913523",
-    "costEth": "0.025689117"
+    "transactions": 22,
+    "gasUsed": "25426036",
+    "costEth": "0.027542940"
   },
-  "updatedAt": "2026-10-03T12:15:00.851Z",
+  "updatedAt": "2026-10-05T06:26:27.061Z",
   "channel": {
     "channelId": "0x8a15fe9f8ea6a20841a9983e2e6176b4bcf1e01530348632d9488be92a4145e0",
     "peer": "296 (Hedera testnet)",
@@ -494,5 +545,19 @@
     "budgetEth": "0.5 (balance-limited: keep >= 0.003)",
     "balanceAfterRoute": "0.007259605123134778 ETH",
     "spentEthRoute": "0.001160935467314388"
+  },
+  "settle": {
+    "contracts": {
+      "SettleDeposit": {
+        "address": "0x249f83524D0827840237e751981B804D99bB5bD6",
+        "runtimeCodeHash": "0x7461d565a907debe07979ee687fc423ac0fe499d6212f6072103d677af5f3990",
+        "runtimeCodeSize": 4315
+      },
+      "SettleDelivery": {
+        "address": "0x5e7dbA624AFbcb13693BB17d9021Be16Da96cDB8",
+        "runtimeCodeHash": "0x8678fc33053cb8f618bfbee69eb554afe2cacf1d829089c2529709a7ff61ad74",
+        "runtimeCodeSize": 2075
+      }
+    }
   }
 }

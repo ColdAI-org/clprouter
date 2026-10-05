@@ -1,0 +1,39 @@
+{
+  "_note": "Settle on Hedera, testnet: SettleOrderBook on Hedera testnet, SettleDeposit + SettleDelivery on Sepolia (both legs of the demo on Sepolia), over the Sepolia -> Hedera CLPR Channel of route.json. Used by script/deploy/settle.sh and DeploySettle.s.sol.",
+  "salt": "clprouter/testnet/settle/v1",
+  "channelId": "0x8a15fe9f8ea6a20841a9983e2e6176b4bcf1e01530348632d9488be92a4145e0",
+  "sepolia": {
+    "service": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+    "ledgerId": "eip155:11155111"
+  },
+  "hedera": {
+    "service": "0xa6db474e3047c3d43b10a4ff7abad547d89982b9",
+    "ledgerId": "eip155:296",
+    "chainId": 296
+  },
+  "orderBook": {
+    "penaltyBps": 1000,
+    "withdrawDelay": 3600,
+    "proofGrace": 1800,
+    "maxQuoteTtl": 600,
+    "sourceNotice": 86400,
+    "coverAssets": [
+      "0x0000000000000000000000000000000000000000"
+    ]
+  },
+  "connector": {
+    "name": "Clip testnet Connector",
+    "bondTinybar": 500000000,
+    "accountFundingHbar": "7",
+    "sepoliaFundingEth": "0.0002"
+  },
+  "clprConnector": {
+    "salt": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "hederaFundingWei": 1000000000000000000
+  },
+  "budget": {
+    "hbar": 25,
+    "eth": 0.002,
+    "sepoliaFloorEth": 0.003
+  }
+}

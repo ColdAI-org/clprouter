@@ -11,7 +11,7 @@ verifiers that exist today, which all run chain → Hiero.
 > "Connector" in this document is a bonded liquidity provider of this protocol. The CLPR messaging connector that
 > pays for a message's execution on the destination is called the *CLPR connector* (`clprConnectorId`).
 
-Status: pre-release, local networks only. No testnet deployment yet.
+Status: pre-release, unaudited. Deployed on Hedera testnet and Sepolia for testing ([`deployments/README.md`](../deployments/README.md#settle-on-hedera-testnet)); no real order has run there yet.
 
 ## Flow
 
@@ -196,7 +196,7 @@ withdraw), closing orders with recorded deliveries and, for local networks only,
 
 ## Gaps
 
-- **No testnet deployment** in this stream.
+- **Testnet deployment** ([`deployments/README.md`](../deployments/README.md#settle-on-hedera-testnet)): the Sepolia source is active one day after it was proposed, the settle CLPR connector is registered on Hedera but not yet on Sepolia, and the Channel needs its sync-committee rotation before new Sepolia messages can be proven.
 - **Verifier-specific proof submission** is a pluggable `ProofRelay` in the service; only the test relay exists.
 - **Payment provers** for Bitcoin, XRPL and Stellar: the interface and the order-book paths exist and are tested
   with `TestPaymentProver`, but no production prover exists. The CLPR verifiers on those chains prove messages
@@ -208,5 +208,5 @@ withdraw), closing orders with recorded deliveries and, for local networks only,
   CLPR, a chain-side Settle contract can send only that many messages over its Channel. The e2e relays acknowledgements back with the test verifier.
 - **Quote-time capacity** is not reserved on-chain; concurrent users can over-subscribe a Connector (counted as
   shortfalls). Clients check `freeCapacity` just before depositing.
-- **Native HBAR via the JSON-RPC relay**: the Connector service does not convert weibars to tinybars for HBAR
-  bonds; ERC-20 (HTS) bonds and local runs are unaffected.
+- **Native HBAR via the JSON-RPC relay**: the Connector service converts an HBAR bond's tinybars to the relay's
+  weibars when it posts the bond on a Hedera chain id (295, 296, 297).
