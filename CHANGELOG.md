@@ -14,6 +14,11 @@ Contract versions are also named by `ClprRouter.VERSION`; a new value is a new o
   `ISettlePaymentProver` for chains without a CLPR Service. Unit, fuzz, invariant and three-ledger tests
   (`test/settle/`), the anvil end-to-end run `script/settle-e2e/run.sh` with Hedera trace-size checks, the reference
   Connector service (`services/connector`), `docs/settle-on-hedera.md` and threat-model section 8.
+- **Docs for the project and the CLPR community:** README rewritten around the testnet evidence (transaction links,
+  diagrams, modes and filters, audit status, roadmap); `docs/lfdt/briefing.md` (briefing and demo script for the CLPR
+  maintainers), `docs/lfdt/hedera-trace-cap.md` (Hedera's contract trace-size cap: evidence, reproduction, impact on
+  verifiers), `docs/faq.md`, `GOVERNANCE.md`, `CODE_OF_CONDUCT.md`; CONTRIBUTING refreshed; social preview image
+  `.github/assets/social-preview.png`.
 
 ## [0.2.0-pre] - 2026-10-01
 
