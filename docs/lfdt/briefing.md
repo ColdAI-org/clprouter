@@ -48,15 +48,18 @@ same trust anchor as `EthMainnetVerifier`, parity-tested) opened it at 4.5 % of 
 **(a) Staged sync-committee configuration and rotation for the ETH verifier on Hedera.** Today a Hedera Channel over
 `EthMainnetVerifier` can be opened only through an adapter, and it cannot follow a sync-committee rotation (the
 rotation bundle carries the next 512 keys through the same frames), so it stops at the end of its period (about
-27 hours on Sepolia). We propose a staging entry point on the verifier (`stageChunk`: on-curve check, record the
-chunk's `ClprCommitteeMerkle` subtree root), a `verifyConfig` shape that names staged chunk roots, and a two-step
-rotation that references a staged record instead of carrying the keys. We bring the adapter, its parity tests, the
-trace-size tool, and live testnet evidence. Proposal: [clpr-staged-eth-committee.md](../proposals/clpr-staged-eth-committee.md).
+27 hours on Sepolia). We propose a staged form of the committee input on the verifier itself:
+`stageCommitteeChunk` (32 keys per transaction, on-curve checked, recording the chunk's `ClprCommitteeMerkle` and SSZ
+subtree roots), a `verifyConfig` shape that names the 16 staged chunk roots, and rotation bundles that name the next
+committee's staged chunks instead of carrying its keys. The trust anchor is byte-for-byte unchanged. The change is
+open as a PR stacked on #5, built and tested against a real Sepolia rotation that ran on Hedera testnet; we also bring
+the adapter, its parity tests and the trace-size tool. Proposal: [clpr-staged-eth-committee.md](../proposals/clpr-staged-eth-committee.md).
 
 **(b) A receive-only (one-way) Channel mode, or queue-depth handling for chain → Hedera-only applications.** The
 reference Service counts a Channel's outbound messages until the peer acknowledges them
 (`nextMessageId - ackedMessageId - 1`) and stops sending at `maxQueueDepth`, and per Connector at
-`connectorQueueQuotaPct` of it. Acknowledgements need proofs in the opposite direction. Settle on Hedera only ever
+`connectorQueueQuotaPct` of it (released when each message's REPLY arrives). Acknowledgements and REPLYs both need
+proofs in the opposite direction. Settle on Hedera only ever
 needs chain → Hedera, but until a Hedera → chain verifier exists a chain-side Settle contract can send only that many
 messages over its Channel (500 with our testnet throttles: depth 1,000, quota 50 %). Options we would like to discuss:
 a Channel flag that marks one direction receive-only and exempts it from the unacknowledged-depth limit, or an
