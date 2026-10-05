@@ -9,6 +9,7 @@
 | [Settle on Hedera](settle-on-hedera.md) | Integrators, Connector operators, auditors | Bonded Connectors with the guarantee on Hedera: contracts, quote format, order states, bonds, Hedera limits, gas, tests, gaps |
 | [Threat model](threat-model.md) | Everyone, auditors | Assets, actors, trust tiers, attack surfaces, mitigations, residual risks |
 | [Audit-readiness pack](audit-readiness.md) | Auditors | Scope, invariants, known issues, test counts and coverage |
+| [Engineering quality](quality.md) | Everyone, auditors, reviewers | Test counts, halmos proofs (what is proven, what is fuzzed), 10,000-run fuzzing, coverage, gas snapshot, contract sizes, slither and Aderyn triage, dependency audit |
 
 Also in the repository:
 
