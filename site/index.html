@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CLPRouter Demo</title>
+    <meta name="description" content="CLPRouter: multi-hop routing for CLPR. Plan routes across 86 chains with the real SDK, and read the live Sepolia and Hedera testnet deployment." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d0d0f" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/png" href="./coldai-dark.png" />
+    <link rel="preconnect" href="https://ethereum-sepolia-rpc.publicnode.com" crossorigin />
+    <link rel="preconnect" href="https://testnet.hashio.io" crossorigin />
+    <link rel="preconnect" href="https://testnet.mirrornode.hedera.com" crossorigin />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="top">
+      <div class="wrap top-in">
+        <a class="brand" href="#top" aria-label="CLPRouter demo, top of page">
+          <img class="logo logo-light" src="./coldai-dark.png" width="28" height="28" alt="" />
+          <img class="logo logo-dark" src="./coldai-white.png" width="28" height="28" alt="" />
+          <span><strong>CLPRouter</strong> <span class="muted">demo</span></span>
+        </a>
+        <nav class="nav" aria-label="Sections">
+          <a href="#planner">Planner</a>
+          <a href="#testnet">Testnet</a>
+          <a href="#how">How it works</a>
+        </nav>
+        <button type="button" id="theme-toggle" class="icon-btn" aria-label="Toggle theme">☾</button>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="wrap">
+          <p class="eyebrow">Built on CLPR · LF Decentralized Trust</p>
+          <h1>Multi-hop routing for CLPR</h1>
+          <p class="lede">CLPR joins two ledgers per Channel, with no bridge validators and no pooled liquidity.
+            CLPRouter turns those Channels into a network: a message or payment hops ledger to ledger, every hop
+            re-checks the sender's rules on-chain, and a receipt settles or refunds the escrow at the origin.</p>
+          <div class="cta">
+            <a class="btn" href="#planner">Plan a route</a>
+            <a class="btn-ghost" href="#testnet">See the live testnet</a>
+          </div>
+          <ul class="facts">
+            <li><strong>86</strong> chains in the measured route graph</li>
+            <li><strong>5</strong> modes · <strong>3</strong> filters</li>
+            <li><strong>Live</strong> on Sepolia and Hedera testnet</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="planner" class="sec" aria-labelledby="planner-h">
+        <div class="wrap">
+          <h2 id="planner-h">Route planner</h2>
+          <p class="sec-lede">The CLPRouter SDK planner (<code>sdk/src/planner.ts</code>) runs in your browser: filters as hard
+            pre-filters on every ledger, Yen's k-shortest paths per objective, a Pareto set over fee, p90 time, failure
+            probability and kgCO2e, then the mode's pick. <strong>All figures are the repo's measured or sample data,
+            not live prices</strong>; placeholders are marked.</p>
+          <div id="planner-root"><div class="loading"><span class="spinner" aria-hidden="true"></span> Loading the planner…</div></div>
+        </div>
+      </section>
+
+      <section id="testnet" class="sec alt" aria-labelledby="testnet-h">
+        <div class="wrap">
+          <h2 id="testnet-h">Live testnet</h2>
+          <p class="sec-lede">Read live from public endpoints in your browser: Sepolia JSON-RPC, the Hedera JSON-RPC relay
+            and the Hedera mirror node. Testnet only, TEST provider committee, pre-audit: do not route value through it.</p>
+          <div id="explorer-root"><div class="loading"><span class="spinner" aria-hidden="true"></span> Connecting to Sepolia and Hedera testnet…</div></div>
+        </div>
+      </section>
+
+      <section id="how" class="sec" aria-labelledby="how-h">
+        <div class="wrap">
+          <h2 id="how-h">How it works</h2>
+
+          <div class="how-grid">
+            <article class="card">
+              <h3 class="card-title">A routed message</h3>
+              <p class="hint">Point-to-point Channels become a network. 100 ledgers need 100 Channels to a hub instead of
+                4,950 pairs, and each hop is a normal CLPR message verified by the receiving ledger.</p>
+              <div id="story-route"></div>
+            </article>
+
+            <article class="card">
+              <h3 class="card-title">Settle on Hedera</h3>
+              <p class="hint">Pay on one chain, be paid on another, with the guarantee held on Hedera. Proofs only flow
+                chain → Hedera, so it works with the verifiers that exist today.</p>
+              <div id="story-settle"></div>
+            </article>
+          </div>
+
+          <article class="card">
+            <h3 class="card-title">The provider: a narrow role</h3>
+            <p class="hint">A k-of-n committee (on testnet: a TEST committee, 3 of 5). Every action is public, signed and
+              time-limited, with notice periods before it takes effect.</p>
+            <div class="powers">
+              <div class="power can">
+                <h4>Can</h4>
+                <ul>
+                  <li>Certify networks for ISO&nbsp;20022, MiCA and Energy</li>
+                  <li>Disable, and later re-enable, a malicious route</li>
+                  <li>Blacklist an account after an exploit: its routed funds go to a locked quarantine vault</li>
+                </ul>
+              </div>
+              <div class="power cannot">
+                <h4>Cannot <span class="muted">(enforced in the contracts)</span></h4>
+                <ul>
+                  <li>Change, pause or upgrade Routers: no admin key, no pause</li>
+                  <li>Move funds anywhere but the quarantine vault</li>
+                  <li>Rewrite history or swap the registry</li>
+                  <li>Release vault funds to itself</li>
+                  <li>Choose routes: planning runs on the sender's side</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+
+          <article class="card">
+            <h3 class="card-title">Engineering note: Hedera's trace-size cap</h3>
+            <p>Opening the Hedera side of the testnet Channel failed five times with <code>INSUFFICIENT_GAS</code>, at
+              every gas limit from 5.6M to 15M, always with 4,062,470 gas used. <code>eth_estimateGas</code> and an
+              anvil fork both succeeded.</p>
+            <p>The cause was not gas. After a contract call executes, a Hedera consensus node checks the size of the
+              call trace it records (every call frame's input and output, precompile calls included) against
+              <code>contracts.maxSerializedTraceDataBytes</code>, 262,144 bytes by default, and fails the transaction
+              above it. The Channel config carried 512 committee keys (67 KB of calldata), repeated through the Service,
+              its logic, the verifier and 257 BLS12-381 on-curve precompile checks: 301,836 bytes of raw trace.
+              Neither the relay's gas estimate nor anvil applies the cap.</p>
+            <figure class="bars" aria-labelledby="bars-cap">
+              <div class="bar-row"><span class="bar-k">Config in one transaction</span><span class="bar over" style="--w: 95.9%"></span><span class="bar-v">301,836 B</span></div>
+              <div class="bar-row"><span class="bar-k">submitBundle (route delivery)</span><span class="bar" style="--w: 38.1%"></span><span class="bar-v">≈ 120 KB</span></div>
+              <div class="bar-row"><span class="bar-k">Settle bundle, 1 deposit</span><span class="bar" style="--w: 7.1%"></span><span class="bar-v">22,292 B</span></div>
+              <div class="bar-row"><span class="bar-k">stageChunk (32 keys)</span><span class="bar" style="--w: 4.0%"></span><span class="bar-v">≈ 12.6 KB</span></div>
+              <div class="bar-row"><span class="bar-k">completeChannel, staged</span><span class="bar" style="--w: 3.8%"></span><span class="bar-v">≈ 11.9 KB</span></div>
+              <div class="cap-line" aria-hidden="true"></div>
+              <figcaption id="bars-cap">Serialized trace per transaction against the 262,144-byte cap (the line).</figcaption>
+            </figure>
+            <p><strong>Fix:</strong> a testnet adapter stages the committee in 16 chunks of 32 keys, each checked on
+              arrival and recorded as a Merkle subtree root; the config then names the 16 roots, and the unchanged CLPR
+              verifier checks every bundle. The Channel opened and the route delivered. For relayers, Settle on Hedera
+              caps bundles to Hedera at 12 messages, about 60% of the limit. A <code>trace-size.mjs</code> estimator in
+              the repo checks every transaction before it is sent.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap foot-in">
+        <p>CLPRouter is pre-release and pre-audit. Do not use it with real funds. MIT © 2026 ColdAI. CLPR is an
+          LF Decentralized Trust project, licensed separately under Apache-2.0.</p>
+        <p><a href="https://github.com/LFDT-CLPR" rel="noopener">CLPR on GitHub</a> · <a href="https://coldai.org" rel="noopener">coldai.org</a></p>
+      </div>
+    </footer>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
