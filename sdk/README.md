@@ -191,19 +191,21 @@ Rules the builder enforces:
 - `trust_floor` defaults to 0 (`attested`); see below.
 - `receipt_path` is empty (reverse hops) unless you pass `receiptPath: "reverse"`.
 
-### Trust floor: decentralised by default
+### Trust floor and Channel approvals
 
 The planner ranks and filters routes by verifier trust tier from the graph (`constraints.trustFloor` in
-`plan`, the `reliable` mode's success model, and `route.effectiveTrustTier` in every quote). That is off-chain and
-needs nobody's permission.
+`plan`, the `reliable` mode's success model, and `route.effectiveTrustTier` in every quote). That is off-chain.
 
-On-chain, every Router can also enforce `constraints.trust_floor`: for a floor above 0 it requires the provider's
-`TRUST_TIER` label on each next edge (Channel direction) at or above the floor, and fails the hop with
-`TRUST_FLOOR` when the edge is unlabelled or labelled lower. **The SDK's default on-chain floor is 0**
-(`DEFAULT_ONCHAIN_TRUST_FLOOR = "attested"`), at which Routers skip the check and never read provider labels, so a
-default route does not depend on the provider. A sender opts in explicitly with
-`buildEnvelope({ ..., trustFloor: "light-client" })`, and should do so only when every edge of the route is
-labelled; the builder still refuses a floor above the route's effective tier.
+On-chain, every Router carries messages only over Channel directions the provider registry approves (a `TRUST_TIER`
+label naming the verifier the receiving ledger uses), and `send` requires both directions of every edge, since the
+receipt comes back the other way. CLPR Channels are permissionless, so this is what keeps a Channel anyone opened
+from carrying routes. `OnChainGraphSource` with `ViemOnChainReader` reads both labels of every edge it is given and
+sets `edge.approved`; the planner skips edges with `approved: false`.
+
+Routers also enforce `constraints.trust_floor` against the labels' tiers, failing the hop with `TRUST_FLOOR` when the
+next edge is labelled lower. **The SDK's default on-chain floor is 0** (`DEFAULT_ONCHAIN_TRUST_FLOOR`), which every
+approved edge meets. A sender opts in to a higher floor with `buildEnvelope({ ..., trustFloor: "light-client" })`;
+the builder still refuses a floor above the route's effective tier.
 
 `signEnvelope` and `recoverEnvelopeSigner` implement the optional origin signature: EIP-191 over the
 keccak256 of the encoded envelope at hop 0 with the full budget. The signature stays valid as `advanceEnvelope`
@@ -221,7 +223,8 @@ moves `hop_index` and spends the budget.
     balance.
   - `ProviderRegistry.certificationLog` and `isDisabled`, keyed with `registryKeys`, which mirror `Caip.sol`.
   - The registry stores emissions in µgCO2e per transaction; `version()` is its decision counter, and
-    `trustTier(edgeKey)` gives the provider's TRUST_TIER label per Channel direction.
+    `trustTier(edgeKey)` gives the provider's TRUST_TIER label per Channel direction. An edge is `approved` when
+    both its direction and the way back are labelled (`RegistryState.edgeApproved`).
 
 ## Sample graph
 

@@ -46,9 +46,14 @@ export interface RegistryState {
   disabledRouterVersions: number[];
   /**
    * Trust tiers the provider labelled Channel directions with, by edge id. Routers enforce a route's trust floor
-   * against these labels (an unlabelled edge fails any floor above `attested`), so they replace the snapshot's tier.
+   * against these labels, so they replace the snapshot's tier.
    */
   edgeTrustTiers?: Record<string, TrustTier>;
+  /**
+   * By edge id: whether both directions of the edge's Channel carry a label in effect (an approval). Routers carry
+   * nothing over a Channel direction without one, so an edge with `false` is not routable.
+   */
+  edgeApproved?: Record<string, boolean>;
 }
 
 /**
@@ -109,6 +114,8 @@ export class OnChainGraphSource implements GraphSource {
         if (disabled.has(edgeId(e))) e.disabled = true;
         const tier = reg.edgeTrustTiers?.[edgeId(e)];
         if (tier) e.trustTier = tier;
+        const approved = reg.edgeApproved?.[edgeId(e)];
+        if (approved !== undefined) e.approved = approved;
       }
       data.disabledRouterVersions = [...new Set([...(data.disabledRouterVersions ?? []), ...reg.disabledRouterVersions])];
       if (reg.version !== undefined) data.registryVersion = Number(reg.version);
@@ -340,23 +347,33 @@ export class ViemOnChainReader implements OnChainReader {
     }
     const disabledEdges: string[] = [];
     const edgeTrustTiers: Record<string, TrustTier> = {};
+    const edgeApproved: Record<string, boolean> = {};
+    const label = (key: Hex) =>
+      client.readContract({ address: r.address, abi: REGISTRY_ABI, functionName: "trustTier", args: [key] });
     for (const e of this.cfg.edges ?? []) {
       const key = registryKeys.edge(e.channelId as Hex, e.to);
       if (await disabled(key)) disabledEdges.push(edgeId(e));
-      const [labelled, tier] = await client.readContract({
-        address: r.address,
-        abi: REGISTRY_ABI,
-        functionName: "trustTier",
-        args: [key],
-      });
+      const [labelled, tier] = await label(key);
       const t = TRUST_TIER_ORDER[tier];
       if (labelled && t) edgeTrustTiers[edgeId(e)] = t;
+      // The receipt comes back over the same Channel into `from`: both directions must be approved.
+      const [back] = await label(registryKeys.edge(e.channelId as Hex, e.from));
+      edgeApproved[edgeId(e)] = labelled && back;
     }
     const disabledRouterVersions: number[] = [];
     for (const v of this.cfg.routerVersions ?? []) {
       if (await disabled(registryKeys.routerVersion(v))) disabledRouterVersions.push(v);
     }
-    return { version, headHash, certifications, disabledLedgers, disabledEdges, disabledRouterVersions, edgeTrustTiers };
+    return {
+      version,
+      headHash,
+      certifications,
+      disabledLedgers,
+      disabledEdges,
+      disabledRouterVersions,
+      edgeTrustTiers,
+      edgeApproved,
+    };
   }
 }
 

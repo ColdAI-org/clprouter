@@ -109,7 +109,7 @@ function prepare(graphIn: RouteGraph | RouteGraphData, req: PlanRequest, mode: M
   const removedNodes = excludedReasons(graph, req, mode, now);
   const quotes = new Map<string, HopQuote>();
   for (const e of graph.edges()) {
-    if (e.disabled) continue;
+    if (e.disabled || e.approved === false) continue;
     if (!(e.status === "active" || (e.status === "projected" && c.allowProjected))) continue;
     if (removedNodes.has(e.from) || removedNodes.has(e.to)) continue;
     if (c.trustFloor && trustRank(e.trustTier) < trustRank(c.trustFloor)) continue;

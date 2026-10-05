@@ -180,6 +180,12 @@ export interface Edge {
   offChain: OffChainEnergy;
   /** Disabled by the provider (route safety). */
   disabled?: boolean;
+  /**
+   * Whether the provider registry approves this Channel in both directions (this one, and the way back that
+   * receipts take). Routers carry nothing over a Channel direction without an approval in effect. `undefined`
+   * when not read from the registry (static snapshots); the planner skips an edge only when this is `false`.
+   */
+  approved?: boolean;
   /** Fields that are placeholders rather than measured. */
   synthetic?: string[];
   notes?: string;
