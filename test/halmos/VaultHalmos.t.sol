@@ -123,6 +123,24 @@ contract VaultHalmos is Test, SymTest {
         }
     }
 
+    /// @notice From any vault state, a release to the recovery address (with or without a challenge override)
+    ///         happens only once the deposit's own window has passed: `RECOVERY_NOTICE + CHALLENGE_WINDOW` after
+    ///         the naming and after the deposit itself, whichever is later.
+    function check_recoveryRelease_waitsForDepositWindow(uint256 depositId, bytes32 caseId, uint8 kind) public {
+        svm.enableSymbolicStorage(address(logicVault));
+        vm.deal(address(logicVault), svm.createUint(128, "bal"));
+        uint256 t = svm.createUint(64, "now");
+        vm.warp(t);
+        uint64 depositedAt = logicVault.depositedAt(depositId);
+        (,, uint64 caseAt) = logicVault.recoveries(caseId);
+        IProviderRegistry.Decision memory d = _decision(A_VAULT_RELEASE, abi.encode(depositId, caseId, kind));
+        (bool ok,) = address(logicVault).call(abi.encodeCall(logicVault.release, (d, new bytes[](0))));
+        if (ok && kind >= 2) {
+            assert(t >= uint256(depositedAt) + 1 days + 3 days);
+            assert(t >= caseAt);
+        }
+    }
+
     /// @notice A released deposit can never be released again, by any decision.
     function check_release_releasedDepositIsFinal(uint256 depositId, bytes32 caseId, uint8 kind) public {
         svm.enableSymbolicStorage(address(logicVault));

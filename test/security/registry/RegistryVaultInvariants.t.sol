@@ -28,6 +28,8 @@ contract RegistryVaultHandler is AuditBase {
     bool public providerPaid;
     bool public chainBroken;
     uint256 public sumUnreleased;
+    /// @dev Ghost: block time of each deposit.
+    mapping(uint256 => uint256) internal depositTime;
     uint256 public releasedCount;
     mapping(bytes32 => uint256) public logLen;
     mapping(bytes32 => bytes32) public logHead; // hash of entry 0, must never change
@@ -99,7 +101,8 @@ contract RegistryVaultHandler is AuditBase {
     function deposit(uint96 amt, uint8 s, uint8 r, bool caseB) external {
         amt = uint96(bound(amt, 1, 100 ether));
         vm.deal(address(this), amt);
-        vault.deposit{value: amt}(ROUTE, cases[caseB ? 1 : 0], actors[s % 4], actors[r % 4]);
+        uint256 id = vault.deposit{value: amt}(ROUTE, cases[caseB ? 1 : 0], actors[s % 4], actors[r % 4]);
+        depositTime[id] = block.timestamp;
         sumUnreleased += amt;
     }
 
@@ -134,7 +137,11 @@ contract RegistryVaultHandler is AuditBase {
         uint8 k4 = kind % 4;
         IProviderRegistry.Decision memory d = _vaultDecision(reg, A_VAULT_RELEASE, abi.encode(id, c, k4));
         (uint256[] memory chosen, uint256 nMembers) = _chosen(signerMask);
-        (address recTo,, uint64 relAt) = vault.recoveries(cid);
+        (address recTo,, uint64 caseAt) = vault.recoveries(cid);
+        // Recovery opens N + W after the naming or after the deposit, whichever is later (ghost deposit time).
+        uint256 relAt = caseAt;
+        uint256 own = depositTime[id] + vault.RECOVERY_NOTICE() + vault.CHALLENGE_WINDOW();
+        if (own > relAt) relAt = own;
         bool challenged = vault.challengedAt(id, recTo) != 0;
         // The registry's quorum for this release, including the supermajority after a committee notice.
         uint256 need = reg.requiredSignatures(kind % 4 == 3 ? A_COMMITTEE : A_VAULT_RELEASE);
@@ -155,7 +162,7 @@ contract RegistryVaultHandler is AuditBase {
             if (
                 k4 == 3
                     && (!challenged
-                        || block.timestamp < uint256(relAt) + vault.CHALLENGE_WINDOW()
+                        || block.timestamp < relAt + vault.CHALLENGE_WINDOW()
                         || nMembers < reg.requiredSignatures(A_COMMITTEE))
             ) releaseRuleViolated = true;
             address paid = k4 == 0 ? s : k4 == 1 ? r : recTo;
