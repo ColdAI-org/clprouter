@@ -29,6 +29,16 @@ runs = 256
 [profile.test]
 ignored_error_codes = [5740, 2394, 3860, 5574]
 
+# Deep fuzzing: `FOUNDRY_PROFILE=deep forge test --skip 'script/**' --match-test '^(testFuzz|invariant)'`.
+# Every fuzz test and invariant at 10,000 runs; the suites that pin their runs inline (router, settle) carry a
+# matching `deep.` inline config. Same compiler settings as the default profile, so the build is shared.
+[profile.deep.fuzz]
+runs = 10000
+
+[profile.deep.invariant]
+runs = 10000
+depth = 64
+
 [fmt]
 line_length = 120
 ignore = ["**/node_modules/**"]

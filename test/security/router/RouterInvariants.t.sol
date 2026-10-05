@@ -311,6 +311,8 @@ contract OriginHandler is Test {
 ///         no state change on reverted paths, and only approved Channels carry messages.
 /// forge-config: default.invariant.runs = 64
 /// forge-config: default.invariant.depth = 60
+/// forge-config: deep.invariant.runs = 10000
+/// forge-config: deep.invariant.depth = 60
 contract RouterInvariantsTest is StdInvariant, OriginHarness {
     OriginHandler internal handler;
     address[] internal actors;
@@ -347,6 +349,11 @@ contract RouterInvariantsTest is StdInvariant, OriginHarness {
         }
         total = _held();
         targetContract(address(handler));
+        // The accounts whose balances the conservation invariant sums never call the handler themselves (the
+        // handler pranks them where it needs to): a fuzzed call from one of them must not move its balance.
+        for (uint256 i = 0; i < actors.length; i++) {
+            excludeSender(actors[i]);
+        }
     }
 
     function _held() internal view returns (uint256 sum) {

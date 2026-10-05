@@ -212,6 +212,8 @@ contract SettleHandler is Test {
 
 /// forge-config: default.invariant.runs = 64
 /// forge-config: default.invariant.depth = 60
+/// forge-config: deep.invariant.runs = 10000
+/// forge-config: deep.invariant.depth = 60
 /// forge-config: default.invariant.fail-on-revert = true
 contract SettleInvariantsTest is Test {
     SettleHandler internal h;
