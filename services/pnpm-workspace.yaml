@@ -1,2 +1,7 @@
 allowBuilds:
   esbuild: false
+
+# autocannon (dev-only load test) -> hyperid@3 pins uuid@8, which has a published advisory fixed in 11.1.1.
+# hyperid only calls uuid.v4(), which uuid 11 still exports for CommonJS.
+overrides:
+  uuid: ^11.1.1

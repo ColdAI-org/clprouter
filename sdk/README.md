@@ -7,11 +7,38 @@ constraints, quotes the route, and builds the `ClprRouteEnvelope` the origin Rou
 The planner adds no trust. Every hop's Router re-checks the constraints on-chain, so a bad quote can make a route
 fail, but it cannot redirect funds.
 
+## Install
+
+The SDK is not on the npm registry yet. Install it from git (pnpm can install a subdirectory of a repository):
+
+```sh
+pnpm add "github:ColdAI-org/clprouter#path:sdk"
+```
+
+The package builds `dist/` in its `prepare` script. Recent pnpm runs a git dependency's build script only when you
+allow it: add the `allowBuilds` entry that pnpm prints to your `pnpm-workspace.yaml` and run the install again.
+Pin a commit with `#<sha>&path:sdk`.
+
+npm cannot install from a subdirectory of a git repository, so pack a tarball and install that:
+
+```sh
+git clone https://github.com/ColdAI-org/clprouter && cd clprouter/sdk
+pnpm install && pnpm pack                        # builds dist/, writes clprouter-sdk-<version>.tgz
+npm install /path/to/clprouter-sdk-<version>.tgz # in your project
+```
+
+Entry points: `@clprouter/sdk` (planner, quotes, envelope), `@clprouter/sdk/iso20022` (ISO 20022 module) and the
+measured route data as `@clprouter/sdk/data/edges.json` and `@clprouter/sdk/data/chains.json`
+(see [data/README.md](data/README.md)). ESM only; Node 20.10 or later.
+
+## Develop
+
 ```sh
 pnpm install
-pnpm test        # vitest
+pnpm test           # vitest
 pnpm typecheck
-pnpm build       # emits dist/
+pnpm build          # emits dist/
+pnpm test:pack      # packs the package, installs it into a scratch project and imports every entry point
 ```
 
 ## Quick start

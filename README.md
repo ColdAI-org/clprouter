@@ -251,27 +251,31 @@ application.
 
 ## Quick start
 
-Requires Foundry (forge 1.5.1), Node 22+ and pnpm.
+Prerequisites: [Foundry](https://getfoundry.sh) v1.5.1 (`foundryup -i v1.5.1`), Node.js 22.13 or later, pnpm and
+jq.
 
 ```sh
 git clone --recurse-submodules https://github.com/ColdAI-org/clprouter && cd clprouter
 
-forge test                                   # 359 contract tests in 22 suites: unit, fuzz, invariant, security, three-ledger
+forge test --skip 'script/**'                # 359 contract tests in 22 suites: unit, fuzz, invariant, security, three-ledger
 (cd sdk && pnpm install && pnpm test)        # 212 tests: planner, envelope codec, ISO 20022
 forge build                                  # artefacts for the services' anvil integration test
 (cd services && pnpm install && pnpm test)   # 172 tests: services, Settle Connector, anvil integration
 
-script/e2e/run.sh          # local demo: three anvil chains, five routes A → B → C and back (about 9 minutes)
+make demo                  # three anvil chains, five routes A → B → C and back, summary table (about 9 minutes)
 script/settle-e2e/run.sh   # Settle on Hedera on three anvil chains, four scenarios, with Hedera trace-size checks
 ```
 
-`script/e2e/run.sh` sends five routes and checks each outcome: delivered with escrow released, destination app
+`make demo` runs [`script/e2e/run.sh`](script/e2e/run.sh), which sends five routes and checks each outcome: delivered with escrow released, destination app
 reverts (`FAILED`), edge disabled mid-route (`FAILED`), recipient blacklisted (`QUARANTINED`), deadline passed
 (`EXPIRED`). Gas per transaction lands in `e2e-out/gas.tsv`. A route through a local Hiero network (Solo) is in
 [`script/e2e-hiero/`](script/e2e-hiero). Reproducing the testnet deployment: [deployments/README.md](deployments/README.md#how-to-reproduce).
+`make demo-docker` runs the same demo with only Docker installed, and `make help` lists the other targets (build,
+coverage, gas snapshot, halmos, slither). To use the SDK in your own project, see [sdk/README.md](sdk/README.md#install).
 
 Test counts were measured on this branch (`forge test --summary`, `pnpm test` in `sdk/` and `services/`). CI runs
-the same suites on every push plus 10,000-run fuzzing, invariants, coverage, Slither and CodeQL; the three-chain e2e
+the same suites on every push plus 10,000-run fuzzing, invariants, halmos proofs, coverage, a gas snapshot,
+Slither and CodeQL ([engineering quality](docs/quality.md)); the three-chain e2e
 runs nightly.
 
 ## Security model and audit status

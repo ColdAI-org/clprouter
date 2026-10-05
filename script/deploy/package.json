@@ -13,13 +13,20 @@
   },
   "dependencies": {
     "@ethereumjs/rlp": "10.1.2",
-    "@hashgraph/sdk": "^2.81.0",
+    "@hashgraph/sdk": "npm:@hiero-ledger/sdk@2.86.2",
     "@noble/curves": "1.9.1",
-    "viem": "2.51.3"
+    "viem": "2.57.3"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",
     "tsx": "^4.19.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "overrides": {
+    "@grpc/grpc-js": "1.14.5",
+    "ws": "8.22.0",
+    "@hiero-ledger/proto": {
+      "protobufjs": "8.6.6"
+    }
+  }
 }

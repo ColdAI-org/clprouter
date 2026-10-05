@@ -13,6 +13,7 @@
 | [Briefing for the LFDT CLPR maintainers](lfdt/briefing.md) | CLPR maintainers | What CLPRouter is, what is verified, proposed upstream contributions, questions, demo script |
 | [Hedera trace-size cap](lfdt/hedera-trace-cap.md) | CLPR verifier authors, Hiero | `contracts.maxSerializedTraceDataBytes`: evidence, reproduction, impact on large-calldata verifiers |
 | [Proposal: staged ETH committee](proposals/clpr-staged-eth-committee.md) | CLPR maintainers | Staged sync-committee configuration and rotation for `EthMainnetVerifier` on Hedera |
+| [Engineering quality](quality.md) | Everyone, auditors, reviewers | Test counts, halmos proofs (what is proven, what is fuzzed), 10,000-run fuzzing, coverage, gas snapshot, contract sizes, slither and Aderyn triage, dependency audit |
 
 Also in the repository:
 

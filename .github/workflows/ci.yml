@@ -24,6 +24,9 @@ env:
   # Tests whose assertions depend on exact gas (MIN_SEND_GAS, the 1/64 rule). They cannot pass under
   # coverage instrumentation, which changes gas costs. Run in the `forge` job, excluded from `coverage`.
   GAS_CALIBRATED_TESTS: "belowMinSendGas|outOfGasInsideSend|definiteServiceRevert"
+  # Tests left out of the gas snapshot: fuzz and invariant runs (input-dependent gas).
+  SNAPSHOT_EXCLUDE: "^(testFuzz|invariant)"
+  HALMOS_VERSION: "0.3.3"
 
 jobs:
   forge:
@@ -45,6 +48,10 @@ jobs:
         run: forge build --sizes --skip 'test/**' --skip 'script/**'
       - name: forge test
         run: forge test -vv
+      - name: forge snapshot --check (gas)
+        # Gas per unit test against the committed .gas-snapshot. Fuzz and invariant tests are excluded (their gas
+        # depends on the random inputs). After an intended gas change: `make snapshot` and commit .gas-snapshot.
+        run: forge snapshot --check --no-match-test "$SNAPSHOT_EXCLUDE"
       - name: Upload build artefacts
         # Used by the services integration test (it deploys from ../out).
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -132,6 +139,29 @@ jobs:
             lcov.info
           retention-days: 14
 
+  halmos:
+    name: halmos (symbolic proofs)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+      - name: Install halmos
+        run: python -m pip install "halmos==${HALMOS_VERSION}"
+      - name: halmos (test/halmos, profile halmos)
+        # Properties proven and their bounds: docs/quality.md.
+        env:
+          FOUNDRY_PROFILE: halmos
+        run: halmos --forge-build-out out-halmos --loop 4
+
   slither:
     name: slither (non-blocking)
     runs-on: ubuntu-24.04
@@ -205,6 +235,10 @@ jobs:
         if: matrix.package == 'sdk'
         working-directory: sdk
         run: pnpm run build
+      - name: pack check (npm tarball installs and imports)
+        if: matrix.package == 'sdk'
+        working-directory: sdk
+        run: pnpm run test:pack
 
   services-integration:
     name: services integration (anvil)
