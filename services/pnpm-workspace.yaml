@@ -5,3 +5,5 @@ allowBuilds:
 # hyperid only calls uuid.v4(), which uuid 11 still exports for CommonJS.
 overrides:
   uuid: ^11.1.1
+  # ajv (dev-only OpenAPI test) -> fast-uri@3.1.8, which has published advisories fixed in 3.1.9.
+  fast-uri: ^3.1.9
