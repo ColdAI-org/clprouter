@@ -20,6 +20,6 @@
     "playwright": "^1.63.0",
     "typescript": "7.0.2",
     "vite": "8.3.5",
-    "wrangler": "4.147.0"
+    "wrangler": "4.156.0"
   }
 }
