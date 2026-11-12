@@ -31,7 +31,7 @@
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
     "ajv": "^8.20.0",
-    "autocannon": "^8.0.0",
+    "autocannon": "^9.0.0",
     "esbuild": "^0.28.2",
     "tsx": "^4.20.0",
     "typescript": "^7.0.2",
